@@ -83,6 +83,78 @@
         <material><ambient>0.9 0.35 0.05 1</ambient><diffuse>0.9 0.35 0.05 1</diffuse></material>
       </visual>
 
+      <visual name="left_lidar_body_visual">
+        <pose>0.46 0.26 0.56 0 0 0.35</pose>
+        <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
+        <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>
+      </visual>
+
+      <visual name="right_lidar_body_visual">
+        <pose>0.46 -0.26 0.56 0 0 -0.35</pose>
+        <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
+        <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>
+      </visual>
+
+      <visual name="left_lidar_ray_-2_visual">
+        <pose>1.211 -0.014 0.565 0 0 -0.350</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="left_lidar_ray_-1_visual">
+        <pose>1.260 0.260 0.565 0 0 0.000</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="left_lidar_ray_0_visual">
+        <pose>1.211 0.534 0.565 0 0 0.350</pose>
+        <geometry><box><size>1.60 0.026 0.014</size></box></geometry>
+        <material><ambient>0.0 1.0 0.55 0.50</ambient><diffuse>0.0 1.0 0.55 0.50</diffuse></material>
+      </visual>
+
+      <visual name="left_lidar_ray_1_visual">
+        <pose>1.072 0.775 0.565 0 0 0.700</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="left_lidar_ray_2_visual">
+        <pose>0.858 0.954 0.565 0 0 1.050</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="right_lidar_ray_-2_visual">
+        <pose>0.858 -0.954 0.565 0 0 -1.050</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="right_lidar_ray_-1_visual">
+        <pose>1.072 -0.775 0.565 0 0 -0.700</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="right_lidar_ray_0_visual">
+        <pose>1.211 -0.534 0.565 0 0 -0.350</pose>
+        <geometry><box><size>1.60 0.026 0.014</size></box></geometry>
+        <material><ambient>0.0 1.0 0.55 0.50</ambient><diffuse>0.0 1.0 0.55 0.50</diffuse></material>
+      </visual>
+
+      <visual name="right_lidar_ray_1_visual">
+        <pose>1.260 -0.260 0.565 0 0 0.000</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="right_lidar_ray_2_visual">
+        <pose>1.211 0.014 0.565 0 0 0.350</pose>
+        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
       <sensor name="left_lidar" type="gpu_lidar">
         <pose>0.46 0.26 0.56 0 0 0.35</pose>
         <topic>/scan_left</topic>

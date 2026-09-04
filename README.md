@@ -89,6 +89,13 @@ http://localhost:8090
 
 Drag the joystick with the mouse or trackpad to publish `/cmd_vel_raw`. Releasing the joystick or closing the page stops the commanded motion automatically.
 
+The two front LiDARs are visible in Gazebo as green scan rays. They are 2D single-line LiDARs, so the ROS outputs are `LaserScan` topics rather than 3D point clouds:
+
+```bash
+ros2 topic echo /scan_left
+ros2 topic echo /scan_right
+```
+
 XQuartz path:
 
 1. Install and open XQuartz.

@@ -29,6 +29,24 @@ class ModelVisualsTest(unittest.TestCase):
         }
         self.assertTrue(expected.issubset(names))
 
+    def test_lidar_scans_are_visible_in_gazebo(self):
+        sensors = self.root.findall(".//sensor[@type='gpu_lidar']")
+        self.assertEqual({sensor.attrib["name"] for sensor in sensors}, {"left_lidar", "right_lidar"})
+        self.assertTrue(all(sensor.findtext("visualize") == "true" for sensor in sensors))
+
+        names = {visual.attrib["name"] for visual in self.root.findall(".//visual")}
+        expected = {
+            "left_lidar_body_visual",
+            "right_lidar_body_visual",
+            "left_lidar_ray_-2_visual",
+            "left_lidar_ray_0_visual",
+            "left_lidar_ray_2_visual",
+            "right_lidar_ray_-2_visual",
+            "right_lidar_ray_0_visual",
+            "right_lidar_ray_2_visual",
+        }
+        self.assertTrue(expected.issubset(names))
+
     def _visual_pose(self, name):
         visual = self.root.find(f".//visual[@name='{name}']")
         self.assertIsNotNone(visual)
