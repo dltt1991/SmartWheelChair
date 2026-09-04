@@ -27,12 +27,13 @@ Sensor feedback is:
 
 ## Safety Behavior
 
-The safety filter subscribes to raw velocity commands and the two front LiDAR scans. It scales forward speed down when the closest front obstacle enters a configurable slowdown distance, and commands a stop when the obstacle is inside a configurable stop distance. Reverse and turning commands are not modified in the first version.
+The safety filter subscribes to raw velocity commands and the two front LiDAR scans. It scales forward speed down when the closest front obstacle enters a configurable slowdown distance, and commands a stop when the obstacle is inside a configurable stop distance. It also stops forward motion when either scan is missing, stale, or contains no valid range data. Reverse and turning commands are not modified in the first version.
 
 Defaults:
 
 - `stop_distance_m`: `0.45`
 - `slow_distance_m`: `1.20`
+- `scan_timeout_s`: `0.50`
 - Front sector is the available LiDAR field because the simulated sensors are mounted facing forward with a `200 deg` horizontal scan.
 
 ## Docker

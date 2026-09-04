@@ -19,10 +19,13 @@ class LimitForwardSpeedTest(unittest.TestCase):
     def test_keeps_reverse_speed_without_lidar_limiting(self):
         self.assertEqual(limit_forward_speed(-0.4, [0.2], 0.45, 1.2), -0.4)
 
-    def test_ignores_invalid_ranges(self):
-        speed = limit_forward_speed(0.5, [math.nan, math.inf, -1.0, 2.0], 0.45, 1.2)
+    def test_stops_forward_motion_when_no_valid_ranges_exist(self):
+        speed = limit_forward_speed(0.5, [math.nan, math.inf, -1.0, 0.0], 0.45, 1.2)
 
-        self.assertEqual(speed, 0.5)
+        self.assertEqual(speed, 0.0)
+
+    def test_stops_forward_motion_when_scan_is_missing(self):
+        self.assertEqual(limit_forward_speed(0.5, [], 0.45, 1.2), 0.0)
 
     def test_rejects_invalid_thresholds(self):
         with self.assertRaisesRegex(ValueError, "slow_distance_m must be greater"):

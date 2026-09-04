@@ -16,7 +16,7 @@ def limit_forward_speed(
 
     valid_ranges = [value for value in ranges if math.isfinite(value) and value > 0.0]
     if not valid_ranges:
-        return requested_speed
+        return 0.0
 
     nearest = min(valid_ranges)
     if nearest <= stop_distance_m:

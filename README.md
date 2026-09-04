@@ -59,7 +59,7 @@ ros2 topic echo /odom
 
 ## Run Local Unit Tests
 
-These tests cover the pure speed-limiter logic and do not require ROS:
+These tests cover the pure speed-limiter logic and do not require ROS. The limiter fails safe for forward motion when no fresh, valid LiDAR ranges are available:
 
 ```bash
 PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest discover ros2_ws/src/smart_wheelchair_safety/test

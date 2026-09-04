@@ -24,12 +24,12 @@ def generate_launch_description():
         package="ros_gz_bridge",
         executable="parameter_bridge",
         arguments=[
-            "/cmd_vel@geometry_msgs/msg/Twist@gz.msgs.Twist",
-            "/odom@nav_msgs/msg/Odometry@gz.msgs.Odometry",
-            "/scan_left@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan",
-            "/scan_right@sensor_msgs/msg/LaserScan@gz.msgs.LaserScan",
-            "/camera/rear/image@sensor_msgs/msg/Image@gz.msgs.Image",
-            "/camera/rear/camera_info@sensor_msgs/msg/CameraInfo@gz.msgs.CameraInfo",
+            "/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist",
+            "/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
+            "/scan_left@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan",
+            "/scan_right@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan",
+            "/camera/rear/image@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/camera/rear/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
         ],
         output="screen",
     )
