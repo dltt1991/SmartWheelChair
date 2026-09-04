@@ -1,0 +1,7 @@
+.DS_Store
+build/
+install/
+log/
+*.pyc
+__pycache__/
+.pytest_cache/

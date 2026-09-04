@@ -1,0 +1,18 @@
+services:
+  sim:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: smart-wheelchair-ros:jazzy
+    network_mode: host
+    ipc: host
+    environment:
+      DISPLAY: ${DISPLAY:-}
+      QT_X11_NO_MITSHM: "1"
+      XDG_RUNTIME_DIR: /tmp/runtime-root
+    volumes:
+      - .:/workspaces/SmartWheelChair
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    working_dir: /workspaces/SmartWheelChair
+    stdin_open: true
+    tty: true

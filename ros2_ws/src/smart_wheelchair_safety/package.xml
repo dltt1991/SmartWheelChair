@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>smart_wheelchair_safety</name>
+  <version>0.1.0</version>
+  <description>Shared-control safety filter for the smart wheelchair simulator.</description>
+  <maintainer email="dev@example.com">SmartWheelChair</maintainer>
+  <license>MIT</license>
+
+  <depend>geometry_msgs</depend>
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
