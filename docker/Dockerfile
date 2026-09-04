@@ -29,13 +29,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-ros-gz \
     ros-jazzy-teleop-twist-keyboard \
     ros-jazzy-xacro \
+    fluxbox \
     git \
     vim \
     less \
+    mesa-utils \
+    novnc \
+    websockify \
+    x11vnc \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY docker/gazebo-gui-vnc.sh /usr/local/bin/gazebo-gui-vnc
+RUN chmod +x /entrypoint.sh /usr/local/bin/gazebo-gui-vnc
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]

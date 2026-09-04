@@ -17,3 +17,25 @@ services:
     working_dir: /workspaces/SmartWheelChair
     stdin_open: true
     tty: true
+
+  gui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    platform: linux/amd64
+    image: smart-wheelchair-ros:jazzy
+    ipc: host
+    environment:
+      VNC_DISPLAY: ":1"
+      VNC_GEOMETRY: 1600x1000x24
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      MESA_GL_VERSION_OVERRIDE: "3.3"
+      QT_X11_NO_MITSHM: "1"
+      XDG_RUNTIME_DIR: /tmp/runtime-root
+    ports:
+      - "6080:6080"
+      - "5900:5900"
+    volumes:
+      - .:/workspaces/SmartWheelChair
+    working_dir: /workspaces/SmartWheelChair
+    command: gazebo-gui-vnc

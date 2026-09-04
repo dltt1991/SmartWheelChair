@@ -64,6 +64,23 @@ The launch file starts Gazebo in headless server mode by default, which works in
 
 To show the Gazebo window on macOS:
 
+Recommended path:
+
+```bash
+cd /Users/guotao/Work/code/SmartWheelChair
+docker compose up gui
+```
+
+Then open:
+
+```text
+http://localhost:6080/vnc.html
+```
+
+The VNC path runs Gazebo inside a container desktop with software OpenGL, avoiding XQuartz GLX issues.
+
+XQuartz path:
+
 1. Install and open XQuartz.
 2. In XQuartz, enable `Settings -> Security -> Allow connections from network clients`.
 3. Restart XQuartz.
