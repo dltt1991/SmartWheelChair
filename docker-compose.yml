@@ -35,7 +35,8 @@ services:
     ports:
       - "6080:6080"
       - "5900:5900"
+      - "8090:8090"
     volumes:
       - .:/workspaces/SmartWheelChair
     working_dir: /workspaces/SmartWheelChair
-    command: gazebo-gui-vnc
+    command: bash /workspaces/SmartWheelChair/docker/gazebo-gui-vnc.sh

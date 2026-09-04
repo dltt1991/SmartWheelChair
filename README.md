@@ -81,6 +81,14 @@ Click `Connect`. The VNC path runs Gazebo inside a container desktop with softwa
 
 `docker compose up gui` starts `ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true` through `docker/gazebo-gui-vnc.sh`. `docker compose run --rm sim` only opens a ROS shell unless you launch Gazebo manually.
 
+Open the virtual joystick in another browser tab:
+
+```text
+http://localhost:8090
+```
+
+Drag the joystick with the mouse or trackpad to publish `/cmd_vel_raw`. Releasing the joystick or closing the page stops the commanded motion automatically.
+
 XQuartz path:
 
 1. Install and open XQuartz.

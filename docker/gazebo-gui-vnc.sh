@@ -26,9 +26,7 @@ x11vnc -display "$DISPLAY" -forever -shared -nopw -noxdamage -repeat -rfbport 59
 websockify --web=/usr/share/novnc/ 0.0.0.0:6080 localhost:5900 >/tmp/novnc.log 2>&1 &
 
 cd /workspaces/SmartWheelChair/ros2_ws
-if [ ! -f install/setup.bash ]; then
-  colcon build --symlink-install
-fi
+colcon build --symlink-install
 source install/setup.bash
 
 exec ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true

@@ -56,6 +56,17 @@ def generate_launch_description():
         output="screen",
     )
 
+    web_joystick = Node(
+        package="smart_wheelchair_safety",
+        executable="web_joystick_node",
+        parameters=[
+            {"http_port": 8090},
+            {"max_linear_mps": 0.8},
+            {"max_angular_rps": 1.4},
+        ],
+        output="screen",
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -68,5 +79,6 @@ def generate_launch_description():
             gz_gui,
             bridge,
             safety_filter,
+            web_joystick,
         ]
     )
