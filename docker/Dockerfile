@@ -1,7 +1,6 @@
 # check=skip=RedundantTargetPlatform
-ARG BASE_IMAGE=docker.m.daocloud.io/osrf/ros:jazzy-desktop-full
-ARG TARGETPLATFORM=linux/amd64
-FROM --platform=${TARGETPLATFORM} ${BASE_IMAGE}
+ARG BASE_IMAGE=docker.m.daocloud.io/ros:jazzy-ros-base
+FROM --platform=linux/arm64 ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
 
@@ -26,7 +25,9 @@ RUN sed -i 's#http://packages.ros.org/ros2/ubuntu#https://mirrors.tuna.tsinghua.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-colcon-common-extensions \
     python3-pip \
-    ros-jazzy-ros-gz \
+    ros-jazzy-ros-gz-bridge \
+    ros-jazzy-ros-gz-image \
+    ros-jazzy-ros-gz-sim \
     ros-jazzy-teleop-twist-keyboard \
     ros-jazzy-xacro \
     fluxbox \
@@ -36,6 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
     novnc \
     websockify \
+    x11-utils \
     x11vnc \
     xvfb \
     && rm -rf /var/lib/apt/lists/*

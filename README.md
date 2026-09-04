@@ -14,7 +14,7 @@ This first version intentionally skips real GD32/RK3568 protocols, SLAM, autonom
 
 ## Build Docker Image
 
-The Dockerfile defaults to DaoCloud's public Docker Hub mirror for the base image and Tsinghua mirrors for Ubuntu/ROS apt packages. `docker-compose.yml` pins `linux/amd64` because this public mirror currently resolves the ROS desktop image that way; Apple Silicon Macs can run it through Docker's emulation, with lower Gazebo performance.
+The Dockerfile defaults to DaoCloud's public Docker Hub mirror for an ARM64 ROS base image and Tsinghua mirrors for Ubuntu/ROS apt packages. `docker-compose.yml` pins `linux/arm64` for Apple Silicon Macs; running the Gazebo GUI through an amd64 ROS desktop image under emulation can leave the VNC desktop black because the Gazebo window never maps correctly.
 
 For Docker Desktop on macOS, add this to `Settings -> Docker Engine` and restart Docker:
 
@@ -35,7 +35,7 @@ docker compose build
 To bypass the mirror:
 
 ```bash
-docker compose build --build-arg BASE_IMAGE=osrf/ros:jazzy-desktop-full
+docker compose build --build-arg BASE_IMAGE=ros:jazzy-ros-base
 ```
 
 ## Open A ROS Shell
@@ -68,7 +68,7 @@ Recommended path:
 
 ```bash
 cd /Users/guotao/Work/code/SmartWheelChair
-docker compose up gui
+docker compose up -d gui
 ```
 
 Then open:
@@ -77,7 +77,9 @@ Then open:
 http://localhost:6080/vnc.html
 ```
 
-The VNC path runs Gazebo inside a container desktop with software OpenGL, avoiding XQuartz GLX issues.
+Click `Connect`. The VNC path runs Gazebo inside a container desktop with software OpenGL, avoiding XQuartz GLX issues. If the browser tab was already open from an older failed run, reconnect or hard refresh the page.
+
+`docker compose up gui` starts `ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true` through `docker/gazebo-gui-vnc.sh`. `docker compose run --rm sim` only opens a ROS shell unless you launch Gazebo manually.
 
 XQuartz path:
 

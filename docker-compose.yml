@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    platform: linux/amd64
+    platform: linux/arm64
     image: smart-wheelchair-ros:jazzy
     network_mode: host
     ipc: host
@@ -22,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    platform: linux/amd64
+    platform: linux/arm64
     image: smart-wheelchair-ros:jazzy
     ipc: host
     environment:
