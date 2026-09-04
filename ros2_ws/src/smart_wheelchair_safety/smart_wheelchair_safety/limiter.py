@@ -41,5 +41,21 @@ def front_sector_ranges(
     ]
 
 
+def safety_ranges(
+    ranges: Sequence[float],
+    angle_min: float,
+    angle_increment: float,
+    half_width_rad: float,
+    range_min: float,
+    range_max: float,
+    body_filter_distance_m: float,
+) -> list[float]:
+    return [
+        value
+        for value in front_sector_ranges(ranges, angle_min, angle_increment, half_width_rad)
+        if range_min <= value <= range_max and value > body_filter_distance_m
+    ]
+
+
 def _normalize_angle(angle: float) -> float:
     return math.atan2(math.sin(angle), math.cos(angle))

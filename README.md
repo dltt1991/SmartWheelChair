@@ -98,6 +98,8 @@ ros2 topic echo /scan_right
 
 The rear 120-degree wide-angle camera is shown in the same browser control page at `http://localhost:8090`.
 
+The forward safety filter only uses the front sector of those scans. It ignores returns within `0.34 m` to simulate body-intersection filtering, stops forward motion inside `0.45 m`, and starts slowing inside `0.90 m`.
+
 XQuartz path:
 
 1. Install and open XQuartz.
@@ -139,7 +141,7 @@ ros2 topic echo /odom
 
 ## Run Local Unit Tests
 
-These tests cover the pure speed-limiter logic and do not require ROS. The limiter fails safe for forward motion when no fresh, valid LiDAR ranges are available:
+These tests cover the pure speed-limiter logic and do not require ROS. The limiter fails safe for forward motion when no fresh, valid, body-filtered LiDAR ranges are available:
 
 ```bash
 PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest discover ros2_ws/src/smart_wheelchair_safety/test

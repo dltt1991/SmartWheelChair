@@ -51,7 +51,9 @@ def generate_launch_description():
         executable="safety_filter_node",
         parameters=[
             {"stop_distance_m": 0.45},
-            {"slow_distance_m": 1.20},
+            {"slow_distance_m": 0.90},
+            {"scan_timeout_s": 2.0},
+            {"body_filter_distance_m": 0.34},
         ],
         output="screen",
     )

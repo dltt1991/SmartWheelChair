@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 
-from smart_wheelchair_safety.limiter import front_sector_ranges, limit_forward_speed
+from smart_wheelchair_safety.limiter import limit_forward_speed, safety_ranges
 
 
 class SafetyFilterNode(Node):
@@ -11,8 +11,9 @@ class SafetyFilterNode(Node):
         super().__init__("safety_filter_node")
         self.declare_parameter("stop_distance_m", 0.45)
         self.declare_parameter("slow_distance_m", 1.20)
-        self.declare_parameter("scan_timeout_s", 0.50)
+        self.declare_parameter("scan_timeout_s", 2.0)
         self.declare_parameter("front_sector_half_angle_rad", 0.70)
+        self.declare_parameter("body_filter_distance_m", 0.34)
         self._validate_parameters()
 
         self._left_ranges = []
@@ -75,29 +76,30 @@ class SafetyFilterNode(Node):
         ]
 
     def _valid_front_scan_ranges(self, msg):
-        front_ranges = front_sector_ranges(
+        return safety_ranges(
             msg.ranges,
             msg.angle_min,
             msg.angle_increment,
             self.get_parameter("front_sector_half_angle_rad").value,
+            msg.range_min,
+            msg.range_max,
+            self.get_parameter("body_filter_distance_m").value,
         )
-        return [
-            value
-            for value in front_ranges
-            if msg.range_min <= value <= msg.range_max
-        ]
 
     def _validate_parameters(self):
         stop_distance = self.get_parameter("stop_distance_m").value
         slow_distance = self.get_parameter("slow_distance_m").value
         scan_timeout = self.get_parameter("scan_timeout_s").value
         front_sector_half_angle = self.get_parameter("front_sector_half_angle_rad").value
+        body_filter_distance = self.get_parameter("body_filter_distance_m").value
         if slow_distance <= stop_distance:
             raise ValueError("slow_distance_m must be greater than stop_distance_m")
         if scan_timeout <= 0.0:
             raise ValueError("scan_timeout_s must be positive")
         if front_sector_half_angle <= 0.0:
             raise ValueError("front_sector_half_angle_rad must be positive")
+        if body_filter_distance < 0.0:
+            raise ValueError("body_filter_distance_m must be non-negative")
 
 
 def main(args=None):

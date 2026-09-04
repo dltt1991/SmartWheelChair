@@ -1,7 +1,11 @@
 import math
 import unittest
 
-from smart_wheelchair_safety.limiter import front_sector_ranges, limit_forward_speed
+from smart_wheelchair_safety.limiter import (
+    front_sector_ranges,
+    limit_forward_speed,
+    safety_ranges,
+)
 
 
 class LimitForwardSpeedTest(unittest.TestCase):
@@ -42,6 +46,23 @@ class LimitForwardSpeedTest(unittest.TestCase):
         self.assertIn(0.6, front)
         self.assertNotIn(0.2, front)
         self.assertNotIn(0.3, front)
+
+    def test_filters_body_intersection_returns_before_limiting(self):
+        ranges = [math.inf] * 401
+        ranges[90] = 0.32
+        ranges[100] = 1.0
+
+        filtered = safety_ranges(
+            ranges,
+            angle_min=-0.87266,
+            angle_increment=math.radians(0.5),
+            half_width_rad=0.70,
+            range_min=0.08,
+            range_max=5.0,
+            body_filter_distance_m=0.34,
+        )
+
+        self.assertEqual(filtered, [1.0])
 
 
 if __name__ == "__main__":
