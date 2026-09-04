@@ -26,3 +26,38 @@ def camera_frame_payload(width, height, encoding, data):
         "encoding": "rgb8",
         "data": base64.b64encode(bytes(data[:limit])).decode("ascii"),
     }
+
+
+def reverse_wheel_paths(
+    linear_x_mps,
+    angular_z_rps,
+    wheel_width_m=0.72,
+    max_length_m=2.0,
+    step_m=0.1,
+):
+    if linear_x_mps >= -0.01:
+        return {"left": [], "right": []}
+
+    curvature = angular_z_rps / linear_x_mps if abs(linear_x_mps) > 1e-6 else 0.0
+    return {
+        "left": _reverse_wheel_path(curvature, wheel_width_m / 2.0, max_length_m, step_m),
+        "right": _reverse_wheel_path(curvature, -wheel_width_m / 2.0, max_length_m, step_m),
+    }
+
+
+def _reverse_wheel_path(curvature, side_offset_m, max_length_m, step_m):
+    points = []
+    steps = max(1, int(max_length_m / step_m))
+    for step in range(steps + 1):
+        distance = min(step * step_m, max_length_m)
+        s = -distance
+        if abs(curvature) < 1e-6:
+            x = s
+            y = 0.0
+            theta = 0.0
+        else:
+            theta = curvature * s
+            x = math.sin(theta) / curvature
+            y = (1.0 - math.cos(theta)) / curvature
+        points.append((x - math.sin(theta) * side_offset_m, y + math.cos(theta) * side_offset_m))
+    return points

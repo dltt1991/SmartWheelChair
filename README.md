@@ -96,7 +96,7 @@ ros2 topic echo /scan_left
 ros2 topic echo /scan_right
 ```
 
-The rear 120-degree wide-angle camera is shown in the same browser control page at `http://localhost:8090`.
+The rear 120-degree wide-angle camera is shown in the same browser control page at `http://localhost:8090`. When reversing, the camera view overlays 2 m predicted left and right wheel trajectories from the differential-drive kinematics.
 
 The forward safety filter only uses the front sector of those scans. It ignores returns within `0.34 m` to simulate body-intersection filtering, stops forward motion inside `0.45 m`, and starts slowing inside `0.90 m`.
 

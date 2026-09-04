@@ -175,6 +175,13 @@ PAGE = """<!doctype html>
     const cameraCanvas = document.getElementById("camera");
     const cameraStatus = document.getElementById("cameraStatus");
     const cameraContext = cameraCanvas.getContext("2d");
+    const MAX_LINEAR_MPS = 0.8;
+    const MAX_ANGULAR_RPS = 1.4;
+    const WHEEL_WIDTH_M = 0.72;
+    const TRAJECTORY_LENGTH_M = 2.0;
+    const CAMERA_X_M = -0.58;
+    const CAMERA_HEIGHT_M = 0.72;
+    const CAMERA_HFOV_RAD = 2.094;
     let dragging = false;
     let current = {x: 0, y: 0};
 
@@ -253,10 +260,81 @@ PAGE = """<!doctype html>
           image.data[dst + 3] = 255;
         }
         cameraContext.putImageData(image, 0, 0);
+        drawReverseTrajectory(frame.width, frame.height);
         cameraStatus.textContent = "后摄画面";
       }).catch(() => {
         cameraStatus.textContent = "后摄画面等待中...";
       });
+    }
+
+    function drawReverseTrajectory(width, height) {
+      const linear = current.y * MAX_LINEAR_MPS;
+      const angular = -current.x * MAX_ANGULAR_RPS;
+      if (linear >= -0.01) return;
+
+      const leftPath = reverseWheelPath(linear, angular, WHEEL_WIDTH_M / 2);
+      const rightPath = reverseWheelPath(linear, angular, -WHEEL_WIDTH_M / 2);
+      drawPath(leftPath, "#22d3ee", width, height);
+      drawPath(rightPath, "#fb923c", width, height);
+    }
+
+    function reverseWheelPath(linear, angular, sideOffset) {
+      const curvature = Math.abs(linear) > 1e-6 ? angular / linear : 0;
+      const points = [];
+      for (let distance = 0; distance <= TRAJECTORY_LENGTH_M + 1e-6; distance += 0.1) {
+        const s = -Math.min(distance, TRAJECTORY_LENGTH_M);
+        let x;
+        let y;
+        let theta;
+        if (Math.abs(curvature) < 1e-6) {
+          x = s;
+          y = 0;
+          theta = 0;
+        } else {
+          theta = curvature * s;
+          x = Math.sin(theta) / curvature;
+          y = (1 - Math.cos(theta)) / curvature;
+        }
+        points.push({x: x - Math.sin(theta) * sideOffset, y: y + Math.cos(theta) * sideOffset});
+      }
+      return points;
+    }
+
+    function projectGroundPoint(point, width, height) {
+      const zForward = -(point.x - CAMERA_X_M);
+      if (zForward <= 0.05) return null;
+
+      const aspect = width / height;
+      const vFov = 2 * Math.atan(Math.tan(CAMERA_HFOV_RAD / 2) / aspect);
+      const u = width / 2 + ((-point.y) / (zForward * Math.tan(CAMERA_HFOV_RAD / 2))) * width / 2;
+      const v = height / 2 + (CAMERA_HEIGHT_M / (zForward * Math.tan(vFov / 2))) * height / 2;
+      if (u < -width || u > width * 2 || v < -height || v > height * 2) return null;
+      return {x: u, y: v};
+    }
+
+    function drawPath(points, color, width, height) {
+      const projected = points.map(point => projectGroundPoint(point, width, height)).filter(Boolean);
+      if (projected.length < 2) return;
+
+      cameraContext.save();
+      cameraContext.lineWidth = 5;
+      cameraContext.lineCap = "round";
+      cameraContext.lineJoin = "round";
+      cameraContext.shadowColor = "rgba(0, 0, 0, 0.55)";
+      cameraContext.shadowBlur = 3;
+      cameraContext.strokeStyle = color;
+      cameraContext.beginPath();
+      cameraContext.moveTo(projected[0].x, projected[0].y);
+      for (const point of projected.slice(1)) {
+        cameraContext.lineTo(point.x, point.y);
+      }
+      cameraContext.stroke();
+
+      cameraContext.setLineDash([14, 12]);
+      cameraContext.lineWidth = 2;
+      cameraContext.strokeStyle = "rgba(255, 255, 255, 0.62)";
+      cameraContext.stroke();
+      cameraContext.restore();
     }
   </script>
 </body>

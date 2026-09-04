@@ -1,6 +1,10 @@
 import unittest
 
-from smart_wheelchair_safety.joystick import camera_frame_payload, joystick_to_velocity
+from smart_wheelchair_safety.joystick import (
+    camera_frame_payload,
+    joystick_to_velocity,
+    reverse_wheel_paths,
+)
 
 
 class JoystickMappingTest(unittest.TestCase):
@@ -20,3 +24,15 @@ class JoystickMappingTest(unittest.TestCase):
         self.assertEqual(payload["height"], 2)
         self.assertEqual(payload["encoding"], "rgb8")
         self.assertEqual(payload["data"], "/wAAAP8A")
+
+    def test_reverse_wheel_paths_are_parallel_when_backing_straight(self):
+        paths = reverse_wheel_paths(-0.5, 0.0, wheel_width_m=0.72, max_length_m=2.0)
+
+        self.assertAlmostEqual(paths["left"][0][1], 0.36)
+        self.assertAlmostEqual(paths["right"][0][1], -0.36)
+        self.assertAlmostEqual(paths["left"][-1][0], -2.0)
+        self.assertAlmostEqual(paths["right"][-1][0], -2.0)
+
+    def test_reverse_wheel_paths_are_empty_unless_reversing(self):
+        self.assertEqual(reverse_wheel_paths(0.0, 0.5), {"left": [], "right": []})
+        self.assertEqual(reverse_wheel_paths(0.3, 0.5), {"left": [], "right": []})
