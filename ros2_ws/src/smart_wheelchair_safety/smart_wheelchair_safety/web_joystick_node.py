@@ -35,9 +35,8 @@ PAGE = """<!doctype html>
         #111827;
     }
     main {
-      width: min(94vw, 980px);
+      width: min(94vw, 760px);
       display: grid;
-      grid-template-columns: minmax(280px, 440px) minmax(320px, 1fr);
       gap: 18px;
       align-items: center;
       justify-content: center;
@@ -126,6 +125,10 @@ PAGE = """<!doctype html>
       justify-items: center;
       width: 100%;
     }
+    .control {
+      width: min(100%, 440px);
+      justify-self: center;
+    }
     .camera canvas {
       width: 100%;
       aspect-ratio: 16 / 9;
@@ -139,7 +142,6 @@ PAGE = """<!doctype html>
     }
     @media (max-width: 820px) {
       main {
-        grid-template-columns: 1fr;
         padding: 18px 0;
       }
     }
@@ -147,6 +149,10 @@ PAGE = """<!doctype html>
 </head>
 <body>
   <main>
+    <div class="camera">
+      <canvas id="camera" width="640" height="360"></canvas>
+      <div class="camera-label" id="cameraStatus">后摄画面等待中...</div>
+    </div>
     <div class="control">
       <h1>SmartWheelChair Joystick</h1>
       <div class="status" id="status">连接中...</div>
@@ -159,10 +165,6 @@ PAGE = """<!doctype html>
         <div>转向 <span id="angular">0.00</span></div>
       </div>
       <button id="stop">停止</button>
-    </div>
-    <div class="camera">
-      <canvas id="camera" width="640" height="360"></canvas>
-      <div class="camera-label" id="cameraStatus">后摄画面等待中...</div>
     </div>
   </main>
   <script>
