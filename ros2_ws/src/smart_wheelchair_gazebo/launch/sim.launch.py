@@ -2,8 +2,10 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, SetEnvironmentVariable
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
+from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -12,12 +14,22 @@ def generate_launch_description():
     ros_gz_sim_share = get_package_share_directory("ros_gz_sim")
     world = os.path.join(pkg_share, "worlds", "m6_room.sdf")
     models = os.path.join(pkg_share, "models")
+    gui = LaunchConfiguration("gui")
 
-    gz_launch = IncludeLaunchDescription(
+    gz_server = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(ros_gz_sim_share, "launch", "gz_sim.launch.py")
         ),
         launch_arguments={"gz_args": f"-r -s {world}"}.items(),
+        condition=UnlessCondition(gui),
+    )
+
+    gz_gui = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(ros_gz_sim_share, "launch", "gz_sim.launch.py")
+        ),
+        launch_arguments={"gz_args": f"-r {world}"}.items(),
+        condition=IfCondition(gui),
     )
 
     bridge = Node(
@@ -46,8 +58,14 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument(
+                "gui",
+                default_value="false",
+                description="Start Gazebo with GUI instead of headless server mode.",
+            ),
             SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", models),
-            gz_launch,
+            gz_server,
+            gz_gui,
             bridge,
             safety_filter,
         ]

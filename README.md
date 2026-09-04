@@ -62,6 +62,26 @@ ros2 launch smart_wheelchair_gazebo sim.launch.py
 
 The launch file starts Gazebo in headless server mode by default, which works inside Docker without display forwarding.
 
+To show the Gazebo window on macOS:
+
+1. Install and open XQuartz.
+2. In XQuartz, enable `Settings -> Security -> Allow connections from network clients`.
+3. Restart XQuartz.
+4. Run:
+
+```bash
+xhost + 127.0.0.1
+docker compose run --rm sim
+```
+
+Inside the Docker shell:
+
+```bash
+cd /workspaces/SmartWheelChair/ros2_ws
+source install/setup.bash
+ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true
+```
+
 In another Docker shell, drive through the safety filter:
 
 ```bash
