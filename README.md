@@ -74,6 +74,8 @@ xhost + 127.0.0.1
 docker compose run --rm sim
 ```
 
+Keep the host terminal `DISPLAY=:0` only for running `xhost`. Docker uses `X11_DISPLAY`, defaulting to `host.docker.internal:0`, so Gazebo connects back to XQuartz instead of looking for a display inside the container.
+
 Inside the Docker shell:
 
 ```bash
