@@ -21,7 +21,7 @@ RUN set -eux; \
       'Components: main restricted universe multiverse' \
       'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
       > /etc/apt/sources.list.d/ubuntu.sources
-RUN sed -i 's#http://packages.ros.org/ros2/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu#g; s#http://packages.ros.org/ros/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros/ubuntu#g; s#https://packages.ros.org/ros2/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu#g; s#https://packages.ros.org/ros/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros/ubuntu#g' /etc/apt/sources.list.d/*ros* || true
+RUN sed -i 's#http://packages.ros.org/ros2/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu#g; s#http://packages.ros.org/ros/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros/ubuntu#g; s#https://packages.ros.org/ros2/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu#g; s#https://packages.ros.org/ros/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros/ubuntu#g; s#^Types: deb deb-src#Types: deb#g; s#^deb-src #&[disabled=yes] #g' /etc/apt/sources.list.d/*ros* || true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-colcon-common-extensions \

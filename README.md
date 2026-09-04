@@ -60,6 +60,8 @@ Inside the Docker shell:
 ros2 launch smart_wheelchair_gazebo sim.launch.py
 ```
 
+The launch file starts Gazebo in headless server mode by default, which works inside Docker without display forwarding.
+
 In another Docker shell, drive through the safety filter:
 
 ```bash

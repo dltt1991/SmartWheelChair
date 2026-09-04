@@ -45,7 +45,7 @@
         <pose>0.46 0.26 0.56 0 0 0.35</pose>
         <topic>/scan_left</topic>
         <update_rate>15</update_rate>
-        <ray>
+        <lidar>
           <scan>
             <horizontal>
               <samples>270</samples>
@@ -59,7 +59,7 @@
             <max>5.0</max>
             <resolution>0.01</resolution>
           </range>
-        </ray>
+        </lidar>
         <always_on>true</always_on>
         <visualize>true</visualize>
       </sensor>
@@ -68,7 +68,7 @@
         <pose>0.46 -0.26 0.56 0 0 -0.35</pose>
         <topic>/scan_right</topic>
         <update_rate>15</update_rate>
-        <ray>
+        <lidar>
           <scan>
             <horizontal>
               <samples>270</samples>
@@ -82,7 +82,7 @@
             <max>5.0</max>
             <resolution>0.01</resolution>
           </range>
-        </ray>
+        </lidar>
         <always_on>true</always_on>
         <visualize>true</visualize>
       </sensor>
@@ -90,9 +90,9 @@
       <sensor name="rear_camera" type="camera">
         <pose>-0.58 0 0.72 0 0 3.1416</pose>
         <topic>/camera/rear/image</topic>
-        <camera_info_topic>/camera/rear/camera_info</camera_info_topic>
         <update_rate>15</update_rate>
         <camera>
+          <camera_info_topic>/camera/rear/camera_info</camera_info_topic>
           <horizontal_fov>2.09</horizontal_fov>
           <image>
             <width>640</width>
