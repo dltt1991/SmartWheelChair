@@ -34,18 +34,35 @@ class ModelVisualsTest(unittest.TestCase):
         self.assertEqual({sensor.attrib["name"] for sensor in sensors}, {"left_lidar", "right_lidar"})
         self.assertTrue(all(sensor.findtext("visualize") == "true" for sensor in sensors))
 
+        left = self.root.find(".//sensor[@name='left_lidar']//horizontal")
+        self.assertEqual(left.findtext("samples"), "401")
+        self.assertAlmostEqual(float(left.findtext("min_angle")), -0.87266, places=4)
+        self.assertAlmostEqual(float(left.findtext("max_angle")), 2.61799, places=4)
+
+        right = self.root.find(".//sensor[@name='right_lidar']//horizontal")
+        self.assertEqual(right.findtext("samples"), "401")
+        self.assertAlmostEqual(float(right.findtext("min_angle")), -2.61799, places=4)
+        self.assertAlmostEqual(float(right.findtext("max_angle")), 0.87266, places=4)
+
         names = {visual.attrib["name"] for visual in self.root.findall(".//visual")}
         expected = {
             "left_lidar_body_visual",
             "right_lidar_body_visual",
-            "left_lidar_ray_-2_visual",
-            "left_lidar_ray_0_visual",
-            "left_lidar_ray_2_visual",
-            "right_lidar_ray_-2_visual",
-            "right_lidar_ray_0_visual",
-            "right_lidar_ray_2_visual",
+            "left_lidar_ray_minus50_visual",
+            "left_lidar_ray_50_visual",
+            "left_lidar_ray_150_visual",
+            "right_lidar_ray_minus150_visual",
+            "right_lidar_ray_minus50_visual",
+            "right_lidar_ray_50_visual",
         }
         self.assertTrue(expected.issubset(names))
+
+    def test_rear_camera_is_centered_wide_angle(self):
+        sensor = self.root.find(".//sensor[@name='rear_camera']")
+        self.assertIsNotNone(sensor)
+        pose = [float(value) for value in sensor.findtext("pose").split()]
+        self.assertAlmostEqual(pose[1], 0.0)
+        self.assertAlmostEqual(float(sensor.findtext(".//horizontal_fov")), 2.094, places=3)
 
     def _visual_pose(self, name):
         visual = self.root.find(f".//visual[@name='{name}']")

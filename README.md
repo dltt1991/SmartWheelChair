@@ -6,8 +6,8 @@ Dockerized ROS 2 Jazzy + Gazebo simulation for an M6-style smart wheelchair.
 
 - Rear differential drive with two powered rear wheels.
 - Two passive front caster wheels.
-- Left and right front 2D LiDAR sensors.
-- Rear camera.
+- Left and right 360-degree spinning single-line LiDAR sensors, exposed as body-filtered side/front 2D scans.
+- Rear center 120-degree wide-angle camera.
 - A ROS safety filter that slows or stops forward motion near front obstacles.
 
 This first version intentionally skips real GD32/RK3568 protocols, SLAM, autonomous navigation, and certified safety behavior.
@@ -89,12 +89,14 @@ http://localhost:8090
 
 Drag the joystick with the mouse or trackpad to publish `/cmd_vel_raw`. Releasing the joystick or closing the page stops the commanded motion automatically.
 
-The two front LiDARs are visible in Gazebo as green scan rays. They are 2D single-line LiDARs, so the ROS outputs are `LaserScan` topics rather than 3D point clouds:
+The two LiDARs are physically modeled as 360-degree spinning single-line sensors, but the simulator publishes the body-filtered effective fields of view used by the wheelchair: about 200 degrees per side at 0.5-degree angular resolution, covering each side and side-front region. They are visible in Gazebo as green scan rays, and the ROS outputs are `LaserScan` topics rather than 3D point clouds:
 
 ```bash
 ros2 topic echo /scan_left
 ros2 topic echo /scan_right
 ```
+
+The rear 120-degree wide-angle camera is shown in the same browser control page at `http://localhost:8090`.
 
 XQuartz path:
 
@@ -149,6 +151,6 @@ The model follows the teardown summary:
 
 - Front wheels are passive casters.
 - Rear wheels are independently driven and form a differential-drive base.
-- Two front single-line LiDARs provide local obstacle input.
-- Rear camera is modeled as a video sensor only.
+- Two 360-degree spinning single-line LiDARs provide body-filtered side/front local obstacle input.
+- The rear camera is modeled as a 120-degree wide-angle video sensor.
 - The simulated shared-control behavior is local obstacle speed limiting, not destination navigation.

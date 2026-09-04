@@ -6,8 +6,9 @@ import time
 from geometry_msgs.msg import Twist
 import rclpy
 from rclpy.node import Node
+from sensor_msgs.msg import Image
 
-from smart_wheelchair_safety.joystick import joystick_to_velocity
+from smart_wheelchair_safety.joystick import camera_frame_payload, joystick_to_velocity
 
 
 PAGE = """<!doctype html>
@@ -34,10 +35,12 @@ PAGE = """<!doctype html>
         #111827;
     }
     main {
-      width: min(92vw, 440px);
+      width: min(94vw, 980px);
       display: grid;
+      grid-template-columns: minmax(280px, 440px) minmax(320px, 1fr);
       gap: 18px;
-      justify-items: center;
+      align-items: center;
+      justify-content: center;
     }
     h1 {
       margin: 0;
@@ -117,21 +120,50 @@ PAGE = """<!doctype html>
       font-weight: 700;
       cursor: pointer;
     }
+    .control, .camera {
+      display: grid;
+      gap: 18px;
+      justify-items: center;
+      width: 100%;
+    }
+    .camera canvas {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border-radius: 8px;
+      background: #020617;
+      border: 1px solid rgba(255,255,255,.16);
+    }
+    .camera-label {
+      color: #cbd5e1;
+      font-size: 15px;
+    }
+    @media (max-width: 820px) {
+      main {
+        grid-template-columns: 1fr;
+        padding: 18px 0;
+      }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>SmartWheelChair Joystick</h1>
-    <div class="status" id="status">连接中...</div>
-    <div class="pad" id="pad" aria-label="virtual joystick">
-      <div class="axis"></div>
-      <div class="knob" id="knob"></div>
+    <div class="control">
+      <h1>SmartWheelChair Joystick</h1>
+      <div class="status" id="status">连接中...</div>
+      <div class="pad" id="pad" aria-label="virtual joystick">
+        <div class="axis"></div>
+        <div class="knob" id="knob"></div>
+      </div>
+      <div class="readout">
+        <div>前后 <span id="linear">0.00</span></div>
+        <div>转向 <span id="angular">0.00</span></div>
+      </div>
+      <button id="stop">停止</button>
     </div>
-    <div class="readout">
-      <div>前后 <span id="linear">0.00</span></div>
-      <div>转向 <span id="angular">0.00</span></div>
+    <div class="camera">
+      <canvas id="camera" width="640" height="360"></canvas>
+      <div class="camera-label" id="cameraStatus">后摄画面等待中...</div>
     </div>
-    <button id="stop">停止</button>
   </main>
   <script>
     const pad = document.getElementById("pad");
@@ -140,6 +172,9 @@ PAGE = """<!doctype html>
     const linearEl = document.getElementById("linear");
     const angularEl = document.getElementById("angular");
     const stopButton = document.getElementById("stop");
+    const cameraCanvas = document.getElementById("camera");
+    const cameraStatus = document.getElementById("cameraStatus");
+    const cameraContext = cameraCanvas.getContext("2d");
     let dragging = false;
     let current = {x: 0, y: 0};
 
@@ -196,7 +231,33 @@ PAGE = """<!doctype html>
     });
     stopButton.addEventListener("click", center);
     setInterval(() => send(current.x, current.y), 100);
+    setInterval(updateCamera, 200);
     center();
+
+    function updateCamera() {
+      fetch("/camera/rear/frame").then(response => {
+        if (!response.ok) throw new Error("no frame");
+        return response.json();
+      }).then(frame => {
+        if (!frame.width || !frame.height || !frame.data) return;
+        if (cameraCanvas.width !== frame.width || cameraCanvas.height !== frame.height) {
+          cameraCanvas.width = frame.width;
+          cameraCanvas.height = frame.height;
+        }
+        const raw = atob(frame.data);
+        const image = cameraContext.createImageData(frame.width, frame.height);
+        for (let src = 0, dst = 0; src < raw.length && dst < image.data.length; src += 3, dst += 4) {
+          image.data[dst] = raw.charCodeAt(src);
+          image.data[dst + 1] = raw.charCodeAt(src + 1);
+          image.data[dst + 2] = raw.charCodeAt(src + 2);
+          image.data[dst + 3] = 255;
+        }
+        cameraContext.putImageData(image, 0, 0);
+        cameraStatus.textContent = "后摄画面";
+      }).catch(() => {
+        cameraStatus.textContent = "后摄画面等待中...";
+      });
+    }
   </script>
 </body>
 </html>
@@ -215,7 +276,9 @@ class WebJoystickNode(Node):
         self._lock = threading.Lock()
         self._last_input = (0.0, 0.0)
         self._last_input_time = 0.0
+        self._camera_frame = None
         self._pub = self.create_publisher(Twist, "cmd_vel_raw", 10)
+        self.create_subscription(Image, "camera/rear/image", self._on_camera_image, 10)
         self.create_timer(0.05, self._publish_command)
 
         http_port = int(self.get_parameter("http_port").value)
@@ -223,9 +286,22 @@ class WebJoystickNode(Node):
         self.get_logger().info(f"Web joystick: http://localhost:{http_port}")
 
     def _start_http_server(self, port):
-        server = ThreadingHTTPServer(("0.0.0.0", port), _handler_class(self._handle_message))
+        server = ThreadingHTTPServer(
+            ("0.0.0.0", port),
+            _handler_class(self._handle_message, self._camera_payload),
+        )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
+
+    def _on_camera_image(self, msg):
+        payload = camera_frame_payload(msg.width, msg.height, msg.encoding, msg.data)
+        if payload["data"]:
+            with self._lock:
+                self._camera_frame = payload
+
+    def _camera_payload(self):
+        with self._lock:
+            return self._camera_frame
 
     def _handle_message(self, message):
         try:
@@ -259,9 +335,22 @@ class WebJoystickNode(Node):
         self._pub.publish(msg)
 
 
-def _handler_class(on_message):
+def _handler_class(on_message, camera_payload):
     class JoystickHandler(BaseHTTPRequestHandler):
         def do_GET(self):
+            if self.path == "/camera/rear/frame":
+                payload = camera_payload()
+                if payload is None:
+                    self.send_error(404)
+                    return
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             if self.path not in ("/", "/index.html"):
                 self.send_error(404)
                 return

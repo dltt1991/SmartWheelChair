@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from smart_wheelchair_safety.limiter import limit_forward_speed
+from smart_wheelchair_safety.limiter import front_sector_ranges, limit_forward_speed
 
 
 class LimitForwardSpeedTest(unittest.TestCase):
@@ -30,6 +30,18 @@ class LimitForwardSpeedTest(unittest.TestCase):
     def test_rejects_invalid_thresholds(self):
         with self.assertRaisesRegex(ValueError, "slow_distance_m must be greater"):
             limit_forward_speed(0.5, [1.0], 1.2, 0.45)
+
+    def test_extracts_front_sector_from_360_degree_scan(self):
+        ranges = [3.0] * 720
+        ranges[0] = 0.2
+        ranges[360] = 0.6
+        ranges[719] = 0.3
+
+        front = front_sector_ranges(ranges, -math.pi, math.radians(0.5), math.radians(30))
+
+        self.assertIn(0.6, front)
+        self.assertNotIn(0.2, front)
+        self.assertNotIn(0.3, front)
 
 
 if __name__ == "__main__":

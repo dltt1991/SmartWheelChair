@@ -26,3 +26,20 @@ def limit_forward_speed(
 
     scale = (nearest - stop_distance_m) / (slow_distance_m - stop_distance_m)
     return requested_speed * scale
+
+
+def front_sector_ranges(
+    ranges: Sequence[float],
+    angle_min: float,
+    angle_increment: float,
+    half_width_rad: float,
+) -> list[float]:
+    return [
+        value
+        for index, value in enumerate(ranges)
+        if abs(_normalize_angle(angle_min + index * angle_increment)) <= half_width_rad
+    ]
+
+
+def _normalize_angle(angle: float) -> float:
+    return math.atan2(math.sin(angle), math.cos(angle))

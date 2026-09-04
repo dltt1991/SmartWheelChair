@@ -84,88 +84,88 @@
       </visual>
 
       <visual name="left_lidar_body_visual">
-        <pose>0.46 0.26 0.56 0 0 0.35</pose>
+        <pose>0.46 0.26 0.56 0 0 0</pose>
         <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
         <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>
       </visual>
 
       <visual name="right_lidar_body_visual">
-        <pose>0.46 -0.26 0.56 0 0 -0.35</pose>
+        <pose>0.46 -0.26 0.56 0 0 0</pose>
         <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
         <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>
       </visual>
 
-      <visual name="left_lidar_ray_-2_visual">
-        <pose>1.211 -0.014 0.565 0 0 -0.350</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="left_lidar_ray_-1_visual">
-        <pose>1.260 0.260 0.565 0 0 0.000</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+      <visual name="left_lidar_ray_minus50_visual">
+        <pose>0.910 -0.276 0.565 0 0 -0.8727</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
       </visual>
 
       <visual name="left_lidar_ray_0_visual">
-        <pose>1.211 0.534 0.565 0 0 0.350</pose>
-        <geometry><box><size>1.60 0.026 0.014</size></box></geometry>
+        <pose>1.160 0.260 0.565 0 0 0.0000</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="left_lidar_ray_50_visual">
+        <pose>0.910 0.796 0.565 0 0 0.8727</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 1.0 0.55 0.50</ambient><diffuse>0.0 1.0 0.55 0.50</diffuse></material>
       </visual>
 
-      <visual name="left_lidar_ray_1_visual">
-        <pose>1.072 0.775 0.565 0 0 0.700</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+      <visual name="left_lidar_ray_100_visual">
+        <pose>0.338 0.949 0.565 0 0 1.7453</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
       </visual>
 
-      <visual name="left_lidar_ray_2_visual">
-        <pose>0.858 0.954 0.565 0 0 1.050</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+      <visual name="left_lidar_ray_150_visual">
+        <pose>-0.146 0.610 0.565 0 0 2.6180</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
       </visual>
 
-      <visual name="right_lidar_ray_-2_visual">
-        <pose>0.858 -0.954 0.565 0 0 -1.050</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+      <visual name="right_lidar_ray_minus150_visual">
+        <pose>-0.146 -0.610 0.565 0 0 -2.6180</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
       </visual>
 
-      <visual name="right_lidar_ray_-1_visual">
-        <pose>1.072 -0.775 0.565 0 0 -0.700</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+      <visual name="right_lidar_ray_minus100_visual">
+        <pose>0.338 -0.949 0.565 0 0 -1.7453</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
+      </visual>
+
+      <visual name="right_lidar_ray_minus50_visual">
+        <pose>0.910 -0.796 0.565 0 0 -0.8727</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
+        <material><ambient>0.0 1.0 0.55 0.50</ambient><diffuse>0.0 1.0 0.55 0.50</diffuse></material>
       </visual>
 
       <visual name="right_lidar_ray_0_visual">
-        <pose>1.211 -0.534 0.565 0 0 -0.350</pose>
-        <geometry><box><size>1.60 0.026 0.014</size></box></geometry>
-        <material><ambient>0.0 1.0 0.55 0.50</ambient><diffuse>0.0 1.0 0.55 0.50</diffuse></material>
-      </visual>
-
-      <visual name="right_lidar_ray_1_visual">
-        <pose>1.260 -0.260 0.565 0 0 0.000</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+        <pose>1.160 -0.260 0.565 0 0 0.0000</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
       </visual>
 
-      <visual name="right_lidar_ray_2_visual">
-        <pose>1.211 0.014 0.565 0 0 0.350</pose>
-        <geometry><box><size>1.60 0.018 0.012</size></box></geometry>
+      <visual name="right_lidar_ray_50_visual">
+        <pose>0.910 0.276 0.565 0 0 0.8727</pose>
+        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
       </visual>
 
       <sensor name="left_lidar" type="gpu_lidar">
-        <pose>0.46 0.26 0.56 0 0 0.35</pose>
+        <pose>0.46 0.26 0.56 0 0 0</pose>
         <topic>/scan_left</topic>
         <update_rate>15</update_rate>
         <lidar>
           <scan>
             <horizontal>
-              <samples>270</samples>
+              <samples>401</samples>
               <resolution>1</resolution>
-              <min_angle>-1.7453</min_angle>
-              <max_angle>1.7453</max_angle>
+              <min_angle>-0.87266</min_angle>
+              <max_angle>2.61799</max_angle>
             </horizontal>
           </scan>
           <range>
@@ -179,16 +179,16 @@
       </sensor>
 
       <sensor name="right_lidar" type="gpu_lidar">
-        <pose>0.46 -0.26 0.56 0 0 -0.35</pose>
+        <pose>0.46 -0.26 0.56 0 0 0</pose>
         <topic>/scan_right</topic>
         <update_rate>15</update_rate>
         <lidar>
           <scan>
             <horizontal>
-              <samples>270</samples>
+              <samples>401</samples>
               <resolution>1</resolution>
-              <min_angle>-1.7453</min_angle>
-              <max_angle>1.7453</max_angle>
+              <min_angle>-2.61799</min_angle>
+              <max_angle>0.87266</max_angle>
             </horizontal>
           </scan>
           <range>
@@ -207,7 +207,7 @@
         <update_rate>15</update_rate>
         <camera>
           <camera_info_topic>/camera/rear/camera_info</camera_info_topic>
-          <horizontal_fov>2.09</horizontal_fov>
+          <horizontal_fov>2.094</horizontal_fov>
           <image>
             <width>640</width>
             <height>360</height>
