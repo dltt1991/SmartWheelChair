@@ -14,8 +14,28 @@ This first version intentionally skips real GD32/RK3568 protocols, SLAM, autonom
 
 ## Build Docker Image
 
+The Dockerfile defaults to DaoCloud's public Docker Hub mirror for the base image and Tsinghua mirrors for Ubuntu/ROS apt packages. `docker-compose.yml` pins `linux/amd64` because this public mirror currently resolves the ROS desktop image that way; Apple Silicon Macs can run it through Docker's emulation, with lower Gazebo performance.
+
+For Docker Desktop on macOS, add this to `Settings -> Docker Engine` and restart Docker:
+
+```json
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io"
+  ]
+}
+```
+
+The same JSON is also saved in `docker/daemon-cn-mirror.json`.
+
 ```bash
 docker compose build
+```
+
+To bypass the mirror:
+
+```bash
+docker compose build --build-arg BASE_IMAGE=osrf/ros:jazzy-desktop-full
 ```
 
 ## Open A ROS Shell

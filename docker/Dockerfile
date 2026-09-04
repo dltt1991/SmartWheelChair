@@ -1,6 +1,27 @@
-FROM osrf/ros:jazzy-desktop-full
+# check=skip=RedundantTargetPlatform
+ARG BASE_IMAGE=docker.m.daocloud.io/osrf/ros:jazzy-desktop-full
+ARG TARGETPLATFORM=linux/amd64
+FROM --platform=${TARGETPLATFORM} ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
+
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    if [ "$arch" = "amd64" ]; then ubuntu_suite="ubuntu"; else ubuntu_suite="ubuntu-ports"; fi; \
+    printf '%s\n' \
+      'Types: deb' \
+      "URIs: https://mirrors.tuna.tsinghua.edu.cn/${ubuntu_suite}" \
+      'Suites: noble noble-updates noble-backports' \
+      'Components: main restricted universe multiverse' \
+      'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+      '' \
+      'Types: deb' \
+      "URIs: https://mirrors.tuna.tsinghua.edu.cn/${ubuntu_suite}" \
+      'Suites: noble-security' \
+      'Components: main restricted universe multiverse' \
+      'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+      > /etc/apt/sources.list.d/ubuntu.sources
+RUN sed -i 's#http://packages.ros.org/ros2/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu#g; s#http://packages.ros.org/ros/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros/ubuntu#g; s#https://packages.ros.org/ros2/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros2/ubuntu#g; s#https://packages.ros.org/ros/ubuntu#https://mirrors.tuna.tsinghua.edu.cn/ros/ubuntu#g' /etc/apt/sources.list.d/*ros* || true
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-colcon-common-extensions \
