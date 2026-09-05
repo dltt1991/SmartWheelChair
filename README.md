@@ -1,22 +1,23 @@
-# SmartWheelChair ROS Simulation
+# SmartWheelChair ROS 仿真
 
-Dockerized ROS 2 Jazzy + Gazebo simulation for an M6-style smart wheelchair.
+这是一个基于 Docker 的 ROS 2 Jazzy + Gazebo 智能轮椅仿真环境，模型参考 M6 类智能轮椅结构。
 
-## What Is Modeled
+## 仿真内容
 
-- Rear differential drive with two powered rear wheels.
-- Two passive front caster wheels.
-- Left and right 360-degree spinning single-line LiDAR sensors, exposed as body-filtered side/front 2D scans.
-- Rear center 120-degree wide-angle camera.
-- A ROS safety filter that slows or stops forward motion near front obstacles.
+- 后轮差速驱动，两侧后轮独立动力输出。
+- 两个被动前万向轮。
+- 左右两颗 360 度旋转单线激光雷达，在仿真中发布经过车身过滤后的侧边/侧前 2D 扫描。
+- 后方中部 120 度广角摄像头。
+- ROS 安全过滤器，可根据激光点云对前进、转向等动作进行减速或停车。
+- 浏览器虚拟摇杆和后摄画面，倒车时叠加 2 米左右轮预测轨迹。
 
-This first version intentionally skips real GD32/RK3568 protocols, SLAM, autonomous navigation, and certified safety behavior.
+当前版本刻意不实现真实 GD32/RK3568 通信协议、SLAM、自主导航和认证级安全控制。
 
-## Build Docker Image
+## 构建 Docker 镜像
 
-The Dockerfile defaults to DaoCloud's public Docker Hub mirror for an ARM64 ROS base image and Tsinghua mirrors for Ubuntu/ROS apt packages. `docker-compose.yml` pins `linux/arm64` for Apple Silicon Macs; running the Gazebo GUI through an amd64 ROS desktop image under emulation can leave the VNC desktop black because the Gazebo window never maps correctly.
+Dockerfile 默认使用 DaoCloud 的 Docker Hub 公共镜像作为 ARM64 ROS 基础镜像源，并使用清华源安装 Ubuntu/ROS apt 软件包。`docker-compose.yml` 针对 Apple Silicon Mac 固定为 `linux/arm64`；如果在模拟环境中跑 amd64 ROS desktop 镜像，Gazebo GUI 可能无法正确映射窗口，导致 VNC 桌面黑屏。
 
-For Docker Desktop on macOS, add this to `Settings -> Docker Engine` and restart Docker:
+如果使用 macOS Docker Desktop，可以在 `Settings -> Docker Engine` 中加入下面配置，然后重启 Docker：
 
 ```json
 {
@@ -26,25 +27,25 @@ For Docker Desktop on macOS, add this to `Settings -> Docker Engine` and restart
 }
 ```
 
-The same JSON is also saved in `docker/daemon-cn-mirror.json`.
+同样的配置也保存了一份在 `docker/daemon-cn-mirror.json`。
 
 ```bash
 docker compose build
 ```
 
-To bypass the mirror:
+如果想绕过镜像源：
 
 ```bash
 docker compose build --build-arg BASE_IMAGE=ros:jazzy-ros-base
 ```
 
-## Open A ROS Shell
+## 打开 ROS Shell
 
 ```bash
 docker compose run --rm sim
 ```
 
-Inside the shell:
+进入容器后执行：
 
 ```bash
 cd /workspaces/SmartWheelChair/ros2_ws
@@ -52,77 +53,83 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
-## Launch Simulation
+## 启动仿真
 
-Inside the Docker shell:
+在 Docker shell 内启动无界面 Gazebo：
 
 ```bash
 ros2 launch smart_wheelchair_gazebo sim.launch.py
 ```
 
-The launch file starts Gazebo in headless server mode by default, which works inside Docker without display forwarding.
+launch 文件默认以 headless server 模式启动 Gazebo，这种方式在 Docker 内不需要显示转发。
 
-To show the Gazebo window on macOS:
-
-Recommended path:
+在 macOS 上显示 Gazebo 窗口，推荐使用浏览器 VNC 方案：
 
 ```bash
 cd /Users/guotao/Work/code/SmartWheelChair
 docker compose up -d gui
 ```
 
-Then open:
+然后打开：
 
 ```text
 http://localhost:6080/vnc.html
 ```
 
-Click `Connect`. The VNC path runs Gazebo inside a container desktop with software OpenGL, avoiding XQuartz GLX issues. If the browser tab was already open from an older failed run, reconnect or hard refresh the page.
+点击 `Connect`。VNC 方案会在容器桌面里运行 Gazebo，并使用软件 OpenGL。如果浏览器标签页来自旧的失败运行，请重新连接或强制刷新页面。
 
-`docker compose up gui` starts `ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true` through `docker/gazebo-gui-vnc.sh`. `docker compose run --rm sim` only opens a ROS shell unless you launch Gazebo manually.
+`docker compose up gui` 会通过 `docker/gazebo-gui-vnc.sh` 启动：
 
-Open the virtual joystick in another browser tab:
+```bash
+ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true
+```
+
+`docker compose run --rm sim` 只会打开 ROS shell，不会自动启动 Gazebo。
+
+## 虚拟摇杆和后摄画面
+
+在另一个浏览器标签页打开：
 
 ```text
 http://localhost:8090
 ```
 
-Drag the joystick with the mouse or trackpad to publish `/cmd_vel_raw`. Releasing the joystick or closing the page stops the commanded motion automatically.
+用鼠标或触控板拖动摇杆，会发布 `/cmd_vel_raw`。松开摇杆或关闭页面后，运动指令会自动归零。
 
-The two LiDARs are physically modeled as 360-degree spinning single-line sensors, but the simulator publishes the body-filtered effective fields of view used by the wheelchair: about 200 degrees per side at 0.5-degree angular resolution, covering each side and side-front region. They are visible in Gazebo as green scan rays, and the ROS outputs are `LaserScan` topics rather than 3D point clouds:
+当前限速：
+
+- 前进最大速度：`6 kph`，即 `1.6666667 m/s`
+- 后退最大速度：`3 kph`，即 `0.8333333 m/s`
+- 最大角速度：`1.4 rad/s`
+
+后方 120 度广角摄像头画面显示在同一个浏览器控制页中。倒车时，画面会根据差速轮运动学叠加 2 米范围内的左右轮预测轨迹。
+
+## 激光雷达和安全过滤
+
+两颗激光雷达在物理结构上按 360 度旋转单线雷达建模，但仿真发布的是轮椅实际使用的有效视场：每侧约 200 度，角分辨率 0.5 度，覆盖侧边和侧前区域。Gazebo 中能看到绿色扫描射线；ROS 输出是 `LaserScan` 话题，不是 3D 点云：
 
 ```bash
 ros2 topic echo /scan_left
 ros2 topic echo /scan_right
 ```
 
-The rear 120-degree wide-angle camera is shown in the same browser control page at `http://localhost:8090`. When reversing, the camera view overlays 2 m predicted left and right wheel trajectories from the differential-drive kinematics.
+安全过滤器会使用不同方向的激光扇区限制运动。它先把雷达测距转换为“障碍物到轮椅外轮廓”的净距离，再进行限速判断。
 
-The forward safety filter only uses the front sector of those scans. It ignores returns within `0.34 m` to simulate body-intersection filtering, stops forward motion inside `0.45 m`, and starts slowing inside `0.90 m`.
+关键参数：
 
-XQuartz path:
+- `body_min_x_m = -0.58`
+- `body_max_x_m = 0.64`
+- `body_min_y_m = -0.40`
+- `body_max_y_m = 0.40`
+- `body_filter_margin_m = 0.02`
+- `stop_distance_m = 0.10`
+- `slow_distance_m = 0.90`
 
-1. Install and open XQuartz.
-2. In XQuartz, enable `Settings -> Security -> Allow connections from network clients`.
-3. Restart XQuartz.
-4. Run:
+其中 `stop_distance_m = 0.10` 表示轮椅外轮廓距离障碍物 10 厘米时停车，而不是雷达原点距离障碍物 10 厘米。距离小于 `0.02 m` 的车身相交回波会被当作自身回波过滤掉。
 
-```bash
-xhost + 127.0.0.1
-docker compose run --rm sim
-```
+## 键盘遥控
 
-Keep the host terminal `DISPLAY=:0` only for running `xhost`. Docker uses `X11_DISPLAY`, defaulting to `host.docker.internal:0`, so Gazebo connects back to XQuartz instead of looking for a display inside the container.
-
-Inside the Docker shell:
-
-```bash
-cd /workspaces/SmartWheelChair/ros2_ws
-source install/setup.bash
-ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true
-```
-
-In another Docker shell, drive through the safety filter:
+在另一个 Docker shell 中，可以通过键盘遥控并经过 safety filter：
 
 ```bash
 cd /workspaces/SmartWheelChair/ros2_ws
@@ -130,7 +137,7 @@ source install/setup.bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r cmd_vel:=cmd_vel_raw
 ```
 
-Useful topics:
+常用话题：
 
 ```bash
 ros2 topic list
@@ -139,20 +146,26 @@ ros2 topic echo /scan_right
 ros2 topic echo /odom
 ```
 
-## Run Local Unit Tests
+## 运行本地单元测试
 
-These tests cover the pure speed-limiter logic and do not require ROS. The limiter fails safe for forward motion when no fresh, valid, body-filtered LiDAR ranges are available:
+这些测试覆盖摇杆映射、速度限制器、轮椅模型和 Gazebo 世界布局。纯 Python 测试不需要 ROS：
 
 ```bash
 PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest discover ros2_ws/src/smart_wheelchair_safety/test
 ```
 
-## Notes From Teardown
+也可以运行当前完整测试集：
 
-The model follows the teardown summary:
+```bash
+PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest ros2_ws/src/smart_wheelchair_safety/test/test_joystick.py ros2_ws/src/smart_wheelchair_safety/test/test_limiter.py ros2_ws/src/smart_wheelchair_gazebo/test/test_model_visuals.py ros2_ws/src/smart_wheelchair_gazebo/test/test_world_layout.py
+```
 
-- Front wheels are passive casters.
-- Rear wheels are independently driven and form a differential-drive base.
-- Two 360-degree spinning single-line LiDARs provide body-filtered side/front local obstacle input.
-- The rear camera is modeled as a 120-degree wide-angle video sensor.
-- The simulated shared-control behavior is local obstacle speed limiting, not destination navigation.
+## 拆机信息对应关系
+
+当前模型根据拆机总结做了以下抽象：
+
+- 前轮是被动万向轮。
+- 后轮独立驱动，组成差速底盘。
+- 两颗 360 度旋转单线激光雷达提供经过车身过滤的侧边/侧前局部障碍输入。
+- 后摄像头建模为 120 度广角视频传感器。
+- 仿真的共享控制行为是本地障碍限速，不是目标点导航。

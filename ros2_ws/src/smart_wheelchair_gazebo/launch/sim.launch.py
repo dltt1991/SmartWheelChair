@@ -50,10 +50,14 @@ def generate_launch_description():
         package="smart_wheelchair_safety",
         executable="safety_filter_node",
         parameters=[
-            {"stop_distance_m": 0.45},
+            {"stop_distance_m": 0.10},
             {"slow_distance_m": 0.90},
             {"scan_timeout_s": 2.0},
-            {"body_filter_distance_m": 0.34},
+            {"body_min_x_m": -0.58},
+            {"body_max_x_m": 0.64},
+            {"body_min_y_m": -0.40},
+            {"body_max_y_m": 0.40},
+            {"body_filter_margin_m": 0.02},
         ],
         output="screen",
     )
@@ -63,7 +67,8 @@ def generate_launch_description():
         executable="web_joystick_node",
         parameters=[
             {"http_port": 8090},
-            {"max_linear_mps": 0.8},
+            {"max_forward_linear_mps": 1.6666667},
+            {"max_reverse_linear_mps": 0.8333333},
             {"max_angular_rps": 1.4},
         ],
         output="screen",

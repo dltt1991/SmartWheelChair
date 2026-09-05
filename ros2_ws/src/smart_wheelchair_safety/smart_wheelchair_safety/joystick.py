@@ -2,12 +2,21 @@ import base64
 import math
 
 
-def joystick_to_velocity(x, y, max_linear, max_angular, deadzone=0.08):
+def joystick_to_velocity(
+    x,
+    y,
+    max_forward_linear,
+    max_angular,
+    deadzone=0.08,
+    max_reverse_linear=None,
+):
     x = _clamp(float(x), -1.0, 1.0)
     y = _clamp(float(y), -1.0, 1.0)
     if math.hypot(x, y) < deadzone:
         return 0.0, 0.0
-    return y * max_linear, -x * max_angular
+    reverse_limit = max_forward_linear if max_reverse_linear is None else max_reverse_linear
+    linear_limit = max_forward_linear if y >= 0.0 else reverse_limit
+    return y * linear_limit, -x * max_angular
 
 
 def _clamp(value, lower, upper):

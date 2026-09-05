@@ -177,12 +177,14 @@ PAGE = """<!doctype html>
     const cameraCanvas = document.getElementById("camera");
     const cameraStatus = document.getElementById("cameraStatus");
     const cameraContext = cameraCanvas.getContext("2d");
-    const MAX_LINEAR_MPS = 0.8;
+    const MAX_FORWARD_LINEAR_MPS = 1.6666667;
+    const MAX_REVERSE_LINEAR_MPS = 0.8333333;
     const MAX_ANGULAR_RPS = 1.4;
     const WHEEL_WIDTH_M = 0.72;
     const TRAJECTORY_LENGTH_M = 2.0;
     const CAMERA_X_M = -0.58;
     const CAMERA_HEIGHT_M = 0.72;
+    const CAMERA_PITCH_RAD = 0.60;
     const CAMERA_HFOV_RAD = 2.094;
     let dragging = false;
     let current = {x: 0, y: 0};
@@ -270,8 +272,9 @@ PAGE = """<!doctype html>
     }
 
     function drawReverseTrajectory(width, height) {
-      const linear = current.y * MAX_LINEAR_MPS;
-      const angular = -current.x * MAX_ANGULAR_RPS;
+      const linearLimit = current.y >= 0 ? MAX_FORWARD_LINEAR_MPS : MAX_REVERSE_LINEAR_MPS;
+      const linear = current.y * linearLimit;
+      const angular = current.x * MAX_ANGULAR_RPS;
       if (linear >= -0.01) return;
 
       const leftPath = reverseWheelPath(linear, angular, WHEEL_WIDTH_M / 2);
@@ -303,13 +306,18 @@ PAGE = """<!doctype html>
     }
 
     function projectGroundPoint(point, width, height) {
-      const zForward = -(point.x - CAMERA_X_M);
+      const rearForward = -(point.x - CAMERA_X_M);
+      const cameraDown = CAMERA_HEIGHT_M;
+      const pitchCos = Math.cos(CAMERA_PITCH_RAD);
+      const pitchSin = Math.sin(CAMERA_PITCH_RAD);
+      const zForward = rearForward * pitchCos + cameraDown * pitchSin;
+      const yDown = cameraDown * pitchCos - rearForward * pitchSin;
       if (zForward <= 0.05) return null;
 
       const aspect = width / height;
       const vFov = 2 * Math.atan(Math.tan(CAMERA_HFOV_RAD / 2) / aspect);
       const u = width / 2 + ((-point.y) / (zForward * Math.tan(CAMERA_HFOV_RAD / 2))) * width / 2;
-      const v = height / 2 + (CAMERA_HEIGHT_M / (zForward * Math.tan(vFov / 2))) * height / 2;
+      const v = height / 2 + (yDown / (zForward * Math.tan(vFov / 2))) * height / 2;
       if (u < -width || u > width * 2 || v < -height || v > height * 2) return null;
       return {x: u, y: v};
     }
@@ -348,7 +356,8 @@ class WebJoystickNode(Node):
     def __init__(self):
         super().__init__("web_joystick_node")
         self.declare_parameter("http_port", 8090)
-        self.declare_parameter("max_linear_mps", 0.8)
+        self.declare_parameter("max_forward_linear_mps", 1.6666667)
+        self.declare_parameter("max_reverse_linear_mps", 0.8333333)
         self.declare_parameter("max_angular_rps", 1.4)
         self.declare_parameter("deadzone", 0.08)
         self.declare_parameter("command_timeout_s", 0.35)
@@ -404,10 +413,18 @@ class WebJoystickNode(Node):
             x = 0.0
             y = 0.0
 
-        max_linear = float(self.get_parameter("max_linear_mps").value)
+        max_forward_linear = float(self.get_parameter("max_forward_linear_mps").value)
+        max_reverse_linear = float(self.get_parameter("max_reverse_linear_mps").value)
         max_angular = float(self.get_parameter("max_angular_rps").value)
         deadzone = float(self.get_parameter("deadzone").value)
-        linear, angular = joystick_to_velocity(x, y, max_linear, max_angular, deadzone)
+        linear, angular = joystick_to_velocity(
+            x,
+            y,
+            max_forward_linear,
+            max_angular,
+            deadzone,
+            max_reverse_linear,
+        )
 
         msg = Twist()
         msg.linear.x = linear
