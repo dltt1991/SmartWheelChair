@@ -97,7 +97,10 @@ class WorldLayoutTest(unittest.TestCase):
         source = TRAJECTORY_PLUGIN.read_text()
 
         self.assertIn("gz::msgs::Marker::CYLINDER", source)
-        self.assertIn("smart_wheelchair_trajectory", source)
+        self.assertIn("smart_wheelchair_trajectory_raw", source)
+        self.assertIn("smart_wheelchair_trajectory_filtered", source)
+        self.assertIn("rawMarkerDiameter{0.03}", source)
+        self.assertIn("filteredMarkerDiameter{0.09}", source)
         self.assertNotIn("gz::msgs::Marker::LINE_STRIP", source)
 
     def test_vnc_startup_forces_top_down_camera_pose(self):

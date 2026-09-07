@@ -106,6 +106,7 @@ class ModelVisualsTest(unittest.TestCase):
 
         self.assertIsNotNone(plugin)
         self.assertEqual(plugin.findtext("cmd_topic"), "/cmd_vel_raw")
+        self.assertEqual(plugin.findtext("filtered_cmd_topic"), "/cmd_vel")
         self.assertEqual(plugin.findtext("prediction_seconds"), "3.0")
 
     def _visual_pose(self, name):

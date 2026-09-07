@@ -328,6 +328,7 @@
 
     <plugin filename="libSmartWheelChairTrajectoryPreview.so" name="smart_wheelchair_gazebo::TrajectoryPreviewSystem">
       <cmd_topic>/cmd_vel_raw</cmd_topic>
+      <filtered_cmd_topic>/cmd_vel</filtered_cmd_topic>
       <prediction_seconds>3.0</prediction_seconds>
       <step_seconds>0.3</step_seconds>
       <command_timeout_s>0.5</command_timeout_s>
