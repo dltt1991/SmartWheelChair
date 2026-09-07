@@ -4,8 +4,12 @@ import unittest
 from smart_wheelchair_safety.limiter import (
     front_sector_ranges,
     limit_forward_speed,
+    limit_forward_speed_for_arc,
+    limit_forward_speed_for_wall_follow,
     limit_forward_speed_with_scan_state,
+    limit_turn_speed_for_forward_arc,
     limit_speed_with_scan_state,
+    safety_clearances_in_forward_corridor,
     safety_ranges,
     safety_clearances_in_sector,
     safety_ranges_in_sector,
@@ -43,6 +47,95 @@ class LimitForwardSpeedTest(unittest.TestCase):
 
     def test_stops_forward_motion_when_scan_is_stale(self):
         speed = limit_forward_speed_with_scan_state(0.5, [], False, 0.45, 1.2)
+
+        self.assertEqual(speed, 0.0)
+
+    def test_arc_forward_keeps_speed_in_slow_zone(self):
+        speed = limit_forward_speed_for_arc(0.45, 0.5, [0.5], True, 0.10, 0.90, 0.20)
+
+        self.assertEqual(speed, 0.45)
+
+    def test_arc_forward_still_stops_inside_stop_distance(self):
+        speed = limit_forward_speed_for_arc(0.45, 0.5, [0.08], True, 0.10, 0.90, 0.20)
+
+        self.assertEqual(speed, 0.0)
+
+    def test_wall_follow_stops_when_body_clearance_is_too_small(self):
+        speed = limit_forward_speed_for_wall_follow(
+            0.45,
+            0.0,
+            front_ranges=[],
+            body_ranges=[0.04],
+            scan_is_fresh=True,
+            stop_distance_m=0.10,
+            slow_distance_m=0.90,
+            arc_angular_threshold_rps=0.20,
+            min_body_clearance_m=0.05,
+            slow_body_clearance_m=0.35,
+            min_wall_follow_linear_mps=0.12,
+        )
+
+        self.assertEqual(speed, 0.0)
+
+    def test_wall_follow_crawls_at_tight_side_clearance(self):
+        speed = limit_forward_speed_for_wall_follow(
+            0.45,
+            0.0,
+            front_ranges=[0.30],
+            body_ranges=[0.07],
+            scan_is_fresh=True,
+            stop_distance_m=0.10,
+            slow_distance_m=0.90,
+            arc_angular_threshold_rps=0.20,
+            min_body_clearance_m=0.05,
+            slow_body_clearance_m=0.35,
+            min_wall_follow_linear_mps=0.12,
+        )
+
+        self.assertEqual(speed, 0.12)
+
+    def test_wall_follow_crawls_when_body_clearance_is_tight(self):
+        speed = limit_forward_speed_for_wall_follow(
+            0.45,
+            0.0,
+            front_ranges=[],
+            body_ranges=[0.30],
+            scan_is_fresh=True,
+            stop_distance_m=0.10,
+            slow_distance_m=0.90,
+            arc_angular_threshold_rps=0.20,
+            min_body_clearance_m=0.05,
+            slow_body_clearance_m=0.35,
+            min_wall_follow_linear_mps=0.12,
+        )
+
+        self.assertGreater(speed, 0.0)
+        self.assertLess(speed, 0.45)
+
+    def test_wall_follow_keeps_speed_when_body_clearance_is_safe(self):
+        speed = limit_forward_speed_for_wall_follow(
+            0.45,
+            0.0,
+            front_ranges=[],
+            body_ranges=[0.45],
+            scan_is_fresh=True,
+            stop_distance_m=0.10,
+            slow_distance_m=0.90,
+            arc_angular_threshold_rps=0.20,
+            min_body_clearance_m=0.05,
+            slow_body_clearance_m=0.35,
+            min_wall_follow_linear_mps=0.12,
+        )
+
+        self.assertEqual(speed, 0.45)
+
+    def test_forward_arc_keeps_turning_in_side_slow_zone(self):
+        speed = limit_turn_speed_for_forward_arc(0.6, 0.45, [0.5], True, 0.10, 0.90, 0.20)
+
+        self.assertEqual(speed, 0.6)
+
+    def test_forward_arc_still_stops_turning_inside_side_stop_distance(self):
+        speed = limit_turn_speed_for_forward_arc(0.6, 0.45, [0.08], True, 0.10, 0.90, 0.20)
 
         self.assertEqual(speed, 0.0)
 
@@ -148,6 +241,48 @@ class LimitForwardSpeedTest(unittest.TestCase):
 
         self.assertEqual(len(clearances), 1)
         self.assertAlmostEqual(clearances[0], 0.12, places=2)
+
+    def test_forward_corridor_ignores_side_wall_points(self):
+        side_angle = math.atan2(0.25, 0.30)
+        ranges = [math.inf] * 2
+        ranges[0] = 0.30
+        ranges[1] = math.hypot(0.30, 0.25)
+
+        clearances = safety_clearances_in_forward_corridor(
+            ranges,
+            angle_min=0.0,
+            angle_increment=side_angle,
+            range_min=0.08,
+            range_max=5.0,
+            lidar_x_m=0.46,
+            lidar_y_m=0.0,
+            body_max_x_m=0.64,
+            body_min_y_m=-0.40,
+            body_max_y_m=0.40,
+            corridor_half_width_m=0.20,
+        )
+
+        self.assertEqual(clearances, [0.12])
+
+    def test_forward_corridor_covers_front_corner_at_full_body_width(self):
+        side_angle = math.atan2(0.35, 0.06)
+        ranges = [math.hypot(0.06, 0.35)]
+
+        clearances = safety_clearances_in_forward_corridor(
+            ranges,
+            angle_min=side_angle,
+            angle_increment=0.0,
+            range_min=0.08,
+            range_max=5.0,
+            lidar_x_m=0.64,
+            lidar_y_m=0.0,
+            body_max_x_m=0.64,
+            body_min_y_m=-0.40,
+            body_max_y_m=0.40,
+            corridor_half_width_m=0.40,
+        )
+
+        self.assertAlmostEqual(clearances[0], 0.06, places=2)
 
 
 if __name__ == "__main__":

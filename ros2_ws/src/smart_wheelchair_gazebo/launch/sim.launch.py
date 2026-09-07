@@ -49,18 +49,54 @@ def generate_launch_description():
         output="screen",
     )
 
+    common_safety_geometry = [
+        {"scan_timeout_s": 2.0},
+        {"body_min_x_m": -0.58},
+        {"body_max_x_m": 0.64},
+        {"body_min_y_m": -0.40},
+        {"body_max_y_m": 0.40},
+        {"body_filter_margin_m": 0.02},
+    ]
+
+    wall_follow_assist = Node(
+        package="smart_wheelchair_safety",
+        executable="wall_follow_assist_node",
+        parameters=[
+            *common_safety_geometry,
+            {"target_wall_distance_m": 0.70},
+            {"wall_follow_enter_distance_m": 1.20},
+            {"min_follow_speed_mps": 0.10},
+            {"max_follow_linear_mps": 0.60},
+            {"max_follow_angular_rps": 0.30},
+            {"wall_follow_hold_s": 0.60},
+            {"wall_filter_alpha": 0.10},
+            {"side_switch_margin_m": 0.30},
+            {"distance_deadband_m": 0.20},
+            {"heading_deadband_rad": 0.08},
+            {"away_distance_margin_m": 0.30},
+            {"max_angular_step_rps": 0.04},
+            {"angular_deadband_rps": 0.08},
+            {"lookahead_m": 1.20},
+            {"k_distance": 0.25},
+            {"k_heading": 1.0},
+            {"min_away_angular_rps": 0.12},
+        ],
+        output="screen",
+    )
+
     safety_filter = Node(
         package="smart_wheelchair_safety",
         executable="safety_filter_node",
         parameters=[
+            *common_safety_geometry,
+            {"input_topic": "cmd_vel_assisted"},
             {"stop_distance_m": 0.10},
             {"slow_distance_m": 0.90},
-            {"scan_timeout_s": 2.0},
-            {"body_min_x_m": -0.58},
-            {"body_max_x_m": 0.64},
-            {"body_min_y_m": -0.40},
-            {"body_max_y_m": 0.40},
-            {"body_filter_margin_m": 0.02},
+            {"body_sector_half_angle_rad": 3.14159265},
+            {"arc_front_corridor_half_width_m": 0.40},
+            {"wall_follow_min_body_clearance_m": 0.05},
+            {"wall_follow_slow_body_clearance_m": 0.35},
+            {"wall_follow_min_linear_mps": 0.12},
         ],
         output="screen",
     )
@@ -70,6 +106,7 @@ def generate_launch_description():
         executable="web_joystick_node",
         parameters=[
             {"http_port": 8090},
+            {"command_timeout_s": 1.0},
             {"max_forward_linear_mps": 1.6666667},
             {"max_reverse_linear_mps": 0.8333333},
             {"max_angular_rps": 1.4},
@@ -89,6 +126,7 @@ def generate_launch_description():
             gz_server,
             gz_gui,
             bridge,
+            wall_follow_assist,
             safety_filter,
             web_joystick,
         ]

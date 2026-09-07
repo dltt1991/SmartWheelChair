@@ -42,6 +42,102 @@ def limit_forward_speed_with_scan_state(
     return limit_forward_speed(requested_speed, ranges, stop_distance_m, slow_distance_m)
 
 
+def limit_forward_speed_for_arc(
+    requested_speed: float,
+    angular_speed: float,
+    ranges: Sequence[float],
+    scan_is_fresh: bool,
+    stop_distance_m: float,
+    slow_distance_m: float,
+    arc_angular_threshold_rps: float,
+) -> float:
+    if requested_speed <= 0.0 or abs(angular_speed) < arc_angular_threshold_rps:
+        return limit_forward_speed_with_scan_state(
+            requested_speed,
+            ranges,
+            scan_is_fresh,
+            stop_distance_m,
+            slow_distance_m,
+        )
+    if not scan_is_fresh:
+        return 0.0
+    valid_ranges = [value for value in ranges if math.isfinite(value) and value > 0.0]
+    if valid_ranges and min(valid_ranges) <= stop_distance_m:
+        return 0.0
+    return requested_speed
+
+
+def limit_forward_speed_for_wall_follow(
+    requested_speed: float,
+    angular_speed: float,
+    front_ranges: Sequence[float],
+    body_ranges: Sequence[float],
+    scan_is_fresh: bool,
+    stop_distance_m: float,
+    slow_distance_m: float,
+    arc_angular_threshold_rps: float,
+    min_body_clearance_m: float,
+    slow_body_clearance_m: float,
+    min_wall_follow_linear_mps: float,
+) -> float:
+    if slow_body_clearance_m <= min_body_clearance_m:
+        raise ValueError("slow_body_clearance_m must be greater than min_body_clearance_m")
+    if not scan_is_fresh:
+        return 0.0
+    arc_limited_speed = limit_forward_speed_for_arc(
+        requested_speed,
+        max(abs(angular_speed), arc_angular_threshold_rps),
+        front_ranges,
+        scan_is_fresh,
+        stop_distance_m,
+        slow_distance_m,
+        arc_angular_threshold_rps,
+    )
+    if arc_limited_speed <= 0.0:
+        return arc_limited_speed
+
+    valid_body_ranges = [value for value in body_ranges if math.isfinite(value) and value > 0.0]
+    if not valid_body_ranges:
+        return arc_limited_speed
+
+    nearest_body = min(valid_body_ranges)
+    if nearest_body <= min_body_clearance_m:
+        return 0.0
+    if nearest_body >= slow_body_clearance_m:
+        return arc_limited_speed
+
+    scale = (nearest_body - min_body_clearance_m) / (
+        slow_body_clearance_m - min_body_clearance_m
+    )
+    limited_speed = arc_limited_speed * scale
+    return min(arc_limited_speed, max(min_wall_follow_linear_mps, limited_speed))
+
+
+def limit_turn_speed_for_forward_arc(
+    requested_speed: float,
+    forward_speed: float,
+    ranges: Sequence[float],
+    scan_is_fresh: bool,
+    stop_distance_m: float,
+    slow_distance_m: float,
+    arc_angular_threshold_rps: float,
+) -> float:
+    if forward_speed <= 0.0 or abs(requested_speed) < arc_angular_threshold_rps:
+        return limit_speed_with_scan_state(
+            requested_speed,
+            ranges,
+            scan_is_fresh,
+            stop_distance_m,
+            slow_distance_m,
+        )
+    if not scan_is_fresh:
+        return 0.0
+    valid_ranges = [value for value in ranges if math.isfinite(value) and value > 0.0]
+    if valid_ranges and min(valid_ranges) <= stop_distance_m:
+        return 0.0
+    return requested_speed
+
+
 def limit_speed_with_scan_state(
     requested_speed: float,
     ranges: Sequence[float],
@@ -153,6 +249,36 @@ def safety_clearances_in_sector(
         clearance = scan_range - body_exit
         if clearance > body_filter_margin_m:
             clearances.append(clearance)
+    return clearances
+
+
+def safety_clearances_in_forward_corridor(
+    ranges: Sequence[float],
+    angle_min: float,
+    angle_increment: float,
+    range_min: float,
+    range_max: float,
+    lidar_x_m: float,
+    lidar_y_m: float,
+    body_max_x_m: float,
+    body_min_y_m: float,
+    body_max_y_m: float,
+    corridor_half_width_m: float | None = None,
+) -> list[float]:
+    min_y = body_min_y_m
+    max_y = body_max_y_m
+    if corridor_half_width_m is not None:
+        min_y = -corridor_half_width_m
+        max_y = corridor_half_width_m
+    clearances = []
+    for index, scan_range in enumerate(ranges):
+        if not math.isfinite(scan_range) or scan_range < range_min or scan_range > range_max:
+            continue
+        angle = angle_min + index * angle_increment
+        x = lidar_x_m + scan_range * math.cos(angle)
+        y = lidar_y_m + scan_range * math.sin(angle)
+        if x > body_max_x_m and min_y <= y <= max_y:
+            clearances.append(x - body_max_x_m)
     return clearances
 
 

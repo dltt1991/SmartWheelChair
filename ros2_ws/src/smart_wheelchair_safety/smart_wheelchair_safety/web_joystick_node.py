@@ -1,5 +1,6 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import math
 import threading
 import time
 
@@ -186,6 +187,7 @@ PAGE = """<!doctype html>
     const CAMERA_HEIGHT_M = 0.72;
     const CAMERA_PITCH_RAD = 0.60;
     const CAMERA_HFOV_RAD = 2.094;
+    const clientId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
     let dragging = false;
     let current = {x: 0, y: 0};
 
@@ -196,7 +198,7 @@ PAGE = """<!doctype html>
       fetch("/cmd", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(current),
+        body: JSON.stringify({...current, client_id: clientId}),
         keepalive: true
       }).then(() => {
         statusEl.textContent = "已连接";
@@ -208,6 +210,10 @@ PAGE = """<!doctype html>
     function center() {
       knob.style.transform = "translate(0px, 0px)";
       send(0, 0);
+    }
+
+    function hasCommand() {
+      return Math.hypot(current.x, current.y) > 0.001;
     }
 
     function move(event) {
@@ -241,7 +247,9 @@ PAGE = """<!doctype html>
       center();
     });
     stopButton.addEventListener("click", center);
-    setInterval(() => send(current.x, current.y), 100);
+    setInterval(() => {
+      if (dragging || hasCommand()) send(current.x, current.y);
+    }, 100);
     setInterval(updateCamera, 200);
     center();
 
@@ -362,11 +370,12 @@ class WebJoystickNode(Node):
         self.declare_parameter("max_reverse_linear_mps", 0.8333333)
         self.declare_parameter("max_angular_rps", 1.4)
         self.declare_parameter("deadzone", 0.08)
-        self.declare_parameter("command_timeout_s", 0.35)
+        self.declare_parameter("command_timeout_s", 1.0)
 
         self._lock = threading.Lock()
         self._last_input = (0.0, 0.0)
         self._last_input_time = 0.0
+        self._active_client_id = None
         self._camera_frame = None
         self._pub = self.create_publisher(Twist, "cmd_vel_raw", 10)
         self.create_subscription(Image, "camera/rear/image", self._on_camera_image, 10)
@@ -399,12 +408,27 @@ class WebJoystickNode(Node):
             data = json.loads(message)
             x = float(data.get("x", 0.0))
             y = float(data.get("y", 0.0))
+            client_id = data.get("client_id")
         except (TypeError, ValueError, json.JSONDecodeError):
             x = 0.0
             y = 0.0
+            client_id = None
         with self._lock:
+            now = time.monotonic()
+            has_active_command = (
+                math.hypot(*self._last_input) > 0.001
+                and now - self._last_input_time
+                <= float(self.get_parameter("command_timeout_s").value)
+            )
+            if math.hypot(x, y) <= 0.001 and has_active_command:
+                if client_id is None or client_id != self._active_client_id:
+                    return
+            if math.hypot(x, y) > 0.001:
+                self._active_client_id = client_id
+            elif client_id == self._active_client_id:
+                self._active_client_id = None
             self._last_input = (x, y)
-            self._last_input_time = time.monotonic()
+            self._last_input_time = now
 
     def _publish_command(self):
         timeout = float(self.get_parameter("command_timeout_s").value)
