@@ -277,10 +277,12 @@ PAGE = """<!doctype html>
       const angular = current.x * MAX_ANGULAR_RPS;
       if (linear >= -0.01) return;
 
+      const rearAxlePath = reverseWheelPath(linear, angular, 0);
       const leftPath = reverseWheelPath(linear, angular, WHEEL_WIDTH_M / 2);
       const rightPath = reverseWheelPath(linear, angular, -WHEEL_WIDTH_M / 2);
-      drawPath(leftPath, "#22d3ee", width, height);
-      drawPath(rightPath, "#fb923c", width, height);
+      drawPath(rearAxlePath, "#00ffff", width, height);
+      drawPath(leftPath, "#ffff00", width, height);
+      drawPath(rightPath, "#ff0000", width, height);
     }
 
     function reverseWheelPath(linear, angular, sideOffset) {

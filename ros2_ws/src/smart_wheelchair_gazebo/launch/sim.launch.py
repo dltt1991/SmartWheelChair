@@ -14,6 +14,8 @@ def generate_launch_description():
     ros_gz_sim_share = get_package_share_directory("ros_gz_sim")
     world = os.path.join(pkg_share, "worlds", "m6_room.sdf")
     models = os.path.join(pkg_share, "models")
+    plugins = os.path.join(os.path.dirname(os.path.dirname(pkg_share)), "lib")
+    gui_config = os.path.join(pkg_share, "config", "top_down_gui.config")
     gui = LaunchConfiguration("gui")
 
     gz_server = IncludeLaunchDescription(
@@ -28,7 +30,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(ros_gz_sim_share, "launch", "gz_sim.launch.py")
         ),
-        launch_arguments={"gz_args": f"-r {world}"}.items(),
+        launch_arguments={"gz_args": f"-r {world} --gui-config {gui_config}"}.items(),
         condition=IfCondition(gui),
     )
 
@@ -37,6 +39,7 @@ def generate_launch_description():
         executable="parameter_bridge",
         arguments=[
             "/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist",
+            "/cmd_vel_raw@geometry_msgs/msg/Twist]gz.msgs.Twist",
             "/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
             "/scan_left@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan",
             "/scan_right@sensor_msgs/msg/LaserScan[gz.msgs.LaserScan",
@@ -82,6 +85,7 @@ def generate_launch_description():
                 description="Start Gazebo with GUI instead of headless server mode.",
             ),
             SetEnvironmentVariable("GZ_SIM_RESOURCE_PATH", models),
+            SetEnvironmentVariable("GZ_SIM_SYSTEM_PLUGIN_PATH", plugins),
             gz_server,
             gz_gui,
             bridge,

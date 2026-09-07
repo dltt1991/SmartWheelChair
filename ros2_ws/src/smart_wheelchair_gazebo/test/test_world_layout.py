@@ -5,6 +5,10 @@ import xml.etree.ElementTree as ET
 
 WORLD = pathlib.Path(__file__).parents[1] / "worlds" / "m6_room.sdf"
 LAUNCH = pathlib.Path(__file__).parents[1] / "launch" / "sim.launch.py"
+CMAKE = pathlib.Path(__file__).parents[1] / "CMakeLists.txt"
+GUI_CONFIG = pathlib.Path(__file__).parents[1] / "config" / "top_down_gui.config"
+GUI_SCRIPT = pathlib.Path(__file__).parents[4] / "docker" / "gazebo-gui-vnc.sh"
+TRAJECTORY_PLUGIN = pathlib.Path(__file__).parents[1] / "src" / "trajectory_preview_system.cc"
 
 
 class WorldLayoutTest(unittest.TestCase):
@@ -56,6 +60,54 @@ class WorldLayoutTest(unittest.TestCase):
         launch_source = LAUNCH.read_text()
 
         self.assertIn('"stop_distance_m": 0.10', launch_source)
+
+    def test_launch_bridges_raw_joystick_for_gazebo_preview_plugin(self):
+        launch_source = LAUNCH.read_text()
+
+        self.assertIn("/cmd_vel_raw@geometry_msgs/msg/Twist]gz.msgs.Twist", launch_source)
+        self.assertIn("GZ_SIM_SYSTEM_PLUGIN_PATH", launch_source)
+        self.assertNotIn("trajectory_preview_node", launch_source)
+
+    def test_gui_launch_uses_top_down_config(self):
+        launch_source = LAUNCH.read_text()
+        cmake_source = CMAKE.read_text()
+
+        self.assertIn("top_down_gui.config", launch_source)
+        self.assertIn("--gui-config", launch_source)
+        self.assertIn("config", cmake_source)
+
+    def test_gui_config_camera_is_top_down_over_wheelchair(self):
+        config_root = ET.parse(GUI_CONFIG).getroot()
+        scene = config_root.find(".//plugin[@filename='MinimalScene']")
+        self.assertIsNotNone(scene)
+
+        pose = [float(value) for value in scene.findtext("camera_pose").split()]
+        self.assertAlmostEqual(pose[0], -6.7, places=1)
+        self.assertAlmostEqual(pose[1], 0.0, places=1)
+        self.assertGreaterEqual(pose[2], 8.0)
+        self.assertAlmostEqual(pose[4], 1.5708, places=3)
+
+    def test_gui_config_loads_marker_manager(self):
+        config_root = ET.parse(GUI_CONFIG).getroot()
+
+        marker_manager = config_root.find(".//plugin[@filename='MarkerManager']")
+        self.assertIsNotNone(marker_manager)
+
+    def test_trajectory_preview_uses_visible_cylinder_markers(self):
+        source = TRAJECTORY_PLUGIN.read_text()
+
+        self.assertIn("gz::msgs::Marker::CYLINDER", source)
+        self.assertIn("smart_wheelchair_trajectory", source)
+        self.assertNotIn("gz::msgs::Marker::LINE_STRIP", source)
+
+    def test_vnc_startup_forces_top_down_camera_pose(self):
+        script_source = GUI_SCRIPT.read_text()
+
+        self.assertIn("/gui/move_to/pose", script_source)
+        self.assertIn("x: -6.7", script_source)
+        self.assertIn("z: 9.0", script_source)
+        self.assertIn("y: 0.7071068", script_source)
+        self.assertIn("data: true", script_source)
 
     def _model_size(self, name):
         model = self.root.find(f".//model[@name='{name}']")

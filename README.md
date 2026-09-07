@@ -104,7 +104,57 @@ http://localhost:8090
 
 后方 120 度广角摄像头画面显示在同一个浏览器控制页中。倒车时，画面会根据差速轮运动学叠加 2 米范围内的左右轮预测轨迹。
 
+## 差速轮运动学方程
+
+![差速轮运动学方程示意图](docs/images/differential-drive-kinematics.svg)
+
+仿真底盘使用后轮差速驱动，Gazebo 模型参数为：
+
+- 驱动轮距 `L = 0.72 m`
+- 车轮半径 `r = 0.18 m`
+- 车体线速度 `v = linear.x`
+- 车体角速度 `omega = angular.z`
+- 左右轮线速度分别为 `v_l`、`v_r`
+- 左右轮角速度分别为 `omega_l`、`omega_r`
+
+由左右轮速度得到车体速度：
+
+```text
+v     = (v_r + v_l) / 2
+omega = (v_r - v_l) / L
+```
+
+由车体速度反算左右轮速度：
+
+```text
+v_l = v - omega * L / 2
+v_r = v + omega * L / 2
+
+omega_l = v_l / r
+omega_r = v_r / r
+```
+
+在平面位姿 `(x, y, theta)` 下，车体中心的运动方程为：
+
+```text
+dx/dt     = v * cos(theta)
+dy/dt     = v * sin(theta)
+dtheta/dt = omega
+```
+
+后摄倒车轨迹使用曲率积分，曲率 `k = omega / v`。当 `omega = 0` 时轨迹为直线；否则沿圆弧预测：
+
+```text
+theta_s = k * s
+x_s     = sin(theta_s) / k
+y_s     = (1 - cos(theta_s)) / k
+```
+
+其中 `s` 是沿车体前后方向的预测距离，倒车时 `s < 0`。左右轮轨迹是在车体中心轨迹基础上叠加横向偏移 `+/- L/2`。
+
 ## 激光雷达和安全过滤
+
+![激光雷达和安全过滤示意图](docs/images/lidar-safety-filter.svg)
 
 两颗激光雷达在物理结构上按 360 度旋转单线雷达建模，但仿真发布的是轮椅实际使用的有效视场：每侧约 200 度，角分辨率 0.5 度，覆盖侧边和侧前区域。Gazebo 中能看到绿色扫描射线；ROS 输出是 `LaserScan` 话题，不是 3D 点云：
 

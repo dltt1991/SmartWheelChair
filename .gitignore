@@ -2,6 +2,7 @@
 build/
 install/
 log/
+superpowers/
 *.pyc
 __pycache__/
 .pytest_cache/

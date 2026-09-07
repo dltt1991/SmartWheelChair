@@ -19,6 +19,7 @@ setup(
     entry_points={
         "console_scripts": [
             "safety_filter_node = smart_wheelchair_safety.safety_filter_node:main",
+            "trajectory_preview_node = smart_wheelchair_safety.trajectory_preview_node:main",
             "web_joystick_node = smart_wheelchair_safety.web_joystick_node:main",
         ],
     },

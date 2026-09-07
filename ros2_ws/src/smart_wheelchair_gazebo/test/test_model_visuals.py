@@ -93,6 +93,21 @@ class ModelVisualsTest(unittest.TestCase):
         self.assertAlmostEqual(pose[4], 0.60, places=2)
         self.assertAlmostEqual(float(sensor.findtext(".//horizontal_fov")), 2.094, places=3)
 
+    def test_trajectory_preview_visuals_are_preallocated_on_base_link(self):
+        base_link = self.root.find(".//link[@name='base_link']")
+        names = {visual.attrib["name"] for visual in base_link.findall("visual")}
+
+        for path_name in ("rear_axle", "left_wheel", "right_wheel"):
+            for index in range(10):
+                self.assertIn(f"trajectory_{path_name}_{index}", names)
+
+    def test_trajectory_preview_gazebo_plugin_is_loaded(self):
+        plugin = self.root.find(".//plugin[@filename='libSmartWheelChairTrajectoryPreview.so']")
+
+        self.assertIsNotNone(plugin)
+        self.assertEqual(plugin.findtext("cmd_topic"), "/cmd_vel_raw")
+        self.assertEqual(plugin.findtext("prediction_seconds"), "3.0")
+
     def _visual_pose(self, name):
         visual = self.root.find(f".//visual[@name='{name}']")
         self.assertIsNotNone(visual)

@@ -29,4 +29,19 @@ cd /workspaces/SmartWheelChair/ros2_ws
 colcon build --symlink-install
 source install/setup.bash
 
+(
+  for _ in {1..40}; do
+    if gz service -s /gui/move_to/pose \
+      --reqtype gz.msgs.GUICamera \
+      --reptype gz.msgs.Boolean \
+      --timeout 1000 \
+      --req 'pose: {position: {x: -6.7, y: 0.0, z: 9.0}, orientation: {x: 0.0, y: 0.7071068, z: 0.0, w: 0.7071068}}' >/tmp/gazebo-camera-pose.log 2>&1 &&
+      grep -q 'data: true' /tmp/gazebo-camera-pose.log; then
+      exit 0
+    fi
+    sleep 0.5
+  done
+  cat /tmp/gazebo-camera-pose.log >&2 || true
+) &
+
 exec ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true

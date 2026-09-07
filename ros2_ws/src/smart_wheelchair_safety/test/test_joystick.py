@@ -65,3 +65,14 @@ class JoystickMappingTest(unittest.TestCase):
         ).read_text()
 
         self.assertIn("const angular = current.x * MAX_ANGULAR_RPS;", page_source)
+
+    def test_rear_camera_overlay_uses_three_gazebo_trajectory_colors(self):
+        page_source = (
+            Path(__file__).parents[1]
+            / "smart_wheelchair_safety"
+            / "web_joystick_node.py"
+        ).read_text()
+
+        self.assertIn('drawPath(rearAxlePath, "#00ffff", width, height);', page_source)
+        self.assertIn('drawPath(leftPath, "#ffff00", width, height);', page_source)
+        self.assertIn('drawPath(rightPath, "#ff0000", width, height);', page_source)
