@@ -159,6 +159,34 @@ def approach_path(target, heading, length=3., steps=41):
     return np.column_stack((xy, np.arctan2(delta[:, 1], delta[:, 0])))
 
 
+def door_entry_clearance(door):
+    normal = np.array([math.cos(door.heading), math.sin(door.heading)])
+    tangent = np.array([-normal[1], normal[0]])
+    lateral_error = float(np.asarray(door.center) @ tangent)
+    projected = .40*abs(math.cos(door.heading)) + .97*abs(math.sin(door.heading))
+    return door.width/2 - .04 - projected - abs(lateral_error)
+
+
+def door_alignment_reference(door, phase):
+    center = np.asarray(door.center, dtype=float)
+    normal = np.array([math.cos(door.heading), math.sin(door.heading)])
+    tangent = np.array([-normal[1], normal[0]])
+    if phase == 'align':
+        lateral_error = float(center @ tangent)
+        heading_error = angle_difference(door.heading, 0.)
+        setback = np.clip(.9 + .6*abs(lateral_error) + .6*abs(heading_error), .9, 1.8)
+        target = center - setback*normal
+        path = approach_path(target, door.heading)
+    elif phase == 'pass':
+        target = center + 1.5*normal
+        path = approach_path(target, door.heading, steps=50)
+    else:
+        raise ValueError(f'unknown door phase: {phase}')
+    path[0, 2] = 0.
+    path[-1, 2] = door.heading
+    return path
+
+
 def wall_reference(lines, v, w, body_clearance=.12):
     raw_path = arc_path(max(v, .1), w)
     candidates = [line for line in lines if abs(line.heading) < 1.30

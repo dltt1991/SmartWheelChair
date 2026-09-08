@@ -3,9 +3,10 @@ import unittest
 import numpy as np
 
 from smart_wheelchair_safety.unified_geometry import (
-    Door, Opening, Segment, door_reference, wall_reference, extract_lines,
-    find_door, find_openings, intended_side_opening, opening_matches,
-    braking_clear, arc_path, transform_points,
+    Door, Opening, Segment, door_alignment_reference, door_entry_clearance,
+    door_reference, wall_reference, extract_lines, find_door, find_openings,
+    intended_side_opening, opening_matches, braking_clear, arc_path,
+    transform_points,
 )
 
 
@@ -63,6 +64,36 @@ class UnifiedGeometryTest(unittest.TestCase):
         too_far = Opening((3.0, .8), math.pi / 2, 1.0, ())
 
         self.assertIsNone(intended_side_opening([too_far], 1, .4, .6))
+
+    def test_door_alignment_uses_more_setback_for_larger_error(self):
+        centered_door = Opening((2., 0.), 0., 1., ())
+        skewed_door = Opening((2., .25), .2, 1., ())
+        centered = door_alignment_reference(centered_door, 'align')
+        skewed = door_alignment_reference(skewed_door, 'align')
+        skewed_normal = np.array([math.cos(.2), math.sin(.2)])
+
+        self.assertLess(skewed[-1, :2] @ skewed_normal, centered[-1, 0])
+        self.assertAlmostEqual(skewed[-1, 2], .2, places=2)
+        np.testing.assert_allclose(skewed[0], [0., 0., 0.], atol=1e-9)
+        self.assertLess(skewed[-1, :2] @ skewed_normal,
+                        np.array(skewed_door.center) @ skewed_normal)
+
+    def test_one_metre_entry_requires_body_and_margin_to_fit(self):
+        self.assertAlmostEqual(door_entry_clearance(Opening((1., .05), 0., 1., ())), .01)
+        aligned = (math.cos(.04), math.sin(.04))
+        self.assertGreater(door_entry_clearance(Opening(aligned, .04, 1., ())), 0.)
+        self.assertLess(door_entry_clearance(Opening((1., .06), .08, 1., ())), 0.)
+
+    def test_pass_reference_starts_here_and_converges_to_frozen_centerline(self):
+        door = Opening((.55, -.03), .04, 1., ())
+        path = door_alignment_reference(door, 'pass')
+        normal = np.array([math.cos(door.heading), math.sin(door.heading)])
+        tangent = np.array([-normal[1], normal[0]])
+
+        np.testing.assert_allclose(path[0], [0., 0., 0.], atol=1e-9)
+        self.assertTrue(np.all(np.diff(path[:, :2] @ normal) > 0.))
+        self.assertAlmostEqual((path[-1, :2] - door.center) @ tangent, 0., places=9)
+        self.assertGreater((path[-1, :2] - door.center) @ normal, 1.4)
 
     def test_corner_is_two_walls_not_an_imaginary_diagonal(self):
         points = [(x, .8) for x in np.linspace(0, 1, 30)]
