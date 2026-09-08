@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<sdf version="1.10">
+  <world name="unified_door">
+    <physics name="1ms" type="ignored"><max_step_size>0.001</max_step_size><real_time_factor>1</real_time_factor></physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"><render_engine>ogre2</render_engine></plugin>
+    <light name="sun" type="directional"><pose>0 0 8 0 0 0</pose><diffuse>0.9 0.9 0.9 1</diffuse><direction>-0.4 0.2 -0.9</direction></light>
+    <model name="floor"><static>true</static><pose>0 0 -0.025 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>14 10 0.05</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>14 10 0.05</size></box></geometry><material><ambient>0.55 0.55 0.55 1</ambient><diffuse>0.55 0.55 0.55 1</diffuse></material></visual>
+    </link></model>
+    <!-- Inner faces at y=+/-0.5: exactly 1.0 m clear, 0.2 m wall thickness. -->
+    <model name="left_jamb"><static>true</static><pose>0 2.75 0.6 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>0.2 4.5 1.2</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>0.2 4.5 1.2</size></box></geometry><material><ambient>0.2 0.6 0.6 1</ambient><diffuse>0.2 0.6 0.6 1</diffuse></material></visual>
+    </link></model>
+    <model name="right_jamb"><static>true</static><pose>0 -2.75 0.6 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>0.2 4.5 1.2</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>0.2 4.5 1.2</size></box></geometry><material><ambient>0.2 0.6 0.6 1</ambient><diffuse>0.2 0.6 0.6 1</diffuse></material></visual>
+    </link></model>
+    <model name="exit_wall"><static>true</static><pose>4 0 0.6 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>0.2 10 1.2</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>0.2 10 1.2</size></box></geometry></visual>
+    </link></model>
+    <include><uri>model://smart_wheelchair</uri><pose>-2.5 0.15 0.04 0 0 0.174533</pose></include>
+  </world>
+</sdf>

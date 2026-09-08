@@ -44,4 +44,8 @@ source install/setup.bash
   cat /tmp/gazebo-camera-pose.log >&2 || true
 ) &
 
-exec ros2 launch smart_wheelchair_gazebo sim.launch.py gui:=true
+args=(gui:=true "unified_control:=${UNIFIED_CONTROL:-true}")
+if [[ -n "${WHEELCHAIR_WORLD:-}" ]]; then
+  args+=("world:=$WHEELCHAIR_WORLD")
+fi
+exec ros2 launch smart_wheelchair_gazebo sim.launch.py "${args[@]}"

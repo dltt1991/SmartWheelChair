@@ -59,23 +59,162 @@
     <model name="outer_west_wall"><static>true</static><pose>-8 0 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>0.14 12.2 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.14 12.2 1.2</size></box></geometry><material><ambient>0.64 0.65 0.62 1</ambient><diffuse>0.64 0.65 0.62 1</diffuse></material></visual></link></model>
     <model name="outer_east_wall"><static>true</static><pose>8 0 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>0.14 12.2 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.14 12.2 1.2</size></box></geometry><material><ambient>0.64 0.65 0.62 1</ambient><diffuse>0.64 0.65 0.62 1</diffuse></material></visual></link></model>
 
-    <model name="long_corridor_north_wall"><static>true</static><pose>-2.0 1.35 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>9.0 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>9.0 0.12 1.2</size></box></geometry><material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material></visual></link></model>
-    <model name="long_corridor_south_wall"><static>true</static><pose>-2.0 -1.35 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>9.0 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>9.0 0.12 1.2</size></box></geometry><material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material></visual></link></model>
+    <!-- Cross corridor: inner wall faces at x/y = +/-1.29 m.
+         Six door openings: 1.0, 1.1 and 1.2 m, two of each.
+         NW and SE have two entrances; all four rooms have turning space. -->
+    <model name="door_nw_horizontal_a">
+      <static>true</static><pose>-6.465 1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.93 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.93 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
 
-    <model name="narrow_door_left_jamb"><static>true</static><pose>3.0 4.0 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>0.14 3.6 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.14 3.6 1.2</size></box></geometry><material><ambient>0.46 0.49 0.50 1</ambient><diffuse>0.46 0.49 0.50 1</diffuse></material></visual></link></model>
-    <model name="narrow_door_right_jamb"><static>true</static><pose>3.0 -4.0 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>0.14 3.6 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.14 3.6 1.2</size></box></geometry><material><ambient>0.46 0.49 0.50 1</ambient><diffuse>0.46 0.49 0.50 1</diffuse></material></visual></link></model>
+    <model name="door_nw_horizontal_b">
+      <static>true</static><pose>-2.675 1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.65 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.65 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
 
-    <model name="small_room_back_wall"><static>true</static><pose>5.6 4.7 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>3.8 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>3.8 0.12 1.2</size></box></geometry><material><ambient>0.55 0.57 0.56 1</ambient><diffuse>0.55 0.57 0.56 1</diffuse></material></visual></link></model>
-    <model name="small_room_side_wall"><static>true</static><pose>4.1 3.6 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>0.12 2.3 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.12 2.3 1.2</size></box></geometry><material><ambient>0.55 0.57 0.56 1</ambient><diffuse>0.55 0.57 0.56 1</diffuse></material></visual></link></model>
-    <model name="small_room_entry_right_wall"><static>true</static><pose>3.0 2.2 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>1.0 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.0 0.12 1.2</size></box></geometry><material><ambient>0.55 0.57 0.56 1</ambient><diffuse>0.55 0.57 0.56 1</diffuse></material></visual></link></model>
-    <model name="small_room_entry_left_wall"><static>true</static><pose>5.6 2.2 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>1.0 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>1.0 0.12 1.2</size></box></geometry><material><ambient>0.55 0.57 0.56 1</ambient><diffuse>0.55 0.57 0.56 1</diffuse></material></visual></link></model>
+    <model name="door_ne_horizontal_a">
+      <static>true</static><pose>2.65 1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.6 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.6 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
 
-    <model name="large_room_back_wall"><static>true</static><pose>5.3 -4.4 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>4.8 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>4.8 0.12 1.2</size></box></geometry><material><ambient>0.55 0.57 0.56 1</ambient><diffuse>0.55 0.57 0.56 1</diffuse></material></visual></link></model>
-    <model name="large_room_side_wall"><static>true</static><pose>2.9 -4.8 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>0.12 2.2 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.12 2.2 1.2</size></box></geometry><material><ambient>0.55 0.57 0.56 1</ambient><diffuse>0.55 0.57 0.56 1</diffuse></material></visual></link></model>
+    <model name="door_ne_horizontal_b">
+      <static>true</static><pose>6.49 1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.88 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.88 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
 
-    <model name="maze_turn_wall_a"><static>true</static><pose>-5.4 3.0 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>0.12 3.2 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>0.12 3.2 1.2</size></box></geometry><material><ambient>0.49 0.52 0.53 1</ambient><diffuse>0.49 0.52 0.53 1</diffuse></material></visual></link></model>
-    <model name="maze_turn_wall_b"><static>true</static><pose>-3.8 4.0 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>3.2 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>3.2 0.12 1.2</size></box></geometry><material><ambient>0.49 0.52 0.53 1</ambient><diffuse>0.49 0.52 0.53 1</diffuse></material></visual></link></model>
-    <model name="maze_turn_wall_c"><static>true</static><pose>-5.0 -4.0 0.60 0 0 0</pose><link name="link"><collision name="collision"><geometry><box><size>3.6 0.12 1.2</size></box></geometry></collision><visual name="visual"><geometry><box><size>3.6 0.12 1.2</size></box></geometry><material><ambient>0.49 0.52 0.53 1</ambient><diffuse>0.49 0.52 0.53 1</diffuse></material></visual></link></model>
+    <model name="door_sw_horizontal_a">
+      <static>true</static><pose>-6.515 -1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.83 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.83 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="door_sw_horizontal_b">
+      <static>true</static><pose>-2.625 -1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.55 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.55 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="door_se_horizontal_a">
+      <static>true</static><pose>2.675 -1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.65 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.65 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="door_se_horizontal_b">
+      <static>true</static><pose>6.465 -1.35 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>2.93 0.12 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>2.93 0.12 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="door_nw_vertical_a">
+      <static>true</static><pose>-1.35 2.15 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 1.6 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.12 1.6 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="door_nw_vertical_b">
+      <static>true</static><pose>-1.35 4.99 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 1.88 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.12 1.88 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="door_se_vertical_a">
+      <static>true</static><pose>1.35 -5.015 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 1.83 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.12 1.83 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="door_se_vertical_b">
+      <static>true</static><pose>1.35 -2.125 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 1.55 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.12 1.55 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="vertical_corridor_west_south">
+      <static>true</static><pose>-1.35 -3.64 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 4.58 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.12 4.58 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="vertical_corridor_east_north">
+      <static>true</static><pose>1.35 3.64 0.60 0 0 0</pose>
+      <link name="link">
+        <collision name="collision"><geometry><box><size>0.12 4.58 1.2</size></box></geometry></collision>
+        <visual name="visual">
+          <geometry><box><size>0.12 4.58 1.2</size></box></geometry>
+          <material><ambient>0.50 0.53 0.54 1</ambient><diffuse>0.50 0.53 0.54 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
 
     <include>
       <uri>model://smart_wheelchair</uri>

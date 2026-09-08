@@ -1,0 +1,119 @@
+controller_server:
+  ros__parameters:
+    use_sim_time: true
+    controller_frequency: 20.0
+    enable_stamped_cmd_vel: false
+    odom_topic: /odom
+    failure_tolerance: 0.3
+    min_x_velocity_threshold: 0.001
+    min_theta_velocity_threshold: 0.001
+    progress_checker_plugins: [progress]
+    goal_checker_plugins: [goal]
+    controller_plugins: [FollowPath]
+    progress:
+      plugin: nav2_controller::SimpleProgressChecker
+      required_movement_radius: 0.05
+      movement_time_allowance: 30.0
+    goal:
+      plugin: nav2_controller::SimpleGoalChecker
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.2
+      stateful: false
+    FollowPath:
+      plugin: nav2_mppi_controller::MPPIController
+      motion_model: DiffDrive
+      model_dt: 0.05
+      time_steps: 60
+      batch_size: 600
+      iteration_count: 1
+      vx_std: 0.25
+      wz_std: 0.30
+      vx_max: 0.80
+      vx_min: 0.0
+      wz_max: 0.65
+      ax_max: 0.50
+      ax_min: -0.50
+      az_max: 0.80
+      prune_distance: 3.5
+      transform_tolerance: 0.15
+      temperature: 0.3
+      gamma: 0.015
+      visualize: false
+      critics: [ConstraintCritic, CostCritic, PathFollowCritic, PathAlignCritic, PathAngleCritic, PreferForwardCritic]
+      ConstraintCritic:
+        enabled: true
+        cost_weight: 4.0
+      CostCritic:
+        enabled: true
+        consider_footprint: true
+        cost_weight: 1.0
+        critical_cost: 300.0
+        collision_cost: 1000000.0
+        trajectory_point_step: 1
+      PathFollowCritic:
+        enabled: true
+        cost_weight: 8.0
+        offset_from_furthest: 6
+        threshold_to_consider: 0.5
+      PathAlignCritic:
+        enabled: true
+        cost_weight: 6.0
+        offset_from_furthest: 6
+        trajectory_point_step: 2
+        threshold_to_consider: 0.25
+        use_path_orientations: true
+      PathAngleCritic:
+        enabled: true
+        cost_weight: 2.0
+        offset_from_furthest: 6
+        threshold_to_consider: 0.25
+        max_angle_to_furthest: 0.5
+      PreferForwardCritic:
+        enabled: true
+        cost_weight: 3.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      use_sim_time: true
+      global_frame: odom
+      robot_base_frame: rear_axle
+      rolling_window: true
+      width: 8
+      height: 8
+      resolution: 0.025
+      update_frequency: 10.0
+      publish_frequency: 2.0
+      transform_tolerance: 0.2
+      footprint: "[[-0.25,-0.40],[0.97,-0.40],[0.97,0.40],[-0.25,0.40]]"
+      footprint_padding: 0.04
+      plugins: [obstacles, inflation]
+      obstacles:
+        plugin: nav2_costmap_2d::ObstacleLayer
+        observation_sources: left right
+        left:
+          topic: /unified_scan_left
+          data_type: LaserScan
+          marking: true
+          clearing: true
+          inf_is_valid: true
+          obstacle_max_range: 4.0
+          raytrace_max_range: 4.5
+        right:
+          topic: /unified_scan_right
+          data_type: LaserScan
+          marking: true
+          clearing: true
+          inf_is_valid: true
+          obstacle_max_range: 4.0
+          raytrace_max_range: 4.5
+      inflation:
+        plugin: nav2_costmap_2d::InflationLayer
+        inflation_radius: 1.15
+        cost_scaling_factor: 5.0
+
+lifecycle_manager_local:
+  ros__parameters:
+    use_sim_time: true
+    autostart: true
+    node_names: [controller_server]

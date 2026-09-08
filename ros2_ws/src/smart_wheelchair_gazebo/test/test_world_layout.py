@@ -25,12 +25,12 @@ class WorldLayoutTest(unittest.TestCase):
         names = {model.attrib["name"] for model in self.root.findall(".//model")}
 
         expected = {
-            "long_corridor_north_wall",
-            "long_corridor_south_wall",
-            "narrow_door_left_jamb",
-            "narrow_door_right_jamb",
-            "small_room_back_wall",
-            "large_room_back_wall",
+            "door_nw_horizontal_a",
+            "door_ne_horizontal_a",
+            "door_sw_horizontal_a",
+            "door_se_horizontal_a",
+            "vertical_corridor_west_south",
+            "vertical_corridor_east_north",
         }
         self.assertTrue(expected.issubset(names))
 
@@ -45,21 +45,35 @@ class WorldLayoutTest(unittest.TestCase):
         self.assertGreater(diffuse[1], diffuse[2])
 
     def test_passages_are_wide_enough_for_wheelchair(self):
-        north_y_min = self._model_bounds("long_corridor_north_wall")[1]
-        south_y_max = self._model_bounds("long_corridor_south_wall")[3]
-        door_left_min = self._model_bounds("narrow_door_left_jamb")[1]
-        door_right_max = self._model_bounds("narrow_door_right_jamb")[3]
-        small_entry_min = self._model_bounds("small_room_entry_left_wall")[0]
-        small_entry_max = self._model_bounds("small_room_entry_right_wall")[2]
+        north_y_min = self._model_bounds("door_nw_horizontal_a")[1]
+        south_y_max = self._model_bounds("door_sw_horizontal_a")[3]
+        west_x_max = self._model_bounds("vertical_corridor_west_south")[2]
+        east_x_min = self._model_bounds("vertical_corridor_east_north")[0]
 
-        self.assertGreaterEqual(north_y_min - south_y_max, 2.4)
-        self.assertGreaterEqual(door_left_min - door_right_max, 1.4)
-        self.assertGreaterEqual(small_entry_min - small_entry_max, 1.4)
+        self.assertAlmostEqual(north_y_min - south_y_max, 2.58)
+        self.assertAlmostEqual(east_x_min - west_x_max, 2.58)
 
     def test_launch_uses_ten_centimeter_stop_distance(self):
         launch_source = LAUNCH.read_text()
 
         self.assertIn('"stop_distance_m": 0.10', launch_source)
+
+    def test_door_fixture_has_exact_one_metre_collision_gap(self):
+        root = ET.parse(WORLD.with_name('unified_door.sdf')).getroot()
+        edges = []
+        for name, sign in [('left_jamb', -1), ('right_jamb', 1)]:
+            model = root.find(f".//model[@name='{name}']")
+            y = float(model.findtext('pose').split()[1])
+            width = float(model.findtext('.//collision/geometry/box/size').split()[1])
+            edges.append(y+sign*width/2)
+        self.assertAlmostEqual(edges[0]-edges[1], 1.)
+
+    def test_unified_launch_retains_baseline_switch(self):
+        source = LAUNCH.read_text()
+        self.assertIn('UnlessCondition(unified)', source)
+        self.assertIn('IfCondition(unified)', source)
+        self.assertIn('("cmd_vel", "cmd_vel_planned")', source)
+        self.assertIn('/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock', source)
 
     def test_launch_bridges_raw_joystick_for_gazebo_preview_plugin(self):
         launch_source = LAUNCH.read_text()

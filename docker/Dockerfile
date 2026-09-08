@@ -30,6 +30,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-jazzy-ros-gz-sim \
     ros-jazzy-teleop-twist-keyboard \
     ros-jazzy-xacro \
+    ros-jazzy-nav2-mppi-controller \
+    ros-jazzy-nav2-controller \
+    ros-jazzy-nav2-lifecycle-manager \
+    ros-jazzy-tf2-ros-py \
+    python3-numpy \
     fluxbox \
     git \
     vim \

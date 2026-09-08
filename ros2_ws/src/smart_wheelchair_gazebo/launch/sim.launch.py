@@ -12,17 +12,19 @@ from launch_ros.actions import Node
 def generate_launch_description():
     pkg_share = get_package_share_directory("smart_wheelchair_gazebo")
     ros_gz_sim_share = get_package_share_directory("ros_gz_sim")
-    world = os.path.join(pkg_share, "worlds", "m6_room.sdf")
+    world = LaunchConfiguration("world")
     models = os.path.join(pkg_share, "models")
     plugins = os.path.join(os.path.dirname(os.path.dirname(pkg_share)), "lib")
     gui_config = os.path.join(pkg_share, "config", "top_down_gui.config")
     gui = LaunchConfiguration("gui")
+    unified = LaunchConfiguration("unified_control")
+    nav_config = os.path.join(pkg_share, "config", "unified_control.yaml")
 
     gz_server = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(ros_gz_sim_share, "launch", "gz_sim.launch.py")
         ),
-        launch_arguments={"gz_args": f"-r -s {world}"}.items(),
+        launch_arguments={"gz_args": ["-r -s ", world]}.items(),
         condition=UnlessCondition(gui),
     )
 
@@ -30,7 +32,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(
             os.path.join(ros_gz_sim_share, "launch", "gz_sim.launch.py")
         ),
-        launch_arguments={"gz_args": f"-r {world} --gui-config {gui_config}"}.items(),
+        launch_arguments={"gz_args": ["-r ", world, " --gui-config ", gui_config]}.items(),
         condition=IfCondition(gui),
     )
 
@@ -38,6 +40,7 @@ def generate_launch_description():
         package="ros_gz_bridge",
         executable="parameter_bridge",
         arguments=[
+            "/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock",
             "/cmd_vel@geometry_msgs/msg/Twist]gz.msgs.Twist",
             "/cmd_vel_raw@geometry_msgs/msg/Twist]gz.msgs.Twist",
             "/odom@nav_msgs/msg/Odometry[gz.msgs.Odometry",
@@ -61,6 +64,7 @@ def generate_launch_description():
     wall_follow_assist = Node(
         package="smart_wheelchair_safety",
         executable="wall_follow_assist_node",
+        condition=UnlessCondition(unified),
         parameters=[
             *common_safety_geometry,
             {"target_wall_distance_m": 0.70},
@@ -87,6 +91,7 @@ def generate_launch_description():
     safety_filter = Node(
         package="smart_wheelchair_safety",
         executable="safety_filter_node",
+        condition=UnlessCondition(unified),
         parameters=[
             *common_safety_geometry,
             {"input_topic": "cmd_vel_assisted"},
@@ -116,6 +121,8 @@ def generate_launch_description():
 
     return LaunchDescription(
         [
+            DeclareLaunchArgument("unified_control", default_value="true"),
+            DeclareLaunchArgument("world", default_value=os.path.join(pkg_share, "worlds", "m6_room.sdf")),
             DeclareLaunchArgument(
                 "gui",
                 default_value="false",
@@ -128,6 +135,16 @@ def generate_launch_description():
             bridge,
             wall_follow_assist,
             safety_filter,
+            Node(package="nav2_controller", executable="controller_server",
+                 name="controller_server", parameters=[nav_config],
+                 remappings=[("cmd_vel", "cmd_vel_planned")],
+                 condition=IfCondition(unified), output="screen"),
+            Node(package="nav2_lifecycle_manager", executable="lifecycle_manager",
+                 name="lifecycle_manager_local", parameters=[nav_config],
+                 condition=IfCondition(unified), output="screen"),
+            Node(package="smart_wheelchair_safety", executable="unified_control_node",
+                 parameters=[{"use_sim_time": True}],
+                 condition=IfCondition(unified), output="screen"),
             web_joystick,
         ]
     )
