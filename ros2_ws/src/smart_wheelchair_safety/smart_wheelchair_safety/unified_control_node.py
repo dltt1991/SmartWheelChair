@@ -19,9 +19,10 @@ from std_msgs.msg import String
 from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, TransformListener, TransformException
 
 from smart_wheelchair_safety.unified_geometry import (
-    Door, Opening, angle_difference, arc_path, braking_clear, door_reference,
-    extract_lines, find_door, find_openings, intended_side_opening,
-    opening_matches, transform_points, wall_reference,
+    Door, Opening, angle_difference, arc_path, braking_clear,
+    door_alignment_reference, door_entry_clearance, extract_lines,
+    find_openings, intended_side_opening, opening_matches, transform_points,
+    wall_reference,
 )
 
 
@@ -47,6 +48,7 @@ class UnifiedControlNode(Node):
         self.odom_stamp = None
         self.scans = {}
         self.door = None
+        self.door_phase = None
         self.door_obstacles = np.empty((0, 2))
         self.opening_candidates = []
         self.confirmed_openings = []
@@ -102,10 +104,11 @@ class UnifiedControlNode(Node):
             self._clear_opening_turn()
         if self.raw[0] <= .02:
             self.front_blocked = False
+        door_active = self.door is not None
         self.override = (self.wall_side * self.raw[1] < -.15
-                         or (self.mode in ('door', 'override') and abs(self.raw[1]) > .25))
-        if self.raw[0] <= .02 or abs(self.raw[1]) > .25:
-            self.door = None
+                         or ((door_active or self.mode == 'override') and abs(self.raw[1]) > .25))
+        if self.raw[0] <= .02 or (door_active and abs(self.raw[1]) > .25):
+            self._clear_door()
 
     def on_planned(self, msg):
         self.planned = np.array([msg.linear.x, msg.angular.z])
@@ -202,6 +205,46 @@ class UnifiedControlNode(Node):
         self.opening_turn_heading = 0.
         self.opening_turn_time = 0.
 
+    def _clear_door(self):
+        self.door = None
+        self.door_phase = None
+
+    @staticmethod
+    def _filtered_opening(current, observed, alpha=.25):
+        center = (1-alpha)*np.asarray(current.center) + alpha*np.asarray(observed.center)
+        heading = current.heading + alpha*angle_difference(observed.heading, current.heading)
+        width = (1-alpha)*current.width + alpha*observed.width
+        return Opening(tuple(center), heading, width, ())
+
+    def _confirmed_front_door(self):
+        candidates = []
+        for world in self.confirmed_openings:
+            local = self._local_opening(world)
+            center = np.asarray(local.center)
+            if (math.cos(local.heading) > .65 and .8 < center[0] < 3.5
+                    and abs(center[1]) < 1.5 and local.width <= 1.5):
+                candidates.append((world, local))
+        return min(candidates, key=lambda pair: np.linalg.norm(pair[1].center), default=(None, None))
+
+    def _local_tracked_door(self):
+        if self.door is None:
+            return None
+        if self.door_phase == 'door_align':
+            observed = next((opening for opening in self.confirmed_openings
+                             if opening_matches(self.door, opening)), None)
+            if observed is not None:
+                self.door = self._filtered_opening(self.door, observed)
+        local = self._local_opening(self.door)
+        normal = np.array([math.cos(local.heading), math.sin(local.heading)])
+        progress = -np.asarray(local.center) @ normal
+        if self.door_phase in ('door_pass', 'door_clear'):
+            if progress > .29:
+                self._clear_door()
+                return None
+            if progress > 0.:
+                self.door_phase = 'door_clear'
+        return local
+
     def _start_opening_turn(self, opening, side):
         self.opening_turn = self._world_opening(opening)
         self.opening_turn_side = side
@@ -252,6 +295,7 @@ class UnifiedControlNode(Node):
             self.door_obstacles = self.door_obstacles[nearby]
         if not self.fresh() or self.raw[0] <= .02:
             self._clear_opening_turn()
+            self._clear_door()
             self.cancel()
             self.mode = 'manual'
             return
@@ -262,29 +306,22 @@ class UnifiedControlNode(Node):
         groups, _ = self.points()
         lines = [line for group in groups for line in extract_lines(group)]
         opening_path = self._opening_turn_path()
-        local_door = None
-        if self.door is not None:
-            center = transform_points([self.door.center], self.pose, inverse=True)[0]
-            heading = self.door.heading-self.pose[2]
-            normal = np.array([math.cos(heading), math.sin(heading)])
-            if -center @ normal > .6:
-                self.door = None
-            else:
-                local_door = Door(tuple(center), heading, self.door.width)
-        elif abs(self.raw[1]) < .25:
-            local_door = find_door(lines)
-            if local_door is not None:
-                center = transform_points([local_door.center], self.pose)[0]
-                self.door = Door(tuple(center), local_door.heading+self.pose[2], local_door.width)
-                # Keep observed jambs through rear clearance even if the
-                # forward-mounted scanners temporarily lose their inner edges.
-                points = np.vstack(groups)
-                normal = np.array([math.cos(local_door.heading), math.sin(local_door.heading)])
-                near_plane = np.abs((points-local_door.center) @ normal) < .3
-                observed = transform_points(points[near_plane], self.pose)
-                memory = np.vstack((self.door_obstacles, observed))
-                _, indices = np.unique(np.floor(memory/.025).astype(int), axis=0, return_index=True)
-                self.door_obstacles = memory[indices]
+        local_door = self._local_tracked_door()
+        if local_door is None and abs(self.raw[1]) < .25:
+            world_door, local_door = self._confirmed_front_door()
+            if world_door is not None:
+                self.door = world_door
+                self.door_phase = 'door_align'
+        if local_door is not None and self.door_phase == 'door_align':
+            # Keep observed jambs through rear clearance even if the
+            # forward-mounted scanners temporarily lose their inner edges.
+            points = np.vstack(groups)
+            normal = np.array([math.cos(local_door.heading), math.sin(local_door.heading)])
+            near_plane = np.abs((points-local_door.center) @ normal) < .3
+            observed = transform_points(points[near_plane], self.pose)
+            memory = np.vstack((self.door_obstacles, observed))
+            _, indices = np.unique(np.floor(memory/.025).astype(int), axis=0, return_index=True)
+            self.door_obstacles = memory[indices]
         frontal_wall = any(abs(line.heading) > 1.35 and .97 < -line.distance/math.sin(line.heading) < 3.
                            and min(line.start[1], line.end[1]) < -.4
                            and max(line.start[1], line.end[1]) > .4 for line in lines)
@@ -295,7 +332,14 @@ class UnifiedControlNode(Node):
         elif local_door is not None:
             self.front_blocked = False
             self.wall_side = 0
-            local_path, self.mode = door_reference(local_door), 'door'
+            if self.door_phase == 'door_align':
+                local_path = door_alignment_reference(local_door, 'align')
+                if np.linalg.norm(local_path[-1, :2]) <= .15 and door_entry_clearance(local_door) > 0.:
+                    self.door_phase = 'door_pass'
+                    local_path = door_alignment_reference(local_door, 'pass')
+            else:
+                local_path = door_alignment_reference(local_door, 'pass')
+            self.mode = self.door_phase
         elif frontal_wall or self.front_blocked:
             self.front_blocked = True
             self.wall_side = 0
@@ -325,7 +369,8 @@ class UnifiedControlNode(Node):
         self.reference.publish(path)
         limit = SpeedLimit()
         limit.speed_limit = min(self.raw[0], self.get_parameter('max_speed').value,
-                                .45 if self.mode == 'door' else 10.)
+                                .25 if self.mode == 'door_align'
+                                else .45 if self.mode in ('door_pass', 'door_clear') else 10.)
         self.limit_pub.publish(limit)
         if not self.pending_goal and self.client.server_is_ready():
             request = FollowPath.Goal()

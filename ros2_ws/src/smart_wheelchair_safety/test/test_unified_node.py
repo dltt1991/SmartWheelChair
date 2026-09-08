@@ -1,4 +1,5 @@
 import importlib.util
+import math
 import time
 from types import SimpleNamespace
 import unittest
@@ -50,6 +51,36 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.opening_turn_time = time.monotonic()
         self.node.wall_side = 0
 
+    def front_opening(self, center=(2., 0.), heading=0., width=1.):
+        from smart_wheelchair_safety.unified_geometry import Segment, find_openings
+        normal = np.array([math.cos(heading), math.sin(heading)])
+        tangent = np.array([-normal[1], normal[0]])
+        center = np.asarray(center, dtype=float)
+        near = center - width / 2 * tangent
+        far = center + width / 2 * tangent
+        line_heading = math.atan2(tangent[1], tangent[0])
+        line_normal = np.array([-tangent[1], tangent[0]])
+        lines = [
+            Segment(tuple(near - 1.5 * tangent), tuple(near), line_heading,
+                    float(near @ line_normal)),
+            Segment(tuple(far), tuple(far + 1.5 * tangent), line_heading,
+                    float(far @ line_normal)),
+        ]
+        return find_openings(lines, max_width=1.5)[0]
+
+    def observe_front_door(self, **kwargs):
+        self.node._observe_openings([self.front_opening(**kwargs)])
+
+    def confirm_door(self, **kwargs):
+        self.observe_front_door(**kwargs)
+        self.observe_front_door(**kwargs)
+
+    def send_raw(self, linear, angular):
+        from geometry_msgs.msg import Twist
+        msg = Twist()
+        msg.linear.x, msg.angular.z = linear, angular
+        self.node.on_raw(msg)
+
     def test_same_side_opening_needs_two_frames_and_blocks_old_wall_reacquisition(self):
         opening = self.wall_opening()
         self.node.raw = np.array([.6, .5])
@@ -91,6 +122,50 @@ class UnifiedNodeTest(unittest.TestCase):
                     self.node.raw_time = 0.
                 self.node.update_reference()
                 self.assertIsNone(self.node.opening_turn)
+
+    def test_door_needs_two_observations_before_alignment(self):
+        self.observe_front_door(center=(2., .2), heading=.12, width=1.)
+        self.node.update_reference()
+        self.assertNotEqual(self.node.mode, 'door_align')
+
+        self.observe_front_door(center=(2.02, .18), heading=.10, width=1.02)
+        self.node.update_reference()
+
+        self.assertEqual(self.node.mode, 'door_align')
+
+    def test_door_centerline_freezes_after_commit(self):
+        self.confirm_door(center=(1., 0.), heading=0., width=1.)
+        self.node.pose = (.10, 0., 0.)
+        self.node.update_reference()
+        self.assertEqual(self.node.mode, 'door_pass')
+        frozen = self.node.door
+
+        self.observe_front_door(center=(1.15, .12), heading=.1, width=1.)
+        self.node.update_reference()
+
+        self.assertEqual(self.node.door, frozen)
+        self.assertEqual(self.node.mode, 'door_pass')
+
+    def test_door_releases_only_after_rear_body_clears_plane(self):
+        self.confirm_door(center=(1., 0.), heading=0., width=1.)
+        self.node.door = self.front_opening(center=(1., 0.), heading=0., width=1.)
+        self.node.door_phase = 'door_pass'
+        self.node.pose = (1.20, 0., 0.)
+        self.node.update_reference()
+        self.assertEqual(self.node.mode, 'door_clear')
+
+        self.node.pose = (1.30, 0., 0.)
+        self.node.update_reference()
+
+        self.assertIsNone(self.node.door)
+
+    def test_stop_reverse_and_away_steering_cancel_door(self):
+        for command in ((0., 0.), (-.2, 0.), (.4, .3)):
+            with self.subTest(command=command):
+                self.node.door = self.front_opening(center=(1., 0.), heading=0., width=1.)
+                self.node.door_phase = 'door_pass'
+                self.send_raw(*command)
+                self.assertIsNone(self.node.door)
 
     def test_stale_planner_never_replays_old_motion(self):
         self.node.output = np.array([.4, .1])
