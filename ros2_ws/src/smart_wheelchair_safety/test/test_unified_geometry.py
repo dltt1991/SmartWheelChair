@@ -6,7 +6,7 @@ from smart_wheelchair_safety.unified_geometry import (
     Door, Opening, Segment, door_alignment_reference, door_entry_clearance,
     door_reference, wall_reference, extract_lines, find_door, find_openings,
     intended_side_opening, opening_matches, braking_clear, arc_path,
-    transform_points,
+    transform_points, intended_front_door,
 )
 
 
@@ -66,6 +66,15 @@ class UnifiedGeometryTest(unittest.TestCase):
 
         self.assertIsNone(intended_side_opening([too_far], 1, .4, .6))
         self.assertIsNone(intended_side_opening([near_narrow_door], 1, .6, .5))
+
+    def test_oblique_joystick_arc_selects_front_door(self):
+        for side in (-1., 1.):
+            door = Opening((1.6, side*.45), side*.18, 1., ())
+            self.assertEqual(intended_front_door([door], .6, side*.30), door)
+
+    def test_arc_turning_away_does_not_select_front_door(self):
+        door = Opening((1.6, .45), .18, 1., ())
+        self.assertIsNone(intended_front_door([door], .6, -.35))
 
     def test_wide_side_corridor_is_selected_early_for_sustained_turn_intent(self):
         corridor = Opening((3.5, -.52), -math.pi / 2, 2.7, ())

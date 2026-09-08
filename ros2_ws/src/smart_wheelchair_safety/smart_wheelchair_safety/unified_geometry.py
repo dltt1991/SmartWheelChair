@@ -147,6 +147,26 @@ def arc_path(v, w, duration=3., steps=41):
     return np.column_stack((v / w * np.sin(yaw), v / w * (1 - np.cos(yaw)), yaw))
 
 
+def intended_front_door(openings, v, w, corridor_tolerance=.25):
+    path = arc_path(max(v, .1), w)[:, :2]
+    matches = []
+    for opening in openings:
+        center = np.asarray(opening.center)
+        if not (opening.width <= 1.5 and math.cos(opening.heading) > .65
+                and .8 < center[0] < 3.5 and abs(center[1]) < 1.5):
+            continue
+        normal = np.array([math.cos(opening.heading), math.sin(opening.heading)])
+        tangent = np.array([-normal[1], normal[0]])
+        relative = path-center
+        across, along = relative@normal, relative@tangent
+        closest = int(np.argmin(np.abs(across)))
+        progress = abs(across[0])-abs(across[closest])
+        miss = abs(along[closest])
+        if progress >= .25 and miss <= opening.width/2+corridor_tolerance:
+            matches.append(((miss, np.linalg.norm(center)), opening))
+    return min(matches, key=lambda item: item[0], default=(None, None))[1]
+
+
 def intended_side_opening(openings, wall_side, v, w):
     if not wall_side or wall_side*w < .12:
         return None
