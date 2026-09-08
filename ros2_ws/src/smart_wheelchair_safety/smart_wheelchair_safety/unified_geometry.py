@@ -14,10 +14,14 @@ class Segment:
 
 
 @dataclass(frozen=True)
-class Door:
+class Opening:
     center: tuple
     heading: float
     width: float
+    jambs: tuple = ()
+
+
+Door = Opening
 
 
 def transform_points(points, pose, inverse=False):
@@ -67,30 +71,54 @@ def extract_lines(points, gap=.25, residual=.035, min_length=.30):
     return result
 
 
-def find_door(lines, min_width=.92, max_width=1.50):
-    doors = []
+def angle_difference(first, second):
+    return math.atan2(math.sin(first-second), math.cos(first-second))
+
+
+def opening_matches(first, second):
+    return (np.linalg.norm(np.asarray(first.center)-second.center) <= .25
+            and abs(angle_difference(first.heading, second.heading)) <= .12
+            and abs(first.width-second.width) <= .25)
+
+
+def find_openings(lines, min_width=.92, max_width=3.20, max_distance=4.5):
+    openings = []
     for i, first in enumerate(lines):
         tangent = np.array([math.cos(first.heading), math.sin(first.heading)])
-        normal = np.array([tangent[1], -tangent[0]])
-        if normal[0] < 0:
-            normal = -normal
-        if normal[0] < .65:
-            continue
+        left_normal = np.array([-tangent[1], tangent[0]])
+        first_points = np.array([first.start, first.end])
+        first_interval = sorted(first_points @ tangent)
+        first_plane = float(np.mean(first_points @ left_normal))
         for second in lines[i + 1:]:
             if abs(math.sin(first.heading - second.heading)) > .06:
                 continue
-            if abs((np.array(second.start) - first.start) @ normal) > .06:
+            second_points = np.array([second.start, second.end])
+            second_plane = float(np.mean(second_points @ left_normal))
+            if abs(first_plane-second_plane) > .06:
                 continue
-            endpoints = sorted([np.array(first.start), np.array(first.end),
-                                np.array(second.start), np.array(second.end)], key=lambda p: p @ tangent)
-            first_interval = sorted(np.array([first.start, first.end]) @ tangent)
-            second_interval = sorted(np.array([second.start, second.end]) @ tangent)
-            gap = max(first_interval[0], second_interval[0]) - min(first_interval[1], second_interval[1])
+            second_interval = sorted(second_points @ tangent)
+            lower, upper = sorted(((first_interval, first_points),
+                                   (second_interval, second_points)), key=lambda item: item[0][0])
+            gap = upper[0][0] - lower[0][1]
             if not min_width <= gap <= max_width:
                 continue
-            center = (endpoints[1] + endpoints[2]) / 2
-            if .8 < center[0] < 3.5 and abs(center[1]) < 1.:
-                doors.append(Door(tuple(center), math.atan2(normal[1], normal[0]), float(gap)))
+            lower_edge = lower[1][np.argmax(lower[1] @ tangent)]
+            upper_edge = upper[1][np.argmin(upper[1] @ tangent)]
+            center = (lower_edge + upper_edge) / 2
+            if center[0] <= 0. or np.linalg.norm(center) > max_distance:
+                continue
+            crossing = math.copysign(1., (first_plane+second_plane)/2.) * left_normal
+            openings.append(Opening(tuple(center), math.atan2(crossing[1], crossing[0]),
+                                    float(gap), (first, second)))
+    return sorted(openings, key=lambda opening: np.linalg.norm(opening.center))
+
+
+def find_door(lines, min_width=.92, max_width=1.50):
+    doors = []
+    for opening in find_openings(lines, min_width, max_width):
+        center = np.asarray(opening.center)
+        if math.cos(opening.heading) > .65 and .8 < center[0] < 3.5 and abs(center[1]) < 1.5:
+            doors.append(opening)
     return min(doors, key=lambda door: np.linalg.norm(door.center), default=None)
 
 

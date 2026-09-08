@@ -3,11 +3,53 @@ import unittest
 import numpy as np
 
 from smart_wheelchair_safety.unified_geometry import (
-    Door, Segment, door_reference, wall_reference, extract_lines, find_door, braking_clear, arc_path, transform_points,
+    Door, Opening, Segment, door_reference, wall_reference, extract_lines,
+    find_door, find_openings, opening_matches, braking_clear, arc_path,
+    transform_points,
 )
 
 
 class UnifiedGeometryTest(unittest.TestCase):
+    def test_general_opening_detector_serves_side_passages_and_front_doors(self):
+        side = [
+            Segment((-1., .8), (.2, .8), 0., .8),
+            Segment((2.8, .8), (4., .8), 0., .8),
+        ]
+        front = [
+            Segment((2., -2.), (2., -.5), math.pi / 2, -2.),
+            Segment((2., .5), (2., 2.), math.pi / 2, -2.),
+        ]
+
+        side_opening = find_openings(side)[0]
+        front_opening = find_openings(front, max_width=1.5)[0]
+
+        np.testing.assert_allclose(side_opening.center, [1.5, .8])
+        self.assertAlmostEqual(side_opening.width, 2.6)
+        self.assertGreater(math.sin(side_opening.heading), .99)
+        np.testing.assert_allclose(front_opening.center, [2., 0.])
+        self.assertAlmostEqual(front_opening.width, 1.)
+        self.assertGreater(math.cos(front_opening.heading), .99)
+
+    def test_opening_detector_rejects_one_jamb_bad_plane_and_out_of_range(self):
+        lone = [Segment((-1., .8), (.2, .8), 0., .8)]
+        bad_plane = lone + [Segment((1.2, .92), (3., .92), 0., .92)]
+        far = [
+            Segment((5., .8), (6., .8), 0., .8),
+            Segment((7., .8), (8., .8), 0., .8),
+        ]
+
+        self.assertEqual(find_openings(lone), [])
+        self.assertEqual(find_openings(bad_plane), [])
+        self.assertEqual(find_openings(far), [])
+
+    def test_opening_association_tolerates_scan_noise_but_not_a_new_gap(self):
+        first = Opening((1.5, .8), math.pi / 2, 2.6, ())
+        noisy = Opening((1.68, .84), math.pi / 2 + .08, 2.43, ())
+        other = Opening((2.1, .8), math.pi / 2, 2.6, ())
+
+        self.assertTrue(opening_matches(first, noisy))
+        self.assertFalse(opening_matches(first, other))
+
     def test_corner_is_two_walls_not_an_imaginary_diagonal(self):
         points = [(x, .8) for x in np.linspace(0, 1, 30)]
         points += [(1, y) for y in np.linspace(.8, 1.8, 30)]
