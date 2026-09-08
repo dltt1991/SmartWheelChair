@@ -9,6 +9,7 @@ CMAKE = pathlib.Path(__file__).parents[1] / "CMakeLists.txt"
 GUI_CONFIG = pathlib.Path(__file__).parents[1] / "config" / "top_down_gui.config"
 GUI_SCRIPT = pathlib.Path(__file__).parents[4] / "docker" / "gazebo-gui-vnc.sh"
 TRAJECTORY_PLUGIN = pathlib.Path(__file__).parents[1] / "src" / "trajectory_preview_system.cc"
+WHEELCHAIR_MODEL = pathlib.Path(__file__).parents[1] / "models" / "smart_wheelchair" / "model.sdf"
 
 
 class WorldLayoutTest(unittest.TestCase):
@@ -67,6 +68,13 @@ class WorldLayoutTest(unittest.TestCase):
             width = float(model.findtext('.//collision/geometry/box/size').split()[1])
             edges.append(y+sign*width/2)
         self.assertAlmostEqual(edges[0]-edges[1], 1.)
+
+    def test_both_lidars_use_five_metre_simulation_range(self):
+        root = ET.parse(WHEELCHAIR_MODEL).getroot()
+        ranges = [float(sensor.findtext("lidar/range/max"))
+                  for sensor in root.findall(".//sensor[@type='gpu_lidar']")]
+
+        self.assertEqual(ranges, [5.0, 5.0])
 
     def test_unified_launch_retains_baseline_switch(self):
         source = LAUNCH.read_text()

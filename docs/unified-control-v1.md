@@ -28,7 +28,10 @@ the motion, and the independent guard can reject even a planner output.
 - Planner: 20 Hz simulation time, 60 x 0.05 s horizon, 600 samples, one iteration.
 - Local map: 8 x 8 m, 0.025 m cells, 10 Hz, full rectangular footprint checks.
 - Forward/reverse/angular command bounds: 0.8 m/s, 0.4 m/s, 0.65 rad/s.
-- Door planning speed limit: 0.45 m/s. No autonomous reverse recovery.
+- Door alignment/pass speed limits: 0.25/0.45 m/s. Wide-opening turns are
+  limited to 0.5 m/s while entering. No autonomous reverse recovery.
+- Both simulated lidars use a 5.0 m maximum range. The hardware sensor's
+  stated 12 m maximum is reserved for later hardware calibration.
 - Wall following: `wall_clearance=0.12` m from the body edge, equivalently
   0.52 m from the rear axle when parallel. The 0.04 m hard guard margin is
   unchanged. Approach, corner and door transitions are not forced inside
@@ -74,6 +77,9 @@ python3 scripts/probe_unified_control.py front --seconds 16
 python3 scripts/probe_unified_control.py override --seconds 18
 python3 scripts/probe_unified_control.py wall_gap --wall-side left --seconds 7
 python3 scripts/probe_unified_control.py wall_gap --wall-side right --seconds 7
+python3 scripts/probe_unified_control.py opening_turn --wall-side left --seconds 14
+python3 scripts/probe_unified_control.py opening_turn --wall-side right --seconds 14
+python3 scripts/probe_unified_control.py opening_straight --wall-side left --seconds 10
 ```
 
 These cases require `m6_room.sdf`. Restart the simulation before each case:
@@ -83,9 +89,17 @@ clears the local costmap. Results default to
 `/tmp/unified-probe.json`; use `--output` to retain separate JSON records.
 
 For the door test, start a fresh `unified_door.sdf` via the README command,
-then run `python3 scripts/probe_unified_control.py door --seconds 25` inside
-the sourced container. Restart the door scene before each repetition: its
-world-coordinate report assumes the original spawn, no preceding movement.
+then run the following inside the sourced container:
+
+```bash
+python3 scripts/probe_unified_control.py door --lateral-m .20 --yaw-deg 15 --seconds 35
+python3 scripts/probe_unified_control.py door --lateral-m -.20 --yaw-deg -15 --seconds 35
+```
+
+Restart the door scene before each repetition. A stopped command clears
+uncommitted opening observations, so a Gazebo pose reset cannot reuse geometry
+from the previous pose. World-coordinate reports use relative wheel odometry
+and the pose explicitly set by the probe.
 The fixture is exactly 1.0 m wide and 0.2 m deep. The pre-redesign room's
 named "narrow door" was much wider. The redesigned `m6_room` now has six
 actual 1.0/1.1/1.2 m doors; this isolated fixture remains separate.
@@ -102,19 +116,20 @@ not statistical safety guarantees):
 | --- | --- |
 | 30-degree wall approach, sustained steering toward wall | Wall mode, speed recovered to 0.8 m/s; minimum sampled clearance 0.368 m |
 | Frontal transverse wall | Remained in front-stop mode; final speed zero, sampled clearance 0.129 m |
-| 1.0 m door, 10-degree heading and 0.15 m body offset | Rear axle passed beyond exit; minimum sampled clearance 0.078 m; low-speed adjustments remain near jambs |
+| Wide left/right corridor turn | Heading changed +1.586/-1.650 rad; minimum sampled clearance 0.111/0.080 m |
+| Straight past the same opening | No opening-turn mode; heading drift 0.0073 rad |
+| 1.0 m door, +/-15-degree heading and +/-0.20 m body offset | Both rear axles cleared the door; minimum sampled clearance 0.087/0.086 m |
 | Steering away during wall following | Exited to override mode and followed -0.42 rad/s requested steering |
 
 The automated suite also covers corners versus fictitious diagonal walls,
 too-narrow door rejection, rear sweep, braking momentum, valid infinite scans,
 stale inputs/planner, driver release, persistent override and jamb memory.
 
-After the odometry-age guard was strengthened, the door still passed but
-included brief braking interventions and slow alignment segments. Door
-comfort/throughput is not considered finished; the next step is earlier
-alignment and tracking evaluation, not reducing the guard's safety margin.
-After the map and wall-clearance update, the automated suites pass 100 safety
-tests and 25 Gazebo geometry/structure tests. The close-wall smoke checks
+Door alignment intentionally slows near a one-metre opening. At the staging
+point, heading closes under bounded feedback before pass is committed; the
+whole-body entry projection must retain the hard margin. Confirmed static
+openings persist through short lidar occlusions but are cleared by stop/reverse
+or after the wheelchair passes them. The close-wall smoke checks
 sampled body-edge gaps of 0.104-0.123 m on the left and 0.102-0.111 m on the
 right. These short steady-following checks do not impose a 0.15 m limit during
 initial approach or obstacle transitions.
@@ -122,7 +137,9 @@ initial approach or obstacle transitions.
 ## Version 1 boundaries
 
 Indoor planar static geometry. A doorway must have two observed, approximately
-coplanar jamb segments and enough measured width for the inflated footprint.
+coplanar jamb segments, no measured wall support inside the proposed gap, and
+enough measured width for the inflated footprint. Side openings at least 1.8 m
+wide can become an intended corridor turn; narrower gaps remain door candidates.
 No automatic reverse recovery; stopping/reverse/explicit steering cancels door
 assistance. Front cross walls remain stop obstacles unless a valid doorway in
 the requested direction is identified. The doorway target persists in odom

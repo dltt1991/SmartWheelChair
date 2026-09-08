@@ -89,7 +89,7 @@ def find_openings(lines, min_width=.92, max_width=3.20, max_distance=4.5):
         first_points = np.array([first.start, first.end])
         first_interval = sorted(first_points @ tangent)
         first_plane = float(np.mean(first_points @ left_normal))
-        for second in lines[i + 1:]:
+        for j, second in enumerate(lines[i + 1:], start=i + 1):
             if abs(math.sin(first.heading - second.heading)) > .06:
                 continue
             second_points = np.array([second.start, second.end])
@@ -101,6 +101,23 @@ def find_openings(lines, min_width=.92, max_width=3.20, max_distance=4.5):
                                    (second_interval, second_points)), key=lambda item: item[0][0])
             gap = upper[0][0] - lower[0][1]
             if not min_width <= gap <= max_width:
+                continue
+            gap_start, gap_end = lower[0][1], upper[0][0]
+            occupied = False
+            for k, third in enumerate(lines):
+                if k in (i, j) or abs(math.sin(first.heading-third.heading)) > .06:
+                    continue
+                third_points = np.array([third.start, third.end])
+                third_plane = float(np.mean(third_points @ left_normal))
+                if abs(first_plane-third_plane) > .06:
+                    continue
+                third_interval = sorted(third_points @ tangent)
+                overlap = (min(third_interval[1], gap_end-.05)
+                           - max(third_interval[0], gap_start+.05))
+                if overlap > .08:
+                    occupied = True
+                    break
+            if occupied:
                 continue
             lower_edge = lower[1][np.argmax(lower[1] @ tangent)]
             upper_edge = upper[1][np.argmin(upper[1] @ tangent)]
@@ -138,6 +155,10 @@ def intended_side_opening(openings, wall_side, v, w):
         normal = np.array([math.cos(opening.heading), math.sin(opening.heading)])
         if wall_side*normal[1] < .65 or opening.center[0] <= .4:
             continue
+        if opening.width < 1.8:
+            continue
+        if opening.center[0] <= 4.5 and .35 < wall_side*opening.center[1] < 1.8:
+            return opening
         tangent = np.array([-normal[1], normal[0]])
         relative = path[:, :2] - opening.center
         across, along = relative @ normal, relative @ tangent

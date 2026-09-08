@@ -19,7 +19,7 @@ from std_msgs.msg import String
 from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, TransformListener, TransformException
 
 from smart_wheelchair_safety.unified_geometry import (
-    Door, Opening, angle_difference, arc_path, braking_clear,
+    Opening, angle_difference, approach_path, arc_path, braking_clear,
     door_alignment_reference, door_entry_clearance, extract_lines,
     find_openings, intended_side_opening, opening_matches, transform_points,
     wall_reference,
@@ -104,6 +104,8 @@ class UnifiedControlNode(Node):
             self._clear_opening_turn()
         if self.raw[0] <= .02:
             self.front_blocked = False
+            self.opening_candidates = []
+            self.confirmed_openings = []
         door_active = self.door is not None
         self.override = (self.wall_side * self.raw[1] < -.15
                          or ((door_active or self.mode == 'override') and abs(self.raw[1]) > .25))
@@ -186,16 +188,28 @@ class UnifiedControlNode(Node):
     def _observe_openings(self, openings):
         if self.pose is None:
             return
+        now = time.monotonic()
         observed = [self._world_opening(opening) for opening in openings]
         updated = []
         confirmed = []
-        for opening in observed:
-            previous = next(((candidate, hits) for candidate, hits in self.opening_candidates
-                             if opening_matches(candidate, opening)), None)
-            hits = previous[1]+1 if previous is not None else 1
-            updated.append((opening, hits))
-            if hits >= 2:
+        for opening in self.confirmed_openings:
+            local = self._local_opening(opening)
+            if local.center[0] >= -.5 and np.linalg.norm(local.center) <= 5.:
                 confirmed.append(opening)
+        for opening in observed:
+            previous = next(((candidate, hits) for candidate, hits, stamp in self.opening_candidates
+                             if now-stamp <= .6 and opening_matches(candidate, opening)), None)
+            hits = previous[1]+1 if previous is not None else 1
+            updated.append((opening, hits, now))
+            if hits >= 2:
+                match = next((index for index, tracked in enumerate(confirmed)
+                              if opening_matches(tracked, opening)), None)
+                if match is None:
+                    confirmed.append(opening)
+        for candidate, hits, stamp in self.opening_candidates:
+            if (now-stamp <= .6 and not any(opening_matches(candidate, opening)
+                                            for opening in observed)):
+                updated.append((candidate, hits, stamp))
         self.opening_candidates = updated
         self.confirmed_openings = confirmed
 
@@ -256,12 +270,27 @@ class UnifiedControlNode(Node):
         if self.opening_turn is None:
             return None
         local = self._local_opening(self.opening_turn)
-        expired = time.monotonic()-self.opening_turn_time >= 3.
-        turned = abs(angle_difference(self.pose[2], self.opening_turn_heading)) >= .45
+        expired = time.monotonic()-self.opening_turn_time >= 6.
+        turned = abs(angle_difference(self.pose[2], self.opening_turn_heading)) >= 1.05
         if expired or turned or local.center[0] < -.25:
             self._clear_opening_turn()
             return None
-        return arc_path(max(self.raw[0], .1), self.raw[1])
+        if not self._opening_turn_ready(local):
+            return arc_path(max(self.raw[0], .1), 0.)
+        normal = np.array([math.cos(local.heading), math.sin(local.heading)])
+        return approach_path(np.asarray(local.center) + 1.2*normal, local.heading)
+
+    def _opening_turn_ready(self, local=None):
+        if self.opening_turn is None:
+            return False
+        local = local or self._local_opening(self.opening_turn)
+        normal = np.array([math.cos(local.heading), math.sin(local.heading)])
+        tangent = np.array([-normal[1], normal[0]])
+        if tangent[0] < 0.:
+            tangent = -tangent
+        near_edge = np.asarray(local.center) @ tangent - local.width/2
+        front_support = .97*tangent[0] + .4*abs(tangent[1])
+        return near_edge <= front_support-.45
 
     def points(self):
         if self.pose is None:
@@ -334,7 +363,7 @@ class UnifiedControlNode(Node):
             self.wall_side = 0
             if self.door_phase == 'door_align':
                 local_path = door_alignment_reference(local_door, 'align')
-                if np.linalg.norm(local_path[-1, :2]) <= .15 and door_entry_clearance(local_door) > 0.:
+                if np.linalg.norm(local_path[-1, :2]) <= .25 and door_entry_clearance(local_door) > 0.:
                     self.door_phase = 'door_pass'
                     local_path = door_alignment_reference(local_door, 'pass')
             else:
@@ -370,7 +399,8 @@ class UnifiedControlNode(Node):
         limit = SpeedLimit()
         limit.speed_limit = min(self.raw[0], self.get_parameter('max_speed').value,
                                 .25 if self.mode == 'door_align'
-                                else .45 if self.mode in ('door_pass', 'door_clear') else 10.)
+                                else .45 if self.mode in ('door_pass', 'door_clear')
+                                else .5 if self.mode == 'opening_turn' else 10.)
         self.limit_pub.publish(limit)
         if not self.pending_goal and self.client.server_is_ready():
             request = FollowPath.Goal()
@@ -419,6 +449,20 @@ class UnifiedControlNode(Node):
                     desired[0] = min(desired[0], allowed)
             elif now-self.plan_time < .25 and np.isfinite(self.planned).all():
                 desired = self.planned.copy()
+                if self.mode == 'door_align' and self.door is not None:
+                    local_door = self._local_opening(self.door)
+                    staging = door_alignment_reference(local_door, 'align')[-1, :2]
+                    if np.linalg.norm(staging) <= .25:
+                        desired[0] = 0.
+                        desired[1] = np.clip(1.5*local_door.heading, -.25, .25)
+                elif self.mode == 'opening_turn':
+                    if not self._opening_turn_ready():
+                        heading_error = angle_difference(self.pose[2], self.opening_turn_heading)
+                        desired[1] = np.clip(-1.5*heading_error, -.2, .2)
+                    elif self.opening_turn_side*self.raw[1] > .12:
+                        intended = min(abs(self.raw[1]), .5)
+                        desired[1] = self.opening_turn_side * max(
+                            self.opening_turn_side*desired[1], intended)
             else:
                 desired = np.zeros(2)
                 self.reason = 'planner_timeout'
@@ -452,8 +496,16 @@ class UnifiedControlNode(Node):
         msg = Twist()
         msg.linear.x, msg.angular.z = map(float, command)
         self.pub.publish(msg)
-        self.status.publish(String(data=json.dumps({'mode': self.mode, 'reason': self.reason,
-                                                   'v': msg.linear.x, 'w': msg.angular.z})))
+        status = {'mode': self.mode, 'reason': self.reason, 'v': msg.linear.x, 'w': msg.angular.z}
+        if self.opening_turn is not None and self.pose is not None:
+            opening = self._local_opening(self.opening_turn)
+            status['opening'] = {'center': opening.center, 'width': opening.width,
+                                 'ready': bool(self._opening_turn_ready(opening))}
+        if self.door is not None and self.pose is not None:
+            door = self._local_opening(self.door)
+            status['door'] = {'center': door.center, 'heading': door.heading,
+                              'width': door.width, 'entry_clearance': door_entry_clearance(door)}
+        self.status.publish(String(data=json.dumps(status)))
 
 
 def main(args=None):

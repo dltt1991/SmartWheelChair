@@ -62,8 +62,27 @@ class UnifiedGeometryTest(unittest.TestCase):
 
     def test_driver_arc_must_cross_between_jambs(self):
         too_far = Opening((3.0, .8), math.pi / 2, 1.0, ())
+        near_narrow_door = Opening((1.0, .8), math.pi / 2, 1.2, ())
 
         self.assertIsNone(intended_side_opening([too_far], 1, .4, .6))
+        self.assertIsNone(intended_side_opening([near_narrow_door], 1, .6, .5))
+
+    def test_wide_side_corridor_is_selected_early_for_sustained_turn_intent(self):
+        corridor = Opening((3.5, -.52), -math.pi / 2, 2.7, ())
+
+        self.assertEqual(intended_side_opening([corridor], -1, .8, -.6), corridor)
+
+    def test_opening_pair_rejects_gap_occupied_by_another_coplanar_segment(self):
+        lines = [
+            Segment((2., -3.), (2., -.95), math.pi / 2, -2.),
+            Segment((2., -3.), (2., -.5), math.pi / 2, -2.),
+            Segment((2., .5), (2., 3.), math.pi / 2, -2.),
+        ]
+
+        openings = find_openings(lines, max_width=1.5)
+
+        self.assertEqual(len(openings), 1)
+        self.assertAlmostEqual(openings[0].width, 1.)
 
     def test_door_alignment_uses_more_setback_for_larger_error(self):
         centered_door = Opening((2., 0.), 0., 1., ())

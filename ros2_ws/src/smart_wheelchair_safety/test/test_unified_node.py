@@ -97,6 +97,37 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.update_reference()
         self.assertEqual(self.node.mode, 'opening_turn')
 
+    def test_confirmed_opening_survives_temporary_lidar_occlusion_until_passed(self):
+        opening = self.wall_opening(side=-1)
+        self.node._observe_openings([opening])
+        self.node._observe_openings([opening])
+
+        self.node._observe_openings([])
+        self.assertEqual(len(self.node.confirmed_openings), 1)
+
+        self.node.pose = (3., 0., 0.)
+        self.node._observe_openings([])
+        self.assertEqual(self.node.confirmed_openings, [])
+
+    def test_confirmed_opening_world_position_does_not_walk_with_chained_matches(self):
+        self.observe_front_door(center=(2., 0.), width=1.)
+        self.observe_front_door(center=(2.1, 0.), width=1.)
+        confirmed = self.node.confirmed_openings[0]
+
+        self.observe_front_door(center=(2.25, 0.), width=1.)
+        self.observe_front_door(center=(2.4, 0.), width=1.)
+
+        self.assertEqual(self.node.confirmed_openings[0], confirmed)
+
+    def test_opening_confirmation_tolerates_one_missing_lidar_fit(self):
+        opening = self.wall_opening(side=-1)
+
+        self.node._observe_openings([opening])
+        self.node._observe_openings([])
+        self.node._observe_openings([opening])
+
+        self.assertEqual(len(self.node.confirmed_openings), 1)
+
     def test_stop_reverse_and_away_steering_cancel_opening_turn(self):
         from geometry_msgs.msg import Twist
         for linear, angular in ((0., 0.), (-.2, 0.), (.4, -.3)):
@@ -113,15 +144,84 @@ class UnifiedNodeTest(unittest.TestCase):
             with self.subTest(case=case):
                 self.set_opening_turn()
                 if case == 'heading':
-                    self.node.pose = (0., 0., .5)
+                    self.node.pose = (0., 0., 1.1)
                 elif case == 'passed':
                     self.node.pose = (2.0, 0., 0.)
                 elif case == 'timeout':
-                    self.node.opening_turn_time -= 3.1
+                    self.node.opening_turn_time -= 6.1
                 else:
                     self.node.raw_time = 0.
                 self.node.update_reference()
                 self.assertIsNone(self.node.opening_turn)
+
+    def test_opening_turn_preserves_clear_driver_steering_when_planner_understeers(self):
+        self.set_opening_turn(side=1)
+        self.node.mode = 'opening_turn'
+        self.node.raw = np.array([.6, .5])
+        self.node.planned = np.array([.5, .03])
+
+        for _ in range(12):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreater(self.commands[-1].angular.z, .25)
+
+    def test_opening_turn_suppresses_planner_yaw_until_front_clears_jamb(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.opening_turn = Opening((3.5, -.52), -math.pi / 2, 2.7, ())
+        self.node.opening_turn_side = -1
+        self.node.opening_turn_heading = 0.
+        self.node.opening_turn_time = time.monotonic()
+        self.node.mode = 'opening_turn'
+        self.node.raw = np.array([.6, -.5])
+        self.node.planned = np.array([.5, -.08])
+
+        for _ in range(8):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertAlmostEqual(self.commands[-1].angular.z, 0.)
+
+    def test_opening_wait_segment_corrects_heading_drift_away_from_wall_end(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.opening_turn = Opening((3.5, -.52), -math.pi / 2, 2.7, ())
+        self.node.opening_turn_side = -1
+        self.node.opening_turn_heading = 0.
+        self.node.opening_turn_time = time.monotonic()
+        self.node.mode = 'opening_turn'
+        self.node.pose = (0., 0., -.08)
+        self.node.raw = np.array([.6, -.5])
+        self.node.planned = np.array([.5, -.08])
+
+        for _ in range(8):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreater(self.commands[-1].angular.z, 0.)
+
+    def test_opening_turn_reference_enters_wide_corridor_instead_of_turning_early(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.opening_turn = Opening((1.7, -.52), -math.pi / 2, 2.7, ())
+        self.node.opening_turn_side = -1
+        self.node.opening_turn_heading = 0.
+        self.node.opening_turn_time = time.monotonic()
+
+        path = self.node._opening_turn_path()
+
+        self.assertGreater(path[-1, 0], 1.5)
+        self.assertLess(path[-1, 1], -1.)
+
+    def test_opening_turn_reference_stays_straight_until_front_clears_near_jamb(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.opening_turn = Opening((3.5, -.52), -math.pi / 2, 2.7, ())
+        self.node.opening_turn_side = -1
+        self.node.opening_turn_heading = 0.
+        self.node.opening_turn_time = time.monotonic()
+
+        path = self.node._opening_turn_path()
+
+        np.testing.assert_allclose(path[:, 1], 0.)
+        np.testing.assert_allclose(path[:, 2], 0.)
 
     def test_door_needs_two_observations_before_alignment(self):
         self.observe_front_door(center=(2., .2), heading=.12, width=1.)
@@ -146,6 +246,13 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertEqual(self.node.door, frozen)
         self.assertEqual(self.node.mode, 'door_pass')
 
+    def test_aligned_door_commits_within_staging_heading_control_band(self):
+        self.confirm_door(center=(1.15, 0.), heading=0., width=1.)
+
+        self.node.update_reference()
+
+        self.assertEqual(self.node.mode, 'door_pass')
+
     def test_door_releases_only_after_rear_body_clears_plane(self):
         self.confirm_door(center=(1., 0.), heading=0., width=1.)
         self.node.door = self.front_opening(center=(1., 0.), heading=0., width=1.)
@@ -166,6 +273,28 @@ class UnifiedNodeTest(unittest.TestCase):
                 self.node.door_phase = 'door_pass'
                 self.send_raw(*command)
                 self.assertIsNone(self.node.door)
+
+    def test_stop_clears_uncommitted_opening_observations(self):
+        self.confirm_door(center=(2., 0.), heading=0., width=1.)
+
+        self.send_raw(0., 0.)
+
+        self.assertEqual(self.node.opening_candidates, [])
+        self.assertEqual(self.node.confirmed_openings, [])
+
+    def test_door_align_uses_heading_feedback_at_staging_instead_of_looping(self):
+        self.node.door = self.front_opening(center=(1., 0.), heading=.08, width=1.)
+        self.node.door_phase = 'door_align'
+        self.node.mode = 'door_align'
+        self.node.raw = np.array([.6, 0.])
+        self.node.planned = np.array([.2, -.2])
+
+        for _ in range(10):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertAlmostEqual(self.commands[-1].linear.x, 0.)
+        self.assertGreater(self.commands[-1].angular.z, 0.)
 
     def test_stale_planner_never_replays_old_motion(self):
         self.node.output = np.array([.4, .1])
