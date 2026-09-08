@@ -140,9 +140,11 @@ Indoor planar static geometry. A doorway must have two observed, approximately
 coplanar jamb segments, no measured wall support inside the proposed gap, and
 enough measured width for the inflated footprint. Side openings at least 1.8 m
 wide can become an intended corridor turn; narrower gaps remain door candidates.
-No automatic reverse recovery; stopping/reverse/explicit steering cancels door
-assistance. Front cross walls remain stop obstacles unless a valid doorway in
-the requested direction is identified. The doorway target persists in odom
+No automatic reverse recovery; stopping, reversing, or steering persistently
+away from the selected doorway cancels door assistance. Steering toward a
+confirmed doorway remains part of the door intent. Front cross walls remain
+stop obstacles unless a valid doorway in the requested direction is identified.
+The doorway target persists in odom
 until the rear of the wheelchair is clear. Nearby observed jamb points remain
 in the guard even when assistance is cancelled; they are spatially pruned
 beyond 4.5 m. This static memory is intentionally conservative and has no

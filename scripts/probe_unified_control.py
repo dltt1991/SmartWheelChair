@@ -161,7 +161,8 @@ def main():
         assert moving and result['min_sampled_clearance'] > .02, 'missing data or insufficient sampled clearance'
         if args.case == 'door':
             assert any(r['world_axle'][0] > .6 for r in moving), 'rear axle did not clear doorway'
-            assert any(mode.startswith('door_') for mode in result['modes']), 'door assistance not observed'
+            assert 'door_align' in result['modes'], 'door alignment was not selected'
+            assert 'wall' not in result['modes'], 'wall following captured the doorway approach'
             assert 'door_pass' in result['modes'], 'door alignment never committed to pass'
         elif args.case == 'front':
             assert abs(moving[-1].get('cmd_vel', [99])[0]) < .02, 'did not stop at front wall'
