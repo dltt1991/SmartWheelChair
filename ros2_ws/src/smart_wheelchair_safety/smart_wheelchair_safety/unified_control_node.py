@@ -26,6 +26,9 @@ from smart_wheelchair_safety.unified_geometry import (
 )
 
 
+DOOR_INTENT_CORRIDOR_TOLERANCE = .35
+
+
 class UnifiedControlNode(Node):
     def __init__(self):
         super().__init__('unified_control')
@@ -115,7 +118,9 @@ class UnifiedControlNode(Node):
             local = self._local_opening(self.door)
             retained = (self.door_phase in ('door_pass', 'door_clear') and local.center[0] <= .8
                         and abs(self.raw[1]) <= .25)
-            targeted = retained or intended_front_door([local], *self.raw) is not None
+            targeted = (retained or intended_front_door(
+                [local], *self.raw,
+                corridor_tolerance=DOOR_INTENT_CORRIDOR_TOLERANCE) is not None)
             if targeted:
                 self.door_away_since = 0.
             elif not self.door_away_since:
@@ -252,7 +257,9 @@ class UnifiedControlNode(Node):
         if self.pose is None:
             return None, None
         local = [self._local_opening(opening) for opening in self.confirmed_openings]
-        selected = intended_front_door(local, *self.raw)
+        selected = intended_front_door(
+            local, *self.raw,
+            corridor_tolerance=DOOR_INTENT_CORRIDOR_TOLERANCE)
         if selected is None:
             return None, None
         return self.confirmed_openings[local.index(selected)], selected

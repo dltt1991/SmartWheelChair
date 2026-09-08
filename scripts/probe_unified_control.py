@@ -34,6 +34,8 @@ def main():
                         help='Door fixture body-centre lateral offset in metres')
     parser.add_argument('--yaw-deg', type=float, default=10.,
                         help='Door fixture initial heading error in degrees')
+    parser.add_argument('--active-align', action='store_true',
+                        help='Briefly steer toward the door before assistance takes over')
     parser.add_argument('--output', default='/tmp/unified-probe.json')
     args = parser.parse_args()
     rclpy.init()
@@ -92,6 +94,8 @@ def main():
                 if args.case == 'opening_turn' and elapsed > 4:
                     # HTTP x is screen direction; joystick_to_velocity negates it.
                     turn = -.45 if args.wall_side == 'left' else .45
+                if args.case == 'door' and args.active_align and 2. < elapsed < 3.2:
+                    turn = math.copysign(.22, args.lateral_m)
                 command(turn if elapsed > 2 else 0., .5 if elapsed > 2 else 0.)
                 last_send = now
             rclpy.spin_once(node, timeout_sec=.005)
@@ -125,7 +129,7 @@ def main():
                             if 0. <= gap < .5:
                                 wall_clearances.append(gap)
             row = dict(t=round(elapsed, 3), **data, clearance=min(clearances, default=99.))
-            if args.case in ('opening_turn', 'opening_straight'):
+            if args.case in ('opening_turn', 'opening_straight', 'door'):
                 row['openings'] = [{'center': list(opening.center), 'heading': opening.heading,
                                     'width': opening.width}
                                    for opening in find_openings(scan_lines)]

@@ -92,8 +92,8 @@ For the door test, start a fresh `unified_door.sdf` via the README command,
 then run the following inside the sourced container:
 
 ```bash
-python3 scripts/probe_unified_control.py door --lateral-m .20 --yaw-deg 15 --seconds 35
-python3 scripts/probe_unified_control.py door --lateral-m -.20 --yaw-deg -15 --seconds 35
+python3 scripts/probe_unified_control.py door --lateral-m .20 --yaw-deg 15 --active-align --seconds 45
+python3 scripts/probe_unified_control.py door --lateral-m -.20 --yaw-deg -15 --active-align --seconds 45
 ```
 
 Restart the door scene before each repetition. A stopped command clears
@@ -118,7 +118,7 @@ not statistical safety guarantees):
 | Frontal transverse wall | Remained in front-stop mode; final speed zero, sampled clearance 0.129 m |
 | Wide left/right corridor turn | Heading changed +1.586/-1.650 rad; minimum sampled clearance 0.111/0.080 m |
 | Straight past the same opening | No opening-turn mode; heading drift 0.0073 rad |
-| 1.0 m door, +/-15-degree heading and +/-0.20 m body offset | Both rear axles cleared the door; minimum sampled clearance 0.087/0.086 m |
+| 1.0 m door, active alignment from +/-15-degree heading and +/-0.20 m body offset | Both rear axles cleared the door without wall mode; minimum sampled clearance 0.088/0.087 m |
 | Steering away during wall following | Exited to override mode and followed -0.42 rad/s requested steering |
 
 The automated suite also covers corners versus fictitious diagonal walls,

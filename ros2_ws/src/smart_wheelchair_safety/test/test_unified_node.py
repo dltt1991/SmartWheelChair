@@ -382,6 +382,22 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertFalse(self.node.override)
         self.assertEqual(self.node.mode, 'door_align')
 
+    def test_straight_oblique_door_intent_tolerates_lidar_fit_variation(self):
+        self.confirm_door(center=(2.6, .9), heading=.262, width=1.02)
+        self.node.raw = np.array([.833, 0.])
+
+        world, _ = self.node._intended_door()
+
+        self.assertIsNotNone(world)
+
+    def test_untargeted_offset_door_does_not_capture_straight_command(self):
+        self.confirm_door(center=(2., 1.25), heading=0., width=1.)
+        self.node.raw = np.array([.6, 0.])
+
+        world, _ = self.node._intended_door()
+
+        self.assertIsNone(world)
+
     def test_observed_obstacle_is_not_erased_when_body_reaches_it(self):
         self.node.scans['left'] = (time.monotonic(), np.array([[.9, .1]]))
         _, points = self.node.points()
