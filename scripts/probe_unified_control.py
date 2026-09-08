@@ -48,7 +48,7 @@ def main():
     parser.add_argument('--yaw-deg', type=float, default=10.,
                         help='Door fixture initial heading error in degrees')
     parser.add_argument('--active-align', action='store_true',
-                        help='Briefly steer toward the door before assistance takes over')
+                        help='Steer toward the door for four seconds during takeover')
     parser.add_argument('--output', default='/tmp/unified-probe.json')
     args = parser.parse_args()
     rclpy.init()
@@ -118,7 +118,7 @@ def main():
                 if args.case == 'opening_turn' and elapsed > 4:
                     # HTTP x is screen direction; joystick_to_velocity negates it.
                     turn = -.45 if args.wall_side == 'left' else .45
-                if args.case == 'door' and args.active_align and 2. < elapsed < 3.2:
+                if args.case == 'door' and args.active_align and 2. < elapsed < 6.:
                     turn = math.copysign(.22, args.lateral_m)
                 command(turn if elapsed > 2 else 0., .5 if elapsed > 2 else 0.)
                 last_send = now

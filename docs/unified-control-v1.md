@@ -118,7 +118,7 @@ not statistical safety guarantees):
 | Frontal transverse wall | Remained in front-stop mode; final speed zero, sampled clearance 0.129 m |
 | Wide left/right corridor turn | Heading changed +1.586/-1.650 rad; minimum sampled clearance 0.111/0.080 m |
 | Straight past the same opening | No opening-turn mode; heading drift 0.0073 rad |
-| 1.0 m door, active alignment from +/-15-degree heading and +/-0.20 m body offset | Both rear axles cleared the door without wall mode; minimum sampled clearance 0.087/0.083 m |
+| 1.0 m door, four-second active alignment from +/-15-degree heading and +/-0.20 m body offset | Both rear axles cleared the door without wall mode; minimum sampled clearance 0.090/0.085 m |
 | Steering away during wall following | Exited to override mode and followed -0.42 rad/s requested steering |
 
 The automated suite also covers corners versus fictitious diagonal walls,
