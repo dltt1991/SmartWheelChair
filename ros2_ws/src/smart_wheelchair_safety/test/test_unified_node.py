@@ -296,6 +296,22 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertIsNotNone(self.node.door)
         self.assertEqual(self.node.door_away_since, 0.)
 
+    def test_committed_door_near_plane_debounces_explicit_away_steering(self):
+        for phase in ('door_pass', 'door_clear'):
+            with self.subTest(phase=phase):
+                self.node.door = self.front_opening(center=(.75, 0.), heading=0., width=1.)
+                self.node.door_phase = phase
+
+                self.send_raw(.5, .5)
+
+                self.assertIsNotNone(self.node.door)
+                self.assertGreater(self.node.door_away_since, 0.)
+                self.node.door_away_since -= .36
+                self.send_raw(.5, .5)
+
+                self.assertIsNone(self.node.door)
+                self.assertTrue(self.node.override)
+
     def test_door_pass_cancels_after_sustained_away_steering_before_plane(self):
         self.node.door = self.front_opening(center=(1.4, .4), heading=.15, width=1.)
         self.node.door_phase = 'door_pass'

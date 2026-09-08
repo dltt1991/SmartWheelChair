@@ -113,7 +113,8 @@ class UnifiedControlNode(Node):
             self._clear_door()
         elif self.door is not None:
             local = self._local_opening(self.door)
-            retained = (self.door_phase in ('door_pass', 'door_clear') and local.center[0] <= .8)
+            retained = (self.door_phase in ('door_pass', 'door_clear') and local.center[0] <= .8
+                        and abs(self.raw[1]) <= .25)
             targeted = retained or intended_front_door([local], *self.raw) is not None
             if targeted:
                 self.door_away_since = 0.
