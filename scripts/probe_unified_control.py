@@ -13,18 +13,31 @@ import subprocess
 import time
 import urllib.request
 
-import numpy as np
-import rclpy
-from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-from geometry_msgs.msg import Twist
-from nav_msgs.msg import Odometry
-from sensor_msgs.msg import LaserScan
-from std_msgs.msg import String
-from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings, transform_points
+
+def moving_records(records):
+    for index, record in enumerate(records):
+        if any(value != 0. for value in record.get('cmd_vel_raw', [])):
+            return records[index:]
+    return []
+
+
+def check_door_modes(modes):
+    assert 'wall' not in modes, 'wall following captured the doorway approach'
+    assert 'door_align' in modes, 'door alignment was not selected'
+    assert 'door_pass' in modes, 'door alignment never committed to pass'
 
 
 def main():
+    import numpy as np
+    import rclpy
+    from rclpy.node import Node
+    from rclpy.qos import qos_profile_sensor_data
+    from geometry_msgs.msg import Twist
+    from nav_msgs.msg import Odometry
+    from sensor_msgs.msg import LaserScan
+    from std_msgs.msg import String
+    from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings, transform_points
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('case', choices=['wall', 'wall_gap', 'override', 'front', 'vertical',
                                          'room_door', 'opening_turn', 'opening_straight', 'door'])
@@ -41,9 +54,18 @@ def main():
     rclpy.init()
     node = Node('unified_sim_probe')
     data, scans, records = {}, {}, []
+    motion_started = False
+    mode_history = []
+
+    def on_status(msg):
+        data['status'] = json.loads(msg.data)
+        if motion_started:
+            mode_history.append({'t': round(time.monotonic()-start, 3),
+                                 'mode': data['status'].get('mode', 'missing')})
+
     for topic in ['cmd_vel_raw', 'cmd_vel_planned', 'cmd_vel']:
         node.create_subscription(Twist, topic, lambda m, t=topic: data.update({t: [m.linear.x, m.angular.z]}), 10)
-    node.create_subscription(String, 'shared_control/status', lambda m: data.update(status=json.loads(m.data)), 10)
+    node.create_subscription(String, 'shared_control/status', on_status, 10)
     node.create_subscription(Odometry, 'odom', lambda m: data.update(odom=[
         m.pose.pose.position.x, m.pose.pose.position.y,
         2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)]), 10)
@@ -51,10 +73,12 @@ def main():
         node.create_subscription(LaserScan, 'scan_'+side, lambda m, s=side: scans.update({s: m}), qos_profile_sensor_data)
 
     def command(x=0., y=0.):
+        nonlocal motion_started
         request = urllib.request.Request('http://localhost:8090/cmd',
             data=json.dumps(dict(x=x, y=y, client_id='unified-sim-probe')).encode(),
             headers={'Content-Type': 'application/json'})
         urllib.request.urlopen(request, timeout=2).close()
+        motion_started = motion_started or x != 0. or y != 0.
 
     try:
         services = subprocess.run(['gz', 'service', '-l'], capture_output=True, text=True, check=True, timeout=5).stdout
@@ -142,11 +166,12 @@ def main():
                 row['world_yaw'] = data['odom'][2]-initial_odom[2]+yaw
             records.append(row)
         command()
-        moving = [r for r in records if r['t'] > 3]
+        moving = moving_records(records)
         result = {'case': args.case, 'samples': len(moving),
                   'min_sampled_clearance': min((r['clearance'] for r in moving), default=0.),
                   'max_speed': max((r.get('cmd_vel', [0])[0] for r in moving), default=0.),
-                  'modes': sorted({r.get('status', {}).get('mode', 'missing') for r in moving}),
+                  'modes': sorted({r['mode'] for r in mode_history}
+                                  | {r.get('status', {}).get('mode', 'missing') for r in moving}),
                   'last': records[-1] if records else None}
         if args.case == 'wall_gap':
             gaps = [r['wall_clearance'] for r in moving if r['wall_clearance'] is not None
@@ -156,14 +181,13 @@ def main():
         if args.case in ('opening_turn', 'opening_straight') and moving:
             result['yaw_change'] = math.atan2(math.sin(moving[-1]['odom'][2]-initial_odom[2]),
                                               math.cos(moving[-1]['odom'][2]-initial_odom[2]))
-        Path(args.output).write_text(json.dumps({'summary': result, 'records': records}, indent=2)+'\n')
+        Path(args.output).write_text(json.dumps({'summary': result, 'records': records,
+                                               'mode_history': mode_history}, indent=2)+'\n')
         print(json.dumps(result, indent=2))
         assert moving and result['min_sampled_clearance'] > .02, 'missing data or insufficient sampled clearance'
         if args.case == 'door':
+            check_door_modes(result['modes'])
             assert any(r['world_axle'][0] > .6 for r in moving), 'rear axle did not clear doorway'
-            assert 'door_align' in result['modes'], 'door alignment was not selected'
-            assert 'wall' not in result['modes'], 'wall following captured the doorway approach'
-            assert 'door_pass' in result['modes'], 'door alignment never committed to pass'
         elif args.case == 'front':
             assert abs(moving[-1].get('cmd_vel', [99])[0]) < .02, 'did not stop at front wall'
         elif args.case == 'override':

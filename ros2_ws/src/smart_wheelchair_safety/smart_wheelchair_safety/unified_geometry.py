@@ -167,6 +167,36 @@ def intended_front_door(openings, v, w, corridor_tolerance=.25):
     return min(matches, key=lambda item: item[0], default=(None, None))[1]
 
 
+def active_aperture_targeted(door, v, w):
+    """Intent only: cross the aperture without turning out before rear clearance.
+
+    No acquisition range/progress filters or speed floor apply to an active
+    door. Failure to reach the plane is inconclusive; reference direction
+    determines whether such a command is affirmative steering away.
+    """
+    normal = np.array([math.cos(door.heading), math.sin(door.heading)])
+    tangent = np.array([-normal[1], normal[0]])
+    relative = arc_path(v, w)[:, :2] - door.center
+    across, along = relative @ normal, relative @ tangent
+    hits = np.flatnonzero((across[:-1] < 0.) & (across[1:] >= 0.))
+    if across[0] >= 0. or not len(hits):
+        return False
+    start = int(hits[0])
+    fraction = -across[start] / (across[start+1]-across[start])
+    entry = along[start] + fraction*(along[start+1]-along[start])
+    if abs(entry) > door.width/2:
+        return False
+    for index in range(start+1, len(across)):
+        # Match the existing rear-clear plane, not a new entry/safety margin.
+        if across[index] >= .29:
+            fraction = (.29-across[index-1]) / (across[index]-across[index-1])
+            exit_lateral = along[index-1] + fraction*(along[index]-along[index-1])
+            return abs(exit_lateral) <= door.width/2
+        if across[index] < 0. or abs(along[index]) > door.width/2:
+            return False
+    return True
+
+
 def intended_side_opening(openings, wall_side, v, w):
     if not wall_side or wall_side*w < .12:
         return None

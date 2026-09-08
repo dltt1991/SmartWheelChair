@@ -11,6 +11,28 @@ from smart_wheelchair_safety.unified_geometry import (
 
 
 class UnifiedGeometryTest(unittest.TestCase):
+    def test_active_aperture_targeting_covers_near_plane_arcs_on_both_sides(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        for side in (-1., 1.):
+            door = Opening((.75, side*.04), side*.04, 1.)
+            for turn in (-.3, .3):
+                with self.subTest(side=side, turn=turn):
+                    self.assertTrue(active_aperture_targeted(door, .5, turn))
+            self.assertTrue(active_aperture_targeted(door, .5, 0.))
+
+    def test_active_aperture_targeting_rejects_turn_out_before_rear_clearance(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        door = Opening((.75, 0.), 0., 1.)
+        for turn in (-.5, .5):
+            self.assertFalse(active_aperture_targeted(door, .5, turn))
+
+    def test_active_aperture_targeting_does_not_invent_low_speed_crossing(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        door = Opening((1.6, .45), .18, 1.)
+        self.assertFalse(active_aperture_targeted(door, .1, .6))
+        self.assertFalse(active_aperture_targeted(door, .5, -.5))
+        self.assertFalse(active_aperture_targeted(Opening((-.1, 0.), 0., 1.), .5, .5))
+
     def test_general_opening_detector_serves_side_passages_and_front_doors(self):
         side = [
             Segment((-1., .8), (.2, .8), 0., .8),

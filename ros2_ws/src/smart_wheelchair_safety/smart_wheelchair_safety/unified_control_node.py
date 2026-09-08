@@ -19,7 +19,7 @@ from std_msgs.msg import String
 from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, TransformListener, TransformException
 
 from smart_wheelchair_safety.unified_geometry import (
-    Opening, angle_difference, approach_path, arc_path, braking_clear,
+    Opening, active_aperture_targeted, angle_difference, approach_path, arc_path, braking_clear,
     door_alignment_reference, door_entry_clearance, extract_lines,
     find_openings, intended_front_door, intended_side_opening, opening_matches, transform_points,
     wall_reference,
@@ -116,12 +116,14 @@ class UnifiedControlNode(Node):
             self._clear_door()
         elif self.door is not None:
             local = self._local_opening(self.door)
-            retained = (self.door_phase in ('door_pass', 'door_clear') and local.center[0] <= .8
-                        and abs(self.raw[1]) <= .25)
-            targeted = (retained or intended_front_door(
-                [local], *self.raw,
-                corridor_tolerance=DOOR_INTENT_CORRIDOR_TOLERANCE) is not None)
-            if targeted:
+            phase = 'align' if self.door_phase == 'door_align' else 'pass'
+            reference = door_alignment_reference(local, phase)
+            reference_turn = (local.heading
+                              if phase == 'align' and np.linalg.norm(reference[-1, :2]) <= .25
+                              else reference[1, 2])
+            away = (abs(self.raw[1]) > .25 and self.raw[1]*reference_turn <= 0.
+                    and not active_aperture_targeted(local, *self.raw))
+            if not away:
                 self.door_away_since = 0.
             elif not self.door_away_since:
                 self.door_away_since = time.monotonic()

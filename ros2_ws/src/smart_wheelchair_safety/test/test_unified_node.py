@@ -3,6 +3,7 @@ import math
 import time
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import numpy as np
 
 
@@ -267,12 +268,111 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertIsNone(self.node.door)
 
     def test_stop_and_reverse_cancel_door_immediately(self):
-        for command in ((0., 0.), (-.2, 0.)):
-            with self.subTest(command=command):
-                self.node.door = self.front_opening(center=(1., 0.), heading=0., width=1.)
-                self.node.door_phase = 'door_pass'
+        for phase in ('door_align', 'door_pass', 'door_clear'):
+            for command in ((0., 0.), (-.2, 0.)):
+                with self.subTest(phase=phase, command=command):
+                    self.node.door = self.front_opening(center=(1., 0.), heading=0., width=1.)
+                    self.node.door_phase = phase
+                    self.send_raw(*command)
+                    self.assertIsNone(self.node.door)
+
+    def test_active_door_retains_near_plane_aperture_crossing_for_sustained_steering(self):
+        for phase in ('door_align', 'door_pass'):
+            for side in (-1., 1.):
+                with self.subTest(phase=phase, side=side):
+                    door = self.front_opening(center=(.75, side*.04), heading=side*.04)
+                    self.node.door = door
+                    self.node.door_phase = phase
+                    with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                        for stamp in (100., 100.2, 100.4, 100.8):
+                            now.return_value = stamp
+                            self.send_raw(.5, side*.3)
+                    self.assertEqual(self.node.door, door)
+                    self.assertEqual(self.node.door_phase, phase)
+                    self.assertEqual(self.node.door_away_since, 0.)
+                    self.assertFalse(self.node.override)
+
+    def test_active_door_retains_low_speed_steering_toward_reference(self):
+        for side in (-1., 1.):
+            with self.subTest(side=side):
+                door = self.front_opening(center=(1.6, side*.45), heading=side*.18)
+                self.node.door = door
+                self.node.door_phase = 'door_align'
+                with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                    for stamp in (100., 100.2, 100.4, 100.8):
+                        now.return_value = stamp
+                        self.send_raw(.1, side*.6)
+                self.assertEqual(self.node.door, door)
+                self.assertEqual(self.node.door_phase, 'door_align')
+                self.assertEqual(self.node.door_away_since, 0.)
+                self.assertFalse(self.node.override)
+
+    def test_aperture_crossing_retains_door_even_opposite_to_reference_turn(self):
+        for phase in ('door_align', 'door_pass'):
+            with self.subTest(phase=phase):
+                door = self.front_opening(center=(.75, .04), heading=.04)
+                self.node.door = door
+                self.node.door_phase = phase
+                with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                    for stamp in (100., 100.4, 100.8):
+                        now.return_value = stamp
+                        self.send_raw(.5, -.3)
+                self.assertEqual(self.node.door, door)
+                self.assertEqual(self.node.door_away_since, 0.)
+
+    def test_low_speed_staging_steering_uses_heading_feedback_direction(self):
+        door = self.front_opening(center=(1., 0.), heading=.08)
+        self.node.door = door
+        self.node.door_phase = 'door_align'
+        with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+            for stamp in (100., 100.4, 100.8):
+                now.return_value = stamp
+                self.send_raw(.1, .6)
+        self.assertEqual(self.node.door, door)
+        self.assertEqual(self.node.door_away_since, 0.)
+
+    def test_active_door_neutral_input_does_not_cancel_on_acquisition_filters(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        for center, heading in (((.75, .2), .2), ((3.6, .2), .2), ((2., 1.6), .9)):
+            with self.subTest(center=center, heading=heading):
+                door = Opening(center, heading, 1.)
+                self.node.door = door
+                self.node.door_phase = 'door_align'
+                with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                    for stamp in (100., 100.4, 100.8):
+                        now.return_value = stamp
+                        self.send_raw(.05, 0.)
+                self.assertEqual(self.node.door, door)
+                self.assertEqual(self.node.door_away_since, 0.)
+
+    def test_toward_input_resets_away_debounce(self):
+        self.node.door = self.front_opening(center=(1.6, .45), heading=.18)
+        self.node.door_phase = 'door_align'
+        with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+            for stamp, command in ((100., (.5, -.5)), (100.2, (.1, .6)),
+                                   (100.4, (.5, -.5)), (100.6, (.5, -.5))):
+                now.return_value = stamp
                 self.send_raw(*command)
+                self.assertIsNotNone(self.node.door)
+            now.return_value = 100.8
+            self.send_raw(.5, -.5)
+        self.assertIsNone(self.node.door)
+
+    def test_low_speed_away_input_still_cancels_in_each_door_phase(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        for phase in ('door_align', 'door_pass', 'door_clear'):
+            with self.subTest(phase=phase):
+                center = (-.1, .04) if phase == 'door_clear' else (1.6, .45)
+                self.node.door = Opening(center, .18, 1.)
+                self.node.door_phase = phase
+                with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                    now.return_value = 100.
+                    self.send_raw(.1, -.6)
+                    self.assertIsNotNone(self.node.door)
+                    now.return_value = 100.4
+                    self.send_raw(.1, -.6)
                 self.assertIsNone(self.node.door)
+                self.assertTrue(self.node.override)
 
     def test_door_cancels_only_after_sustained_away_steering(self):
         self.node.door = self.front_opening(center=(1.4, .4), heading=.15, width=1.)
