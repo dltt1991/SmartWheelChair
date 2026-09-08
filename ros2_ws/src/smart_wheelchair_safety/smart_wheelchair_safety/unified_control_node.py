@@ -19,8 +19,9 @@ from std_msgs.msg import String
 from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, TransformListener, TransformException
 
 from smart_wheelchair_safety.unified_geometry import (
-    Door, braking_clear, door_reference, extract_lines,
-    find_door, transform_points, wall_reference,
+    Door, Opening, angle_difference, arc_path, braking_clear, door_reference,
+    extract_lines, find_door, find_openings, intended_side_opening,
+    opening_matches, transform_points, wall_reference,
 )
 
 
@@ -47,6 +48,13 @@ class UnifiedControlNode(Node):
         self.scans = {}
         self.door = None
         self.door_obstacles = np.empty((0, 2))
+        self.opening_candidates = []
+        self.confirmed_openings = []
+        self.opening_observation_time = 0.
+        self.opening_turn = None
+        self.opening_turn_side = 0
+        self.opening_turn_heading = 0.
+        self.opening_turn_time = 0.
         self.mode = 'waiting'
         self.front_blocked = False
         self.wall_side = 0
@@ -89,6 +97,9 @@ class UnifiedControlNode(Node):
     def on_raw(self, msg):
         self.raw = np.array([msg.linear.x, msg.angular.z])
         self.raw_time = time.monotonic()
+        if (self.opening_turn is not None
+                and (self.raw[0] <= .02 or self.opening_turn_side*self.raw[1] < -.12)):
+            self._clear_opening_turn()
         if self.raw[0] <= .02:
             self.front_blocked = False
         self.override = (self.wall_side * self.raw[1] < -.15
@@ -153,6 +164,61 @@ class UnifiedControlNode(Node):
                    | (np.abs(axle_local[:, 1]) > .4))
         world = world[outside]
         self.scans[side] = (time.monotonic(), world)
+        now = time.monotonic()
+        if self.pose is not None and len(self.scans) == 2 and now-self.opening_observation_time >= .08:
+            groups, _ = self.points()
+            lines = [line for group in groups for line in extract_lines(group)]
+            self._observe_openings(find_openings(lines))
+            self.opening_observation_time = now
+
+    def _world_opening(self, opening):
+        center = transform_points([opening.center], self.pose)[0]
+        return Opening(tuple(center), opening.heading+self.pose[2], opening.width, ())
+
+    def _local_opening(self, opening):
+        center = transform_points([opening.center], self.pose, inverse=True)[0]
+        heading = angle_difference(opening.heading, self.pose[2])
+        return Opening(tuple(center), heading, opening.width, ())
+
+    def _observe_openings(self, openings):
+        if self.pose is None:
+            return
+        observed = [self._world_opening(opening) for opening in openings]
+        updated = []
+        confirmed = []
+        for opening in observed:
+            previous = next(((candidate, hits) for candidate, hits in self.opening_candidates
+                             if opening_matches(candidate, opening)), None)
+            hits = previous[1]+1 if previous is not None else 1
+            updated.append((opening, hits))
+            if hits >= 2:
+                confirmed.append(opening)
+        self.opening_candidates = updated
+        self.confirmed_openings = confirmed
+
+    def _clear_opening_turn(self):
+        self.opening_turn = None
+        self.opening_turn_side = 0
+        self.opening_turn_heading = 0.
+        self.opening_turn_time = 0.
+
+    def _start_opening_turn(self, opening, side):
+        self.opening_turn = self._world_opening(opening)
+        self.opening_turn_side = side
+        self.opening_turn_heading = self.pose[2]
+        self.opening_turn_time = time.monotonic()
+        self.wall_side = 0
+
+    def _opening_turn_path(self):
+        if self.opening_turn is None:
+            return None
+        local = self._local_opening(self.opening_turn)
+        expired = time.monotonic()-self.opening_turn_time >= 3.
+        turned = abs(angle_difference(self.pose[2], self.opening_turn_heading)) >= .45
+        if expired or turned or local.center[0] < -.25:
+            self._clear_opening_turn()
+            return None
+        return arc_path(max(self.raw[0], .1), self.raw[1])
 
     def points(self):
         if self.pose is None:
@@ -185,6 +251,7 @@ class UnifiedControlNode(Node):
             nearby = np.linalg.norm(self.door_obstacles-np.array(self.pose[:2]), axis=1) < 4.5
             self.door_obstacles = self.door_obstacles[nearby]
         if not self.fresh() or self.raw[0] <= .02:
+            self._clear_opening_turn()
             self.cancel()
             self.mode = 'manual'
             return
@@ -194,6 +261,7 @@ class UnifiedControlNode(Node):
             return
         groups, _ = self.points()
         lines = [line for group in groups for line in extract_lines(group)]
+        opening_path = self._opening_turn_path()
         local_door = None
         if self.door is not None:
             center = transform_points([self.door.center], self.pose, inverse=True)[0]
@@ -220,7 +288,11 @@ class UnifiedControlNode(Node):
         frontal_wall = any(abs(line.heading) > 1.35 and .97 < -line.distance/math.sin(line.heading) < 3.
                            and min(line.start[1], line.end[1]) < -.4
                            and max(line.start[1], line.end[1]) > .4 for line in lines)
-        if local_door is not None:
+        if opening_path is not None:
+            local_path = opening_path
+            self.mode = 'opening_turn'
+            self.wall_side = 0
+        elif local_door is not None:
             self.front_blocked = False
             self.wall_side = 0
             local_path, self.mode = door_reference(local_door), 'door'
@@ -233,6 +305,13 @@ class UnifiedControlNode(Node):
         else:
             local_path, self.mode, self.wall_side = wall_reference(
                 lines, *self.raw, body_clearance=self.get_parameter('wall_clearance').value)
+            local_openings = [self._local_opening(opening) for opening in self.confirmed_openings]
+            selected = intended_side_opening(local_openings, self.wall_side, *self.raw)
+            if self.mode == 'wall' and selected is not None:
+                side = self.wall_side
+                self._start_opening_turn(selected, side)
+                local_path = arc_path(max(self.raw[0], .1), self.raw[1])
+                self.mode = 'opening_turn'
         world_xy = transform_points(local_path[:, :2], self.pose)
         path = Path()
         path.header.frame_id = 'odom'

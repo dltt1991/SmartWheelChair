@@ -4,8 +4,8 @@ import numpy as np
 
 from smart_wheelchair_safety.unified_geometry import (
     Door, Opening, Segment, door_reference, wall_reference, extract_lines,
-    find_door, find_openings, opening_matches, braking_clear, arc_path,
-    transform_points,
+    find_door, find_openings, intended_side_opening, opening_matches,
+    braking_clear, arc_path, transform_points,
 )
 
 
@@ -49,6 +49,20 @@ class UnifiedGeometryTest(unittest.TestCase):
 
         self.assertTrue(opening_matches(first, noisy))
         self.assertFalse(opening_matches(first, other))
+
+    def test_driver_arc_selects_opening_on_followed_side(self):
+        left = Opening((1.0, .8), math.pi / 2, 2.0, ())
+        right = Opening((1.0, -.8), -math.pi / 2, 2.0, ())
+
+        self.assertEqual(intended_side_opening([left], 1, .6, .5), left)
+        self.assertEqual(intended_side_opening([right], -1, .6, -.5), right)
+        self.assertIsNone(intended_side_opening([left], 1, .6, 0.))
+        self.assertIsNone(intended_side_opening([left], -1, .6, .5))
+
+    def test_driver_arc_must_cross_between_jambs(self):
+        too_far = Opening((3.0, .8), math.pi / 2, 1.0, ())
+
+        self.assertIsNone(intended_side_opening([too_far], 1, .4, .6))
 
     def test_corner_is_two_walls_not_an_imaginary_diagonal(self):
         points = [(x, .8) for x in np.linspace(0, 1, 30)]

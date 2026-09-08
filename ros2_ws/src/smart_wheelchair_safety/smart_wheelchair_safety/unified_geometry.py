@@ -130,6 +130,23 @@ def arc_path(v, w, duration=3., steps=41):
     return np.column_stack((v / w * np.sin(yaw), v / w * (1 - np.cos(yaw)), yaw))
 
 
+def intended_side_opening(openings, wall_side, v, w):
+    if not wall_side or wall_side*w < .12:
+        return None
+    path = arc_path(max(v, .1), w)
+    for opening in openings:
+        normal = np.array([math.cos(opening.heading), math.sin(opening.heading)])
+        if wall_side*normal[1] < .65 or opening.center[0] <= .4:
+            continue
+        tangent = np.array([-normal[1], normal[0]])
+        relative = path[:, :2] - opening.center
+        across, along = relative @ normal, relative @ tangent
+        hits = np.flatnonzero((across[:-1] < 0.) & (across[1:] >= 0.))
+        if any(abs(along[index+1]) <= opening.width/2-.40 for index in hits):
+            return opening
+    return None
+
+
 def approach_path(target, heading, length=3., steps=41):
     """A tangent-continuous reference; MPPI and the guard check feasibility."""
     end = np.asarray(target, dtype=float)

@@ -28,6 +28,70 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.destroy_node()
         rclpy.shutdown()
 
+    def wall_opening(self, side=1):
+        from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings
+        y = side * .8
+        points = np.vstack((
+            np.column_stack((np.linspace(-1., .2, 20), np.full(20, y))),
+            np.column_stack((np.linspace(2.2, 4., 20), np.full(20, y))),
+        ))
+        now = time.monotonic()
+        self.node.scans = {
+            'left': (now, points),
+            'right': (now, np.empty((0, 2))),
+        }
+        return find_openings(extract_lines(points))[0]
+
+    def set_opening_turn(self, side=1):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.opening_turn = Opening((1.2, side * .8), side * np.pi / 2, 2., ())
+        self.node.opening_turn_side = side
+        self.node.opening_turn_heading = 0.
+        self.node.opening_turn_time = time.monotonic()
+        self.node.wall_side = 0
+
+    def test_same_side_opening_needs_two_frames_and_blocks_old_wall_reacquisition(self):
+        opening = self.wall_opening()
+        self.node.raw = np.array([.6, .5])
+        self.node.wall_side = 1
+        self.node.mode = 'wall'
+
+        self.node._observe_openings([opening])
+        self.assertEqual(self.node.confirmed_openings, [])
+        self.node._observe_openings([opening])
+        self.node.update_reference()
+
+        self.assertEqual(self.node.mode, 'opening_turn')
+        self.assertIsNotNone(self.node.opening_turn)
+        self.node.update_reference()
+        self.assertEqual(self.node.mode, 'opening_turn')
+
+    def test_stop_reverse_and_away_steering_cancel_opening_turn(self):
+        from geometry_msgs.msg import Twist
+        for linear, angular in ((0., 0.), (-.2, 0.), (.4, -.3)):
+            with self.subTest(command=(linear, angular)):
+                self.set_opening_turn()
+                msg = Twist()
+                msg.linear.x, msg.angular.z = linear, angular
+                self.node.on_raw(msg)
+                self.assertIsNone(self.node.opening_turn)
+
+    def test_opening_turn_exits_on_heading_pass_timeout_and_stale_input(self):
+        cases = ('heading', 'passed', 'timeout', 'stale')
+        for case in cases:
+            with self.subTest(case=case):
+                self.set_opening_turn()
+                if case == 'heading':
+                    self.node.pose = (0., 0., .5)
+                elif case == 'passed':
+                    self.node.pose = (2.0, 0., 0.)
+                elif case == 'timeout':
+                    self.node.opening_turn_time -= 3.1
+                else:
+                    self.node.raw_time = 0.
+                self.node.update_reference()
+                self.assertIsNone(self.node.opening_turn)
+
     def test_stale_planner_never_replays_old_motion(self):
         self.node.output = np.array([.4, .1])
         self.node.plan_time = 0.
