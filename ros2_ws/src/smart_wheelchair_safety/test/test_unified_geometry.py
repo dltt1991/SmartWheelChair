@@ -33,6 +33,21 @@ class UnifiedGeometryTest(unittest.TestCase):
         self.assertFalse(active_aperture_targeted(door, .5, -.5))
         self.assertFalse(active_aperture_targeted(Opening((-.1, 0.), 0., 1.), .5, .5))
 
+    def test_active_aperture_analysis_distinguishes_traversal_departure_and_unknown(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        for side in (-1., 1.):
+            cases = (
+                (Opening((1.6, side*.04), side*.3, 1.), .1, side*.6, None),
+                (Opening((.75, side*.04), side*.04, 1.), .5, side*.3, True),
+                (Opening((.75, side*.001), 0., 1.), .5, side*.5, False),
+                (Opening((.75, -side*.6), 0., 1.), .5, side*.3, False),
+                (Opening((-.1, side*.001), 0., 1.), .5, side*.5, None),
+                (Opening((0., 0.), 0., 1.), .5, side*.5, None),
+            )
+            for door, v, w, expected in cases:
+                with self.subTest(door=door, v=v, w=w):
+                    self.assertIs(active_aperture_targeted(door, v, w), expected)
+
     def test_general_opening_detector_serves_side_passages_and_front_doors(self):
         side = [
             Segment((-1., .8), (.2, .8), 0., .8),

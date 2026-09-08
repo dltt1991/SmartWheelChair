@@ -307,6 +307,83 @@ class UnifiedNodeTest(unittest.TestCase):
                 self.assertEqual(self.node.door_away_since, 0.)
                 self.assertFalse(self.node.override)
 
+    def test_millimetre_offset_does_not_veto_confirmed_aperture_departure(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        for phase in ('door_pass', 'door_clear'):
+            for side in (-1., 1.):
+                with self.subTest(phase=phase, side=side):
+                    door = self.front_opening(center=(.75, side*.001), heading=0.)
+                    self.assertFalse(active_aperture_targeted(door, .5, side*.5))
+                    self.node.door = door
+                    self.node.door_phase = phase
+                    self.node.door_away_since = 0.
+                    with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                        for stamp in (100., 100.2, 100.349):
+                            now.return_value = stamp
+                            self.send_raw(.5, side*.5)
+                            self.assertEqual(self.node.door, door)
+                            self.assertFalse(self.node.override)
+                        now.return_value = 100.351
+                        self.send_raw(.5, side*.5)
+                    self.assertIsNone(self.node.door)
+                    self.assertTrue(self.node.override)
+
+    def test_low_throttle_toward_heading_retains_despite_opposite_staging_bend(self):
+        from smart_wheelchair_safety.unified_geometry import door_alignment_reference
+        for side in (-1., 1.):
+            with self.subTest(side=side):
+                door = self.front_opening(center=(1.6, side*.04), heading=side*.3)
+                reference = door_alignment_reference(door, 'align')
+                self.assertLess(side*reference[1, 2], 0.)
+                self.node.door = door
+                self.node.door_phase = 'door_align'
+                self.node.door_away_since = 0.
+                with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                    for stamp in (100., 100.2, 100.4, 100.8):
+                        now.return_value = stamp
+                        self.send_raw(.1, side*.6)
+                        self.assertEqual(self.node.door, door)
+                        self.assertEqual(self.node.door_away_since, 0.)
+                        self.assertFalse(self.node.override)
+
+    def test_inconclusive_toward_intent_uses_heading_or_forward_center_bearing(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        for phase in ('door_align', 'door_pass', 'door_clear'):
+            for side in (-1., 1.):
+                for center, heading in (((1.6, side*.45), 0.),
+                                        ((1.6, 0.), side*.3),
+                                        ((-.1, 0.), side*.3)):
+                    with self.subTest(phase=phase, side=side, center=center, heading=heading):
+                        door = Opening(center, heading, 1.)
+                        self.node.door = door
+                        self.node.door_phase = phase
+                        self.node.door_away_since = 0.
+                        with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                            for stamp in (100., 100.4, 100.8):
+                                now.return_value = stamp
+                                self.send_raw(.1, side*.6)
+                                self.assertEqual(self.node.door, door)
+                                self.assertEqual(self.node.door_away_since, 0.)
+
+    def test_inconclusive_millimetre_offsets_do_not_count_as_toward_intent(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        for phase in ('door_align', 'door_pass', 'door_clear'):
+            for side in (-1., 1.):
+                for x in (1.6, .04, -.1):
+                    with self.subTest(phase=phase, side=side, x=x):
+                        door = Opening((x, side*.001), 0., 1.)
+                        self.node.door = door
+                        self.node.door_phase = phase
+                        self.node.door_away_since = 0.
+                        with patch('smart_wheelchair_safety.unified_control_node.time.monotonic') as now:
+                            now.return_value = 100.
+                            self.send_raw(.021, side*.6)
+                            self.assertEqual(self.node.door, door)
+                            now.return_value = 100.4
+                            self.send_raw(.021, side*.6)
+                        self.assertIsNone(self.node.door)
+                        self.assertTrue(self.node.override)
+
     def test_aperture_crossing_retains_door_even_opposite_to_reference_turn(self):
         for phase in ('door_align', 'door_pass'):
             with self.subTest(phase=phase):

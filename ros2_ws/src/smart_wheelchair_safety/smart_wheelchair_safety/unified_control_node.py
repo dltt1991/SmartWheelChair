@@ -116,13 +116,17 @@ class UnifiedControlNode(Node):
             self._clear_door()
         elif self.door is not None:
             local = self._local_opening(self.door)
-            phase = 'align' if self.door_phase == 'door_align' else 'pass'
-            reference = door_alignment_reference(local, phase)
-            reference_turn = (local.heading
-                              if phase == 'align' and np.linalg.norm(reference[-1, :2]) <= .25
-                              else reference[1, 2])
-            away = (abs(self.raw[1]) > .25 and self.raw[1]*reference_turn <= 0.
-                    and not active_aperture_targeted(local, *self.raw))
+            targeted = active_aperture_targeted(local, *self.raw)
+            if targeted is None:
+                heading_error = angle_difference(local.heading, 0.)
+                # Ignore millimetre offsets even near the plane; a center behind
+                # the axle is no longer a forward steering target.
+                bearing_error = (math.atan2(local.center[1], local.center[0])
+                                 if local.center[0] > 0. and abs(local.center[1]) > .01
+                                 else 0.)
+                targeted = any(abs(error) > .02 and self.raw[1]*error > 0.
+                               for error in (heading_error, bearing_error))
+            away = abs(self.raw[1]) > .25 and not targeted
             if not away:
                 self.door_away_since = 0.
             elif not self.door_away_since:

@@ -167,12 +167,12 @@ def intended_front_door(openings, v, w, corridor_tolerance=.25):
     return min(matches, key=lambda item: item[0], default=(None, None))[1]
 
 
-def active_aperture_targeted(door, v, w):
-    """Intent only: cross the aperture without turning out before rear clearance.
+def active_aperture_targeted(door, v, w) -> bool | None:
+    """Return True for in-aperture traversal, False for departure, None if unknown.
 
     No acquisition range/progress filters or speed floor apply to an active
-    door. Failure to reach the plane is inconclusive; reference direction
-    determines whether such a command is affirmative steering away.
+    door. An arc that cannot reach the plane, or starts beyond it, is
+    inconclusive. This is intent only, not a footprint safety check.
     """
     normal = np.array([math.cos(door.heading), math.sin(door.heading)])
     tangent = np.array([-normal[1], normal[0]])
@@ -180,7 +180,7 @@ def active_aperture_targeted(door, v, w):
     across, along = relative @ normal, relative @ tangent
     hits = np.flatnonzero((across[:-1] < 0.) & (across[1:] >= 0.))
     if across[0] >= 0. or not len(hits):
-        return False
+        return None
     start = int(hits[0])
     fraction = -across[start] / (across[start+1]-across[start])
     entry = along[start] + fraction*(along[start+1]-along[start])
@@ -191,7 +191,7 @@ def active_aperture_targeted(door, v, w):
         if across[index] >= .29:
             fraction = (.29-across[index-1]) / (across[index]-across[index-1])
             exit_lateral = along[index-1] + fraction*(along[index]-along[index-1])
-            return abs(exit_lateral) <= door.width/2
+            return bool(abs(exit_lateral) <= door.width/2)
         if across[index] < 0. or abs(along[index]) > door.width/2:
             return False
     return True

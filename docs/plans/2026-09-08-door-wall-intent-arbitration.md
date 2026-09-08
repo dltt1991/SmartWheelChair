@@ -45,8 +45,22 @@ allowed and the door target remains latched through short scan occlusions.
 The latch is released by stop/reverse, passing the door, or sustained steering
 whose predicted trajectory misses the doorway on the away side. A short
 debounce prevents scan noise or a single joystick sample from switching
-between door and wall modes. A strong, unambiguous turn away may cancel
-immediately.
+between door and wall modes. Steering above 0.25 rad/s that departs from the
+aperture must persist for 0.35 s before cancellation; stop/reverse remains
+immediate.
+
+Active-door arc analysis has three outcomes: in-aperture traversal, confirmed
+departure on reaching the plane (including turning out before rear clearance),
+and inconclusive when the three-second horizon cannot reach the plane or the
+axle has already crossed. Confirmed departure starts the debounce regardless
+of the alignment reference's initial turn direction.
+
+For inconclusive arcs, steering toward either a meaningful doorway heading
+error or a forward center-bearing error retains the target. Both angular
+errors use a 0.02 rad deadband; center bearing additionally requires more than
+0.01 m lateral offset and a center ahead of the axle. This ignores 1 mm offsets
+even close to the plane. The initial staging-path bend is not evidence of
+driver intent. Neutral steering and renewed toward intent reset the debounce.
 
 Wall-follow override remains available when no doorway is intended. A door
 candidate that is visible but not targeted does not suppress wall following.
