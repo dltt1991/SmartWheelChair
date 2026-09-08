@@ -72,6 +72,10 @@ class UnifiedGeometryTest(unittest.TestCase):
             door = Opening((1.6, side*.45), side*.18, 1., ())
             self.assertEqual(intended_front_door([door], .6, side*.30), door)
 
+    def test_front_door_rejects_opening_below_minimum_width(self):
+        door = Opening((1.6, .45), .18, .84, ())
+        self.assertIsNone(intended_front_door([door], .6, .30))
+
     def test_arc_turning_away_does_not_select_front_door(self):
         door = Opening((1.6, .45), .18, 1., ())
         self.assertIsNone(intended_front_door([door], .6, -.35))

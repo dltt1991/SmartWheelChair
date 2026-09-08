@@ -152,7 +152,7 @@ def intended_front_door(openings, v, w, corridor_tolerance=.25):
     matches = []
     for opening in openings:
         center = np.asarray(opening.center)
-        if not (opening.width <= 1.5 and math.cos(opening.heading) > .65
+        if not (0.92 <= opening.width <= 1.5 and math.cos(opening.heading) > .65
                 and .8 < center[0] < 3.5 and abs(center[1]) < 1.5):
             continue
         normal = np.array([math.cos(opening.heading), math.sin(opening.heading)])
