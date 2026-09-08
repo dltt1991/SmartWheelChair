@@ -266,13 +266,48 @@ class UnifiedNodeTest(unittest.TestCase):
 
         self.assertIsNone(self.node.door)
 
-    def test_stop_reverse_and_away_steering_cancel_door(self):
-        for command in ((0., 0.), (-.2, 0.), (.4, .3)):
+    def test_stop_and_reverse_cancel_door_immediately(self):
+        for command in ((0., 0.), (-.2, 0.)):
             with self.subTest(command=command):
                 self.node.door = self.front_opening(center=(1., 0.), heading=0., width=1.)
                 self.node.door_phase = 'door_pass'
                 self.send_raw(*command)
                 self.assertIsNone(self.node.door)
+
+    def test_door_cancels_only_after_sustained_away_steering(self):
+        self.node.door = self.front_opening(center=(1.4, .4), heading=.15, width=1.)
+        self.node.door_phase = 'door_align'
+
+        self.send_raw(.5, -.5)
+
+        self.assertIsNotNone(self.node.door)
+        self.node.door_away_since -= .36
+        self.send_raw(.5, -.5)
+
+        self.assertIsNone(self.node.door)
+        self.assertTrue(self.node.override)
+
+    def test_door_pass_retains_target_near_plane_despite_acquisition_range(self):
+        self.node.door = self.front_opening(center=(.75, 0.), heading=0., width=1.)
+        self.node.door_phase = 'door_pass'
+
+        self.send_raw(.5, 0.)
+
+        self.assertIsNotNone(self.node.door)
+        self.assertEqual(self.node.door_away_since, 0.)
+
+    def test_door_pass_cancels_after_sustained_away_steering_before_plane(self):
+        self.node.door = self.front_opening(center=(1.4, .4), heading=.15, width=1.)
+        self.node.door_phase = 'door_pass'
+
+        self.send_raw(.5, -.5)
+
+        self.assertIsNotNone(self.node.door)
+        self.node.door_away_since -= .36
+        self.send_raw(.5, -.5)
+
+        self.assertIsNone(self.node.door)
+        self.assertTrue(self.node.override)
 
     def test_stop_clears_uncommitted_opening_observations(self):
         self.confirm_door(center=(2., 0.), heading=0., width=1.)
@@ -320,6 +355,16 @@ class UnifiedNodeTest(unittest.TestCase):
         msg.linear.x, msg.angular.z = .5, -.4
         self.node.on_raw(msg)
         self.assertTrue(self.node.override)
+
+    def test_oblique_door_intent_beats_existing_wall_override(self):
+        self.confirm_door(center=(1.6, .45), heading=.18, width=1.)
+        self.node.wall_side = -1
+
+        self.send_raw(.6, .30)
+        self.node.update_reference()
+
+        self.assertFalse(self.node.override)
+        self.assertEqual(self.node.mode, 'door_align')
 
     def test_observed_obstacle_is_not_erased_when_body_reaches_it(self):
         self.node.scans['left'] = (time.monotonic(), np.array([[.9, .1]]))

@@ -21,7 +21,7 @@ from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, Tr
 from smart_wheelchair_safety.unified_geometry import (
     Opening, angle_difference, approach_path, arc_path, braking_clear,
     door_alignment_reference, door_entry_clearance, extract_lines,
-    find_openings, intended_side_opening, opening_matches, transform_points,
+    find_openings, intended_front_door, intended_side_opening, opening_matches, transform_points,
     wall_reference,
 )
 
@@ -49,6 +49,7 @@ class UnifiedControlNode(Node):
         self.scans = {}
         self.door = None
         self.door_phase = None
+        self.door_away_since = 0.
         self.door_obstacles = np.empty((0, 2))
         self.opening_candidates = []
         self.confirmed_openings = []
@@ -106,11 +107,26 @@ class UnifiedControlNode(Node):
             self.front_blocked = False
             self.opening_candidates = []
             self.confirmed_openings = []
-        door_active = self.door is not None
-        self.override = (self.wall_side * self.raw[1] < -.15
-                         or ((door_active or self.mode == 'override') and abs(self.raw[1]) > .25))
-        if self.raw[0] <= .02 or (door_active and abs(self.raw[1]) > .25):
+        intended, _ = self._intended_door()
+        door_cancelled = False
+        if self.raw[0] <= .02:
             self._clear_door()
+        elif self.door is not None:
+            local = self._local_opening(self.door)
+            retained = (self.door_phase in ('door_pass', 'door_clear') and local.center[0] <= .8)
+            targeted = retained or intended_front_door([local], *self.raw) is not None
+            if targeted:
+                self.door_away_since = 0.
+            elif not self.door_away_since:
+                self.door_away_since = time.monotonic()
+            elif time.monotonic()-self.door_away_since >= .35:
+                self._clear_door()
+                door_cancelled = True
+        self.override = (door_cancelled
+                         or (self.door is None and intended is None
+                             and self.wall_side * self.raw[1] < -.15)
+                         or (self.door is None and intended is None
+                             and self.mode == 'override' and abs(self.raw[1]) > .25))
 
     def on_planned(self, msg):
         self.planned = np.array([msg.linear.x, msg.angular.z])
@@ -222,6 +238,7 @@ class UnifiedControlNode(Node):
     def _clear_door(self):
         self.door = None
         self.door_phase = None
+        self.door_away_since = 0.
 
     @staticmethod
     def _filtered_opening(current, observed, alpha=.25):
@@ -230,15 +247,14 @@ class UnifiedControlNode(Node):
         width = (1-alpha)*current.width + alpha*observed.width
         return Opening(tuple(center), heading, width, ())
 
-    def _confirmed_front_door(self):
-        candidates = []
-        for world in self.confirmed_openings:
-            local = self._local_opening(world)
-            center = np.asarray(local.center)
-            if (math.cos(local.heading) > .65 and .8 < center[0] < 3.5
-                    and abs(center[1]) < 1.5 and local.width <= 1.5):
-                candidates.append((world, local))
-        return min(candidates, key=lambda pair: np.linalg.norm(pair[1].center), default=(None, None))
+    def _intended_door(self):
+        if self.pose is None:
+            return None, None
+        local = [self._local_opening(opening) for opening in self.confirmed_openings]
+        selected = intended_front_door(local, *self.raw)
+        if selected is None:
+            return None, None
+        return self.confirmed_openings[local.index(selected)], selected
 
     def _local_tracked_door(self):
         if self.door is None:
@@ -336,8 +352,8 @@ class UnifiedControlNode(Node):
         lines = [line for group in groups for line in extract_lines(group)]
         opening_path = self._opening_turn_path()
         local_door = self._local_tracked_door()
-        if local_door is None and abs(self.raw[1]) < .25:
-            world_door, local_door = self._confirmed_front_door()
+        if local_door is None:
+            world_door, local_door = self._intended_door()
             if world_door is not None:
                 self.door = world_door
                 self.door_phase = 'door_align'
