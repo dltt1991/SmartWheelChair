@@ -68,7 +68,7 @@ class WorldLayoutTest(unittest.TestCase):
     def test_both_lidars_use_five_metre_simulation_range(self):
         root = ET.parse(WHEELCHAIR_MODEL).getroot()
         ranges = [float(sensor.findtext("ray/range/max"))
-                  for sensor in root.findall(".//sensor[@type='gpu_ray']")]
+                  for sensor in root.findall(".//sensor[@type='ray']")]
 
         self.assertEqual(ranges, [5.0, 5.0])
 
@@ -120,12 +120,19 @@ class WorldLayoutTest(unittest.TestCase):
         self.assertIn('gazebo::msgs::Visual', source)
         self.assertIn('gazebo::msgs::Geometry::CYLINDER', source)
         self.assertIn('"~/visual"', source)
-        self.assertIn('set_delete_me(true)', source)
+        self.assertIn('set_visible(false)', source)
+        self.assertNotIn('set_delete_me(true)', source)
+        self.assertIn('libSmartWheelChairGuiOnlyVisual.so', source)
         self.assertIn('ros::CallbackQueue', source)
         self.assertIn("smart_wheelchair_trajectory_raw", source)
         self.assertIn("smart_wheelchair_trajectory_filtered", source)
         self.assertIn("rawMarkerDiameter{0.03}", source)
         self.assertIn("filteredMarkerDiameter{0.09}", source)
+
+    def test_preview_visual_mask_uses_native_gui_only_flag(self):
+        helper = WORLD.parents[1] / 'src/gui_only_visual_plugin.cc'
+        self.assertTrue(helper.is_file())
+        self.assertIn('SetVisibilityFlags(GZ_VISIBILITY_GUI)', helper.read_text())
 
     def _model_size(self, name):
         model = self.root.find(f".//model[@name='{name}']")

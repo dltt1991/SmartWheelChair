@@ -45,7 +45,7 @@ class ModelVisualsTest(unittest.TestCase):
         self.assertLess(diffuse[0], 0.25)
 
     def test_lidar_scans_are_visible_in_gazebo(self):
-        sensors = self.root.findall(".//sensor[@type='gpu_ray']")
+        sensors = self.root.findall(".//sensor[@type='ray']")
         self.assertEqual({sensor.attrib["name"] for sensor in sensors}, {"left_lidar", "right_lidar"})
         self.assertTrue(all(sensor.findtext("visualize") == "true" for sensor in sensors))
         self.assertTrue(all(sensor.findtext("update_rate") == "10" for sensor in sensors))
@@ -78,7 +78,8 @@ class ModelVisualsTest(unittest.TestCase):
         for side in ('left', 'right'):
             sensor = self.root.find(f".//sensor[@name='{side}_lidar']")
             self.assertIsNotNone(sensor.find('ray'))
-            plugin = sensor.find("plugin[@filename='libgazebo_ros_gpu_laser.so']")
+            self.assertEqual(sensor.attrib['type'], 'ray')
+            plugin = sensor.find("plugin[@filename='libgazebo_ros_laser.so']")
             self.assertIsNotNone(plugin)
             self.assertEqual(plugin.findtext('topicName'), f'/scan_{side}')
             self.assertEqual(plugin.findtext('frameName'), f'{side}_lidar')

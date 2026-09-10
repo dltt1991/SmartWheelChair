@@ -44,8 +44,8 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
     this->callbackQueue.disable();
     this->rawSubscriber.shutdown();
     this->filteredSubscriber.shutdown();
-    this->DeleteVisuals(this->rawCommand.visuals);
-    this->DeleteVisuals(this->filteredCommand.visuals);
+    this->HideVisuals(this->rawCommand.visuals);
+    this->HideVisuals(this->filteredCommand.visuals);
   }
 
   void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) override
@@ -176,6 +176,9 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
           visual.set_is_static(false);
           visual.set_visible(true);
           visual.set_cast_shadows(false);
+          auto guiOnly = visual.add_plugin();
+          guiOnly->set_name("gui_only");
+          guiOnly->set_filename("libSmartWheelChairGuiOnlyVisual.so");
           auto geometry = visual.mutable_geometry();
           geometry->set_type(gazebo::msgs::Geometry::CYLINDER);
           geometry->mutable_cylinder()->set_radius(diameter / 2.0);
@@ -192,20 +195,26 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
         }
       }
     }
+    auto hiddenVisuals = state.visuals;
     for (const auto &name : nextVisuals)
-      state.visuals.erase(name);
-    this->DeleteVisuals(state.visuals);
-    state.visuals = std::move(nextVisuals);
+      hiddenVisuals.erase(name);
+    this->HideVisuals(hiddenVisuals);
+    // Retain known slots and keep publishing their desired hidden state, just
+    // as active state is refreshed. A missed expiry packet must not leave a
+    // stale path visible forever under rendering/transport load.
+    state.visuals.insert(nextVisuals.begin(), nextVisuals.end());
   }
 
-  void DeleteVisuals(const std::set<std::string> &names)
+  // Gazebo retains deleted visuals in their parent's children. Keep bounded,
+  // deterministic slots instead, and reuse the same render objects next time.
+  void HideVisuals(const std::set<std::string> &names)
   {
     for (const auto &name : names)
     {
       gazebo::msgs::Visual visual;
       visual.set_name(name);
       visual.set_parent_name(this->parentName);
-      visual.set_delete_me(true);
+      visual.set_visible(false);
       this->visualPublisher->Publish(visual);
     }
   }
