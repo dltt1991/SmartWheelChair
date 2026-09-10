@@ -1,6 +1,5 @@
-# check=skip=RedundantTargetPlatform
 ARG BASE_IMAGE=docker.m.daocloud.io/ros:noetic-ros-base-focal
-FROM --platform=linux/arm64 ${BASE_IMAGE}
+FROM ${BASE_IMAGE}
 
 SHELL ["/bin/bash", "-c"]
 

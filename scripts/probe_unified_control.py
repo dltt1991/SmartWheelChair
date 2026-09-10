@@ -27,6 +27,14 @@ def check_door_modes(modes):
     assert 'door_pass' in modes, 'door alignment never committed to pass'
 
 
+def settled_after_release(data, released, now):
+    return all(released < data.get(key + '_received', -math.inf) <= now
+               and now - data[key + '_received'] <= .25
+               and len(data.get(key, [])) == 2
+               and all(math.isfinite(value) and abs(value) < .02 for value in data[key])
+               for key in ('cmd_vel', 'odom_velocity'))
+
+
 def main():
     import numpy as np
     import rospy
@@ -62,7 +70,8 @@ def main():
                                  'mode': data['status'].get('mode', 'missing')})
 
     for topic in ['cmd_vel_raw', 'cmd_vel']:
-        rospy.Subscriber(topic, Twist, lambda m, t=topic: data.update({t: [m.linear.x, m.angular.z]}), queue_size=10)
+        rospy.Subscriber(topic, Twist, lambda m, t=topic: data.update(
+            {t: [m.linear.x, m.angular.z], t + '_received': time.monotonic()}), queue_size=10)
     rospy.Subscriber(
         'cmd_vel_planned', TwistStamped,
         lambda m: data.update(cmd_vel_planned=[m.twist.linear.x,
@@ -71,7 +80,8 @@ def main():
     rospy.Subscriber('odom', Odometry, lambda m: data.update(odom=[
         m.pose.pose.position.x, m.pose.pose.position.y,
         2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)],
-        odom_velocity=[m.twist.twist.linear.x, m.twist.twist.angular.z]), queue_size=10)
+        odom_velocity=[m.twist.twist.linear.x, m.twist.twist.angular.z],
+        odom_velocity_received=time.monotonic()), queue_size=10)
     for side in ['left', 'right']:
         rospy.Subscriber('scan_'+side, LaserScan, lambda m, s=side: scans.update({s: m}), queue_size=5)
 
@@ -175,14 +185,16 @@ def main():
                 row['world_yaw'] = data['odom'][2]-initial_odom[2]+yaw
             records.append(row)
         command()
+        released = time.monotonic()
         # Observe physical settling after release, not just the sent zero request.
         time.sleep(.2)
         stop_deadline = time.monotonic() + 3.
         while time.monotonic() < stop_deadline:
-            if all(abs(value) < .02 for key in ('cmd_vel', 'odom_velocity')
-                   for value in data.get(key, [99.])):
+            if settled_after_release(data, released, time.monotonic()):
                 break
             time.sleep(.05)
+        stopped = dict(data)
+        settled_at = time.monotonic()
         moving = moving_records(records)
         sequence = []
         for entry in mode_history:
@@ -194,7 +206,10 @@ def main():
                   'modes': sorted({r['mode'] for r in mode_history}
                                   | {r.get('status', {}).get('mode', 'missing') for r in moving}),
                   'mode_sequence': sequence,
-                  'final_stop': {key: data.get(key) for key in ('cmd_vel', 'odom_velocity')},
+                  'final_stop': {key: stopped.get(key) for key in (
+                      'cmd_vel', 'odom_velocity', 'cmd_vel_received', 'odom_velocity_received')},
+                  'released': released,
+                  'settled_at': settled_at,
                   'last': records[-1] if records else None}
         if args.case == 'wall_gap':
             gaps = [r['wall_clearance'] for r in moving if r['wall_clearance'] is not None
@@ -208,8 +223,8 @@ def main():
                                                'mode_history': mode_history}, indent=2)+'\n')
         print(json.dumps(result, indent=2))
         assert moving and result['min_sampled_clearance'] > .02, 'missing data or insufficient sampled clearance'
-        assert all(abs(value) < .02 for key in ('cmd_vel', 'odom_velocity')
-                   for value in data.get(key, [99.])), 'release did not stop command and physical motion'
+        assert settled_after_release(stopped, released, settled_at), \
+            'release did not produce fresh stopped command and odometry samples'
         assert result['max_speed'] <= .800001, 'assisted speed limit exceeded'
         if args.case == 'door':
             check_door_modes(result['modes'])

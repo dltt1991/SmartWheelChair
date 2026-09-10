@@ -10,6 +10,22 @@ spec.loader.exec_module(probe)
 
 
 class UnifiedProbeTest(unittest.TestCase):
+    def test_release_settling_requires_new_fresh_command_and_odometry(self):
+        self.assertTrue(hasattr(probe, 'settled_after_release'),
+                        'cached zero samples must not prove post-release settling')
+        data = {'cmd_vel': [0., 0.], 'odom_velocity': [0., 0.],
+                'cmd_vel_received': 9., 'odom_velocity_received': 9.}
+        self.assertFalse(probe.settled_after_release(data, released=10., now=10.1))
+        data['cmd_vel_received'] = 10.05
+        self.assertFalse(probe.settled_after_release(data, released=10., now=10.1))
+        data['odom_velocity_received'] = 10.06
+        self.assertTrue(probe.settled_after_release(data, released=10., now=10.1))
+        self.assertFalse(probe.settled_after_release(data, released=10., now=10.5))
+        data['odom_velocity'] = [.03, 0.]
+        self.assertFalse(probe.settled_after_release(data, released=10., now=10.1))
+        data['odom_velocity'] = []
+        self.assertFalse(probe.settled_after_release(data, released=10., now=10.1))
+
     def test_moving_window_starts_at_first_nonzero_raw_command_and_keeps_stops(self):
         records = [
             {'t': 1.9, 'cmd_vel_raw': [0., 0.]},

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import math
+import json
+from pathlib import Path
 import unittest
 import numpy as np
 
@@ -14,6 +16,23 @@ from smart_wheelchair_safety.unified_geometry import (
 
 
 class UnifiedGeometryTest(unittest.TestCase):
+    def test_captured_wall_guard_preserves_state_age_uncertainty(self):
+        capture = json.loads((Path(__file__).with_name('fixtures') /
+                              'wall_guard_capture.json').read_text())
+        self.assertEqual(capture['reason'], 'emergency_stop')
+        self.assertEqual(len(capture['candidates']), 6)
+        for candidate in capture['candidates']:
+            with self.subTest(command=candidate['command']):
+                self.assertFalse(braking_clear(
+                    capture['points'], candidate['command'], candidate['measured'],
+                    margin=candidate['margin'], reaction=candidate['reaction'],
+                    deceleration=candidate['deceleration'], state_age=candidate['state_age']))
+        # Counterfactual diagnosis only: removing acquisition age would accept
+        # this nominally clear stop. Production must retain the measured age.
+        zero = capture['candidates'][-1]
+        self.assertTrue(braking_clear(capture['points'], zero['command'],
+                                      zero['measured'], state_age=0.))
+
     def test_active_aperture_targeting_covers_near_plane_arcs_on_both_sides(self):
         from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
         for side in (-1., 1.):

@@ -274,6 +274,10 @@ docker compose run --rm sim bash -lc 'source /usr/share/gazebo/setup.sh && sourc
 
 结束后用 Ctrl-C 停止独立 master，再执行 `docker compose down`。`xvfb-run` 后保留 `exit $?`，避免它成为容器 PID 1 后无法收到 Xvfb 的就绪信号。不要同时运行 GUI、headless 场景或另一个使用相同 ROS/Gazebo 端口的实例。构建产生的 `catkin_ws/build`、`devel`、`.catkin_workspace` 与顶层 catkin CMake 链接均不应提交。
 
+此固定仿真栈的 catkin 配置会输出 `WARNING: package 'gazebo_ros' is deprecated`、`WARNING: package 'gazebo_msgs' is deprecated`，并包含 `Gazebo classic 11 reaching end-of-life` 说明。这些是依赖包声明的生命周期警告；验证以构建退出码、完整测试结果、传感器数据和闭环行为为准，不宣称整套工具输出完全无警告。Dockerfile 的平台由 Compose 指定，不再重复写入 `FROM`，构建检查不应出现平台冗余警告。
+
+探针松杆后只接受新的 `/cmd_vel` 与里程计样本：两个接收时间都必须晚于本次零指令请求完成，且在判断时均不超过 `0.25 s`。结果保存 `released`、`settled_at` 和两路接收时间，旧的缓存零值不能证明停车。
+
 ## 拆机信息对应关系
 
 当前模型根据拆机总结做了以下抽象：
