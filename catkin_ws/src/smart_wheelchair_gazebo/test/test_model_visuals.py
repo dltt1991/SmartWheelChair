@@ -45,7 +45,7 @@ class ModelVisualsTest(unittest.TestCase):
         self.assertLess(diffuse[0], 0.25)
 
     def test_lidar_scans_are_visible_in_gazebo(self):
-        sensors = self.root.findall(".//sensor[@type='gpu_lidar']")
+        sensors = self.root.findall(".//sensor[@type='gpu_ray']")
         self.assertEqual({sensor.attrib["name"] for sensor in sensors}, {"left_lidar", "right_lidar"})
         self.assertTrue(all(sensor.findtext("visualize") == "true" for sensor in sensors))
         self.assertTrue(all(sensor.findtext("update_rate") == "10" for sensor in sensors))
@@ -72,6 +72,50 @@ class ModelVisualsTest(unittest.TestCase):
             "right_lidar_ray_50_visual",
         }
         self.assertTrue(expected.issubset(names))
+
+    def test_classic_ros_sensor_and_drive_interfaces(self):
+        self.assertIn(self.root.attrib['version'], ('1.6', '1.7'))
+        for side in ('left', 'right'):
+            sensor = self.root.find(f".//sensor[@name='{side}_lidar']")
+            self.assertIsNotNone(sensor.find('ray'))
+            plugin = sensor.find("plugin[@filename='libgazebo_ros_gpu_laser.so']")
+            self.assertIsNotNone(plugin)
+            self.assertEqual(plugin.findtext('topicName'), f'/scan_{side}')
+            self.assertEqual(plugin.findtext('frameName'), f'{side}_lidar')
+            self.assertEqual(plugin.findtext('robotNamespace'), '/')
+        camera = self.root.find(".//sensor[@name='rear_camera']/plugin[@filename='libgazebo_ros_camera.so']")
+        self.assertIsNotNone(camera)
+        self.assertEqual(camera.findtext('cameraName'), 'camera/rear')
+        self.assertEqual(camera.findtext('imageTopicName'), 'image')
+        self.assertEqual(camera.findtext('cameraInfoTopicName'), 'camera_info')
+        self.assertEqual(camera.findtext('frameName'), 'rear_camera')
+        drive = self.root.find(".//plugin[@filename='libgazebo_ros_diff_drive.so']")
+        self.assertIsNotNone(drive)
+        for tag, value in {'alwaysOn': 'true', 'updateRate': '50',
+                           'leftJoint': 'left_rear_wheel_joint',
+                           'rightJoint': 'right_rear_wheel_joint',
+                           'wheelSeparation': '0.72', 'wheelDiameter': '0.36',
+                           'commandTopic': '/cmd_vel', 'odometryTopic': '/diff_drive/odom',
+                           'odometryFrame': 'odom', 'robotBaseFrame': 'rear_axle',
+                           'publishWheelTF': 'false', 'publishOdomTF': 'false',
+                           'odometrySource': 'world'}.items():
+            self.assertEqual(drive.findtext(tag), value, tag)
+
+    def test_odometry_measures_actual_rear_axle_link(self):
+        axle = self.root.find("model/link[@name='rear_axle']")
+        self.assertIsNotNone(axle)
+        self.assertEqual(list(map(float, axle.findtext('pose').split())), [-0.33, 0, 0, 0, 0, 0])
+        joint = self.root.find("model/joint[@name='rear_axle_joint']")
+        self.assertEqual(joint.attrib['type'], 'fixed')
+        self.assertEqual(joint.findtext('parent'), 'base_link')
+        self.assertEqual(joint.findtext('child'), 'rear_axle')
+        p3d = self.root.find("model/plugin[@filename='libgazebo_ros_p3d.so']")
+        self.assertIsNotNone(p3d)
+        self.assertEqual(p3d.findtext('bodyName'), 'rear_axle')
+        self.assertEqual(p3d.findtext('topicName'), '/rear_axle_ground_truth')
+        self.assertEqual(p3d.findtext('frameName'), 'world')
+        self.assertEqual(p3d.findtext('localTwist'), 'true')
+        self.assertEqual(p3d.findtext('updateRate'), '50')
 
     def test_lidar_ray_visuals_are_above_scan_plane(self):
         lidar_height = self._sensor_pose("left_lidar")[2]

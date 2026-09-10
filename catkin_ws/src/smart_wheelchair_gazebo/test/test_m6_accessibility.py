@@ -11,7 +11,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 
-WORLD = Path(__file__).parents[1] / 'worlds' / 'm6_room.sdf'
+WORLD = Path(__file__).parents[1] / 'worlds' / 'm6_room.world'
 DOORS = [
     ('nw_horizontal', -4.5, 1.35, 0, 1.0),
     ('ne_horizontal', 4.5, 1.35, 0, 1.1),
@@ -24,6 +24,7 @@ DOORS = [
 
 class M6AccessibilityTest(unittest.TestCase):
     def setUp(self):
+        self.assertTrue(WORLD.is_file(), 'Gazebo 11 .world asset is missing')
         self.root = ET.parse(WORLD).getroot()
         self.boxes = {}
         for model in self.root.findall('./world/model'):

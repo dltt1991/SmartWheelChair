@@ -1,0 +1,2 @@
+control_rate_hz: 20.0
+input_timeout_s: 0.25

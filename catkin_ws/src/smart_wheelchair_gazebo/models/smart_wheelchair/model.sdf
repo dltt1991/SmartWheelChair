@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<sdf version="1.10">
+<sdf version="1.6">
   <model name="smart_wheelchair">
     <pose>0 0 0 0 0 0</pose>
 
@@ -156,11 +156,10 @@
         <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
       </visual>
 
-      <sensor name="left_lidar" type="gpu_lidar">
+      <sensor name="left_lidar" type="gpu_ray">
         <pose>0.46 0.26 0.56 0 0 0</pose>
-        <topic>/scan_left</topic>
         <update_rate>10</update_rate>
-        <lidar>
+        <ray>
           <scan>
             <horizontal>
               <samples>401</samples>
@@ -174,16 +173,20 @@
             <max>5.0</max>
             <resolution>0.01</resolution>
           </range>
-        </lidar>
+        </ray>
+        <plugin name="left_lidar_ros" filename="libgazebo_ros_gpu_laser.so">
+          <robotNamespace>/</robotNamespace>
+          <topicName>/scan_left</topicName>
+          <frameName>left_lidar</frameName>
+        </plugin>
         <always_on>true</always_on>
         <visualize>true</visualize>
       </sensor>
 
-      <sensor name="right_lidar" type="gpu_lidar">
+      <sensor name="right_lidar" type="gpu_ray">
         <pose>0.46 -0.26 0.56 0 0 0</pose>
-        <topic>/scan_right</topic>
         <update_rate>10</update_rate>
-        <lidar>
+        <ray>
           <scan>
             <horizontal>
               <samples>401</samples>
@@ -197,17 +200,20 @@
             <max>5.0</max>
             <resolution>0.01</resolution>
           </range>
-        </lidar>
+        </ray>
+        <plugin name="right_lidar_ros" filename="libgazebo_ros_gpu_laser.so">
+          <robotNamespace>/</robotNamespace>
+          <topicName>/scan_right</topicName>
+          <frameName>right_lidar</frameName>
+        </plugin>
         <always_on>true</always_on>
         <visualize>true</visualize>
       </sensor>
 
       <sensor name="rear_camera" type="camera">
         <pose>-0.58 0 0.72 0 0.60 3.1416</pose>
-        <topic>/camera/rear/image</topic>
         <update_rate>15</update_rate>
         <camera>
-          <camera_info_topic>/camera/rear/camera_info</camera_info_topic>
           <horizontal_fov>2.094</horizontal_fov>
           <image>
             <width>640</width>
@@ -219,6 +225,13 @@
             <far>10.0</far>
           </clip>
         </camera>
+        <plugin name="rear_camera_ros" filename="libgazebo_ros_camera.so">
+          <robotNamespace>/</robotNamespace>
+          <cameraName>camera/rear</cameraName>
+          <imageTopicName>image</imageTopicName>
+          <cameraInfoTopicName>camera_info</cameraInfoTopicName>
+          <frameName>rear_camera</frameName>
+        </plugin>
         <always_on>true</always_on>
       </sensor>
     </link>
@@ -255,6 +268,18 @@
       <visual name="right_caster_fork_visual"><pose>0 0 0.11 0 0 0</pose><geometry><box><size>0.05 0.12 0.12</size></box></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
     </link>
 
+    <link name="rear_axle">
+      <pose>-0.33 0 0 0 0 0</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia><ixx>0.000001</ixx><iyy>0.000001</iyy><izz>0.000001</izz></inertia>
+      </inertial>
+    </link>
+    <joint name="rear_axle_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>rear_axle</child>
+    </joint>
+
     <joint name="left_rear_wheel_joint" type="revolute">
       <parent>base_link</parent>
       <child>left_rear_wheel</child>
@@ -283,20 +308,35 @@
       <child>right_front_caster</child>
     </joint>
 
-    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
-      <left_joint>left_rear_wheel_joint</left_joint>
-      <right_joint>right_rear_wheel_joint</right_joint>
-      <wheel_separation>0.72</wheel_separation>
-      <wheel_radius>0.18</wheel_radius>
-      <topic>/cmd_vel</topic>
-      <odom_topic>/odom</odom_topic>
-      <frame_id>odom</frame_id>
-      <child_frame_id>base_link</child_frame_id>
-      <max_linear_acceleration>0.6</max_linear_acceleration>
-      <max_angular_acceleration>1.2</max_angular_acceleration>
+    <plugin name="differential_drive_controller" filename="libgazebo_ros_diff_drive.so">
+      <robotNamespace>/</robotNamespace>
+      <alwaysOn>true</alwaysOn>
+      <updateRate>50</updateRate>
+      <leftJoint>left_rear_wheel_joint</leftJoint>
+      <rightJoint>right_rear_wheel_joint</rightJoint>
+      <wheelSeparation>0.72</wheelSeparation>
+      <wheelDiameter>0.36</wheelDiameter>
+      <commandTopic>/cmd_vel</commandTopic>
+      <odometryTopic>/diff_drive/odom</odometryTopic>
+      <odometryFrame>odom</odometryFrame>
+      <robotBaseFrame>rear_axle</robotBaseFrame>
+      <publishWheelTF>false</publishWheelTF>
+      <publishOdomTF>false</publishOdomTF>
+      <odometrySource>world</odometrySource>
     </plugin>
 
-    <plugin filename="libSmartWheelChairTrajectoryPreview.so" name="smart_wheelchair_gazebo::TrajectoryPreviewSystem">
+    <!-- P3D measures the link itself; diff-drive world odometry measures the model origin. -->
+    <plugin name="rear_axle_ground_truth" filename="libgazebo_ros_p3d.so">
+      <robotNamespace>/</robotNamespace>
+      <bodyName>rear_axle</bodyName>
+      <topicName>/rear_axle_ground_truth</topicName>
+      <frameName>world</frameName>
+      <localTwist>true</localTwist>
+      <updateRate>50</updateRate>
+      <gaussianNoise>0</gaussianNoise>
+    </plugin>
+
+    <plugin filename="libSmartWheelChairTrajectoryPreview.so" name="smart_wheelchair_gazebo::TrajectoryPreviewPlugin">
       <cmd_topic>/cmd_vel_raw</cmd_topic>
       <filtered_cmd_topic>/cmd_vel</filtered_cmd_topic>
       <prediction_seconds>3.0</prediction_seconds>

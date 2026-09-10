@@ -12,7 +12,6 @@ from std_msgs.msg import Float32
 from smart_wheelchair_safety.local_path_follower import select_velocity
 
 
-STALE_TIMEOUT_S = 0.25
 LIDAR_X_M = 0.79
 LIDAR_Y_M = {"left": 0.26, "right": -0.26}
 
@@ -27,6 +26,11 @@ def _yaw(quaternion):
 
 class LocalPathFollowerNode:
     def __init__(self, clock=time.monotonic):
+        control_rate_hz = float(rospy.get_param('~control_rate_hz', 20.0))
+        self.input_timeout_s = float(rospy.get_param('~input_timeout_s', 0.25))
+        if any(not math.isfinite(value) or value <= 0.0
+               for value in (control_rate_hz, self.input_timeout_s)):
+            raise ValueError('control_rate_hz and input_timeout_s must be finite and positive')
         self._clock = clock
         self._lock = threading.Lock()
         self._reference = None
@@ -48,7 +52,7 @@ class LocalPathFollowerNode:
             rospy.Subscriber("/unified_scan_right", LaserScan,
                              self.on_scan_right, queue_size=10),
         ]
-        self._timer = rospy.Timer(rospy.Duration(0.05), self.publish)
+        self._timer = rospy.Timer(rospy.Duration(1.0 / control_rate_hz), self.publish)
 
     def on_reference(self, message):
         path = np.asarray([
@@ -95,7 +99,7 @@ class LocalPathFollowerNode:
             inputs = (self._reference, self._odom, self._speed_limit,
                       self._scans["left"], self._scans["right"])
             reference_stamp = self._reference[2] if self._reference else rospy.Time()
-            if any(value is None or now - value[0] > STALE_TIMEOUT_S
+            if any(value is None or now - value[0] > self.input_timeout_s
                    for value in inputs):
                 command = np.zeros(2)
             else:

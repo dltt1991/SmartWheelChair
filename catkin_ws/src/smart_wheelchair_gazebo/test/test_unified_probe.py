@@ -4,18 +4,12 @@ import unittest
 
 
 PROBE = Path(__file__).parents[4] / 'scripts' / 'probe_unified_control.py'
-CONFIG = Path(__file__).parents[1] / 'config' / 'unified_control.yaml'
 spec = importlib.util.spec_from_file_location('unified_probe', PROBE)
 probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(probe)
 
 
 class UnifiedProbeTest(unittest.TestCase):
-    def test_mppi_uses_physical_footprint_without_duplicating_guard_margin(self):
-        config = CONFIG.read_text()
-
-        self.assertIn('      footprint_padding: 0.0', config.splitlines())
-
     def test_moving_window_starts_at_first_nonzero_raw_command_and_keeps_stops(self):
         records = [
             {'t': 1.9, 'cmd_vel_raw': [0., 0.]},

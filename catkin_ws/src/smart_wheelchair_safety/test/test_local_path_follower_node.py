@@ -17,6 +17,22 @@ if ROS_AVAILABLE:
 
 @unittest.skipUnless(ROS_AVAILABLE, "requires ROS")
 class LocalPathFollowerNodeTest(unittest.TestCase):
+    def test_private_timing_parameters_are_used_and_validated(self):
+        from smart_wheelchair_safety.local_path_follower_node import LocalPathFollowerNode
+
+        with patch.object(rospy, 'get_param', side_effect=[10.0, 0.1]), \
+                patch.object(rospy, 'Timer') as timer:
+            node = LocalPathFollowerNode()
+        self.assertAlmostEqual(timer.call_args[0][0].to_sec(), 0.1)
+        self.assertEqual(node.input_timeout_s, 0.1)
+        for value in (0.0, -1.0, float('nan'), float('inf')):
+            for parameters in ([value, 0.25], [20.0, value]):
+                with self.subTest(parameters=parameters), \
+                        patch.object(rospy, 'get_param', side_effect=parameters), \
+                        patch.object(rospy, 'Timer'), \
+                        self.assertRaises(ValueError):
+                    LocalPathFollowerNode()
+
     def test_fresh_inputs_publish_stamped_plan_and_stale_inputs_stop(self):
         import rospy
         from geometry_msgs.msg import PoseStamped
