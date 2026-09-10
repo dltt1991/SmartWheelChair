@@ -2,7 +2,7 @@ controller_server:
   ros__parameters:
     use_sim_time: true
     controller_frequency: 20.0
-    enable_stamped_cmd_vel: false
+    enable_stamped_cmd_vel: true
     odom_topic: /odom
     failure_tolerance: 0.3
     min_x_velocity_threshold: 0.001
@@ -86,7 +86,7 @@ local_costmap:
       publish_frequency: 2.0
       transform_tolerance: 0.2
       footprint: "[[-0.25,-0.40],[0.97,-0.40],[0.97,0.40],[-0.25,0.40]]"
-      footprint_padding: 0.04
+      footprint_padding: 0.0
       plugins: [obstacles, inflation]
       obstacles:
         plugin: nav2_costmap_2d::ObstacleLayer

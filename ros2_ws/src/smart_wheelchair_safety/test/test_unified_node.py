@@ -1,5 +1,6 @@
 import importlib.util
 import math
+import threading
 import time
 from types import SimpleNamespace
 import unittest
@@ -76,6 +77,12 @@ class UnifiedNodeTest(unittest.TestCase):
         self.observe_front_door(**kwargs)
         self.observe_front_door(**kwargs)
 
+    def finish_door_plan(self):
+        self.node.door_plan_request[0].result(timeout=2.)
+        self.node.raw_time = self.node.odom_time = time.monotonic()
+        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.update_reference()
+
     def send_raw(self, linear, angular):
         from geometry_msgs.msg import Twist
         msg = Twist()
@@ -98,6 +105,218 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.update_reference()
         self.assertEqual(self.node.mode, 'opening_turn')
 
+    def test_straight_reference_keeps_remembered_wall_side(self):
+        now = time.monotonic()
+        x = np.linspace(0., 4., 20)
+        self.node.wall_preference = 1
+        self.node.raw = np.array([.6, 0.])
+        self.node.scans = {
+            'left': (now, np.column_stack((x, np.full_like(x, .9)))),
+            'right': (now, np.column_stack((x, np.full_like(x, -.55)))),
+        }
+
+        self.node.update_reference()
+
+        self.assertEqual(self.node.mode, 'wall')
+        self.assertEqual(self.node.wall_side, 1)
+        self.assertEqual(self.node.wall_preference, 1)
+
+    def test_missing_remembered_side_uses_manual_without_forgetting_entry_side(self):
+        now = time.monotonic()
+        x = np.linspace(0., 4., 20)
+        self.node.wall_preference = 1
+        self.node.raw = np.array([.6, 0.])
+        self.node.scans = {
+            'left': (now, np.empty((0, 2))),
+            'right': (now, np.column_stack((x, np.full_like(x, -.55)))),
+        }
+
+        self.node.update_reference()
+
+        self.assertEqual((self.node.mode, self.node.wall_side), ('manual', 0))
+        self.assertEqual(self.node.wall_preference, 1)
+
+    def test_requested_side_opening_releases_old_wall_override(self):
+        opening = self.wall_opening(side=1)
+        self.node._observe_openings([opening])
+        self.node._observe_openings([opening])
+        self.node.wall_side = -1
+        self.node.wall_preference = -1
+        self.node.mode = 'wall'
+
+        self.send_raw(.6, .5)
+        self.node.update_reference()
+
+        self.assertFalse(self.node.override)
+        self.assertEqual(self.node.mode, 'opening_turn')
+        self.assertEqual(self.node.opening_turn_side, 1)
+
+    def test_stop_clears_wall_preference(self):
+        self.node.wall_preference = 1
+
+        self.send_raw(0., 0.)
+
+        self.assertEqual(self.node.wall_preference, 0)
+
+    def test_mode_change_stops_and_clears_assistance_state(self):
+        from std_msgs.msg import Bool
+        self.set_opening_turn()
+        self.node.wall_side = self.node.wall_preference = 1
+        self.node.opening_candidates = [('candidate', 1, time.monotonic())]
+        self.node.confirmed_openings = ['opening']
+        self.node.door_obstacles = np.array([[.2, .5]])
+        self.node.output[:] = [.4, .2]
+        self.node.acceleration[:] = [.3, .4]
+
+        self.node.on_assist_enabled(Bool(data=False))
+
+        self.assertFalse(self.node.assist_enabled)
+        self.assertFalse(self.node.mode_neutral_seen)
+        self.assertIsNone(self.node.opening_turn)
+        self.assertEqual((self.node.wall_side, self.node.wall_preference), (0, 0))
+        self.assertEqual(self.node.opening_candidates, [])
+        self.assertEqual(self.node.confirmed_openings, [])
+        self.assertEqual(len(self.node.door_obstacles), 0)
+        np.testing.assert_array_equal(self.node.output, [0., 0.])
+        np.testing.assert_array_equal(self.node.acceleration, [0., 0.])
+        self.assertEqual((self.commands[-1].linear.x,
+                          self.commands[-1].angular.z), (0., 0.))
+
+    def test_repeated_mode_heartbeat_does_not_disarm_active_mode(self):
+        from std_msgs.msg import Bool
+        self.node.mode_neutral_seen = True
+
+        self.node.on_assist_enabled(Bool(data=True))
+
+        self.assertTrue(self.node.mode_neutral_seen)
+
+    def test_manual_mode_forwards_fresh_raw_without_sensors_or_smoothing(self):
+        from std_msgs.msg import Bool
+        self.node.on_assist_enabled(Bool(data=False))
+        self.send_raw(0., 0.)
+        self.send_raw(1.2, -.7)
+        self.node.scans = {}
+        self.node.odom_time = 0.
+
+        self.node.control()
+
+        self.assertEqual(self.node.mode, 'manual_direct')
+        self.assertAlmostEqual(self.commands[-1].linear.x, 1.2)
+        self.assertAlmostEqual(self.commands[-1].angular.z, -.7)
+
+    def test_manual_mode_rejects_non_finite_raw_command(self):
+        from std_msgs.msg import Bool
+        self.node.on_assist_enabled(Bool(data=False))
+        self.send_raw(0., 0.)
+
+        self.send_raw(float('nan'), .4)
+        self.node.control()
+
+        self.assertEqual((self.commands[-1].linear.x,
+                          self.commands[-1].angular.z), (0., 0.))
+        self.assertEqual(self.node.reason, 'stale_input')
+
+    def test_mode_transition_and_manual_timeout_publish_zero(self):
+        from std_msgs.msg import Bool
+        self.node.on_assist_enabled(Bool(data=False))
+        self.send_raw(.6, .3)
+
+        self.node.control()
+
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+        self.send_raw(0., 0.)
+        self.node.raw_time = 0.
+        self.node.control()
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+
+    def test_assist_restoration_waits_for_neutral_then_uses_existing_chain(self):
+        from std_msgs.msg import Bool
+        self.node.on_assist_enabled(Bool(data=False))
+        self.send_raw(0., 0.)
+        self.node.on_assist_enabled(Bool(data=True))
+        self.send_raw(.5, 0.)
+
+        self.node.control()
+
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+        self.send_raw(0., 0.)
+        self.send_raw(.5, 0.)
+        now = time.monotonic()
+        self.node.raw_time = self.node.odom_time = self.node.plan_time = now
+        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.scans = {
+            side: (now, np.array([[3., 2.], [3., -2.]]))
+            for side in ('left', 'right')
+        }
+        self.node.control()
+
+        self.assertNotEqual(self.node.mode, 'manual_direct')
+
+    def test_assist_restoration_ignores_old_plan_until_new_goal_is_accepted(self):
+        from concurrent.futures import Future
+        from geometry_msgs.msg import TwistStamped
+        from rclpy.time import Time
+        from std_msgs.msg import Bool
+        self.node.on_assist_enabled(Bool(data=False))
+        self.send_raw(0., 0.)
+        self.node.on_assist_enabled(Bool(data=True))
+        self.send_raw(0., 0.)
+
+        old = TwistStamped()
+        old.twist.linear.x = .7
+        self.node.on_planned(old)
+
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
+        self.assertEqual(self.node.plan_time, 0.)
+
+        accepted = SimpleNamespace(accepted=True)
+        response = Future()
+        response.set_result(accepted)
+        self.node.client = SimpleNamespace(
+            server_is_ready=lambda: True,
+            send_goal_async=lambda _: response,
+        )
+        self.send_raw(.5, 0.)
+        now = time.monotonic()
+        self.node.raw_time = self.node.odom_time = self.node.plan_time = now
+        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.update_reference()
+
+        self.node.on_planned(old)
+
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
+        fresh = TwistStamped()
+        fresh.header.stamp = Time(
+            nanoseconds=self.node.planned_after_stamp + 1).to_msg()
+        fresh.twist.linear.x = .7
+        self.node.on_planned(fresh)
+
+        self.assertAlmostEqual(self.node.planned[0], .7)
+
+    def test_startup_and_cancel_ignore_plans_until_new_goal_is_accepted(self):
+        from geometry_msgs.msg import TwistStamped
+        self.node.planned[:] = 0.
+        self.node.plan_time = 0.
+        command = TwistStamped()
+        command.header.stamp = self.node.get_clock().now().to_msg()
+        command.twist.linear.x = .7
+
+        self.node.on_planned(command)
+
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
+        self.node.accept_planned = True
+        self.node.planned_after_stamp = -1
+        self.node.on_planned(command)
+        self.assertAlmostEqual(self.node.planned[0], .7)
+
+        self.node.cancel()
+        command.header.stamp = self.node.get_clock().now().to_msg()
+        self.node.on_planned(command)
+
+        self.assertFalse(self.node.accept_planned)
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
+        self.assertEqual(self.node.plan_time, 0.)
+
     def test_confirmed_opening_survives_temporary_lidar_occlusion_until_passed(self):
         opening = self.wall_opening(side=-1)
         self.node._observe_openings([opening])
@@ -109,6 +328,18 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.pose = (3., 0., 0.)
         self.node._observe_openings([])
         self.assertEqual(self.node.confirmed_openings, [])
+
+    def test_corner_bounded_opening_still_requires_two_observations(self):
+        from smart_wheelchair_safety.unified_geometry import Segment, find_openings
+        wall = Segment((.3, -.52), (2.44, -.52), 0., -.52)
+        boundary = Segment((5.14, -.55), (5.14, -.95), math.pi/2, -5.14)
+        opening = find_openings([wall, boundary])[0]
+
+        self.node._observe_openings([opening])
+        self.assertEqual(self.node.confirmed_openings, [])
+
+        self.node._observe_openings([opening])
+        self.assertEqual(len(self.node.confirmed_openings), 1)
 
     def test_confirmed_opening_world_position_does_not_walk_with_chained_matches(self):
         self.observe_front_door(center=(2., 0.), width=1.)
@@ -149,14 +380,16 @@ class UnifiedNodeTest(unittest.TestCase):
                 elif case == 'passed':
                     self.node.pose = (2.0, 0., 0.)
                 elif case == 'timeout':
-                    self.node.opening_turn_time -= 6.1
+                    self.node.opening_turn_time -= 12.1
                 else:
                     self.node.raw_time = 0.
                 self.node.update_reference()
                 self.assertIsNone(self.node.opening_turn)
 
     def test_opening_turn_preserves_clear_driver_steering_when_planner_understeers(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
         self.set_opening_turn(side=1)
+        self.node.opening_turn = Opening((.4, .8), math.pi / 2, 2., ())
         self.node.mode = 'opening_turn'
         self.node.raw = np.array([.6, .5])
         self.node.planned = np.array([.5, .03])
@@ -200,17 +433,75 @@ class UnifiedNodeTest(unittest.TestCase):
 
         self.assertGreater(self.commands[-1].angular.z, 0.)
 
+    def test_opening_wait_segment_corrects_lateral_drift_toward_wall(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.opening_turn = Opening((3.5, -.52), -math.pi / 2, 2.7, ())
+        self.node.opening_turn_side = -1
+        self.node.opening_turn_heading = 0.
+        self.node.opening_turn_origin = np.array([0., 0.])
+        self.node.opening_turn_time = time.monotonic()
+        self.node.mode = 'opening_turn'
+        self.node.pose = (1., -.05, 0.)
+        self.node.raw = np.array([.6, -.5])
+        self.node.planned = np.array([.5, 0.])
+
+        for _ in range(8):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreater(self.commands[-1].angular.z, .03)
+
+    def test_straight_wall_preview_enforces_correction_away_from_wall(self):
+        for side in (-1, 1):
+            with self.subTest(side=side):
+                self.commands.clear()
+                self.node.output[:] = 0.
+                self.node.acceleration[:] = 0.
+                self.node.mode = 'wall'
+                self.node.wall_side = side
+                self.node.wall_preview_heading = -side*.08
+                self.node.pose = (0., 0., 0.)
+                self.node.raw = np.array([.6, 0.])
+                self.node.planned = np.array([.5, side*.04])
+
+                for _ in range(8):
+                    self.node.last_tick -= .1
+                    self.node.control()
+
+                self.assertGreater(-side*self.commands[-1].angular.z, .03)
+
     def test_opening_turn_reference_enters_wide_corridor_instead_of_turning_early(self):
         from smart_wheelchair_safety.unified_geometry import Opening
-        self.node.opening_turn = Opening((1.7, -.52), -math.pi / 2, 2.7, ())
+        self.node.opening_turn = Opening((.8, -.52), -math.pi / 2, 2.7, ())
         self.node.opening_turn_side = -1
         self.node.opening_turn_heading = 0.
         self.node.opening_turn_time = time.monotonic()
 
         path = self.node._opening_turn_path()
 
-        self.assertGreater(path[-1, 0], 1.5)
+        self.assertGreater(path[-1, 0], .7)
         self.assertLess(path[-1, 1], -1.)
+
+    def test_opening_wait_heading_comes_from_wall_tangent_not_current_drift(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.pose = (1., 2., -.08)
+        local_opening = Opening((3.5, -.52), -math.pi/2+.08, 2.7, ())
+
+        self.node._start_opening_turn(local_opening, -1)
+
+        self.assertAlmostEqual(self.node.opening_turn_heading, 0., places=6)
+
+    def test_opening_turn_waits_until_rear_axle_clears_near_jamb(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.opening_turn = Opening((1.7, -.52), -math.pi / 2, 2.7, ())
+        self.node.opening_turn_side = -1
+        self.node.opening_turn_heading = 0.
+        self.node.opening_turn_time = time.monotonic()
+
+        self.assertFalse(self.node._opening_turn_ready())
+
+        self.node.opening_turn = Opening((.8, -.52), -math.pi / 2, 2.7, ())
+        self.assertTrue(self.node._opening_turn_ready())
 
     def test_opening_turn_reference_stays_straight_until_front_clears_near_jamb(self):
         from smart_wheelchair_safety.unified_geometry import Opening
@@ -231,26 +522,127 @@ class UnifiedNodeTest(unittest.TestCase):
 
         self.observe_front_door(center=(2.02, .18), heading=.10, width=1.02)
         self.node.update_reference()
+        self.assertEqual(self.node.mode, 'manual')
+        self.finish_door_plan()
 
         self.assertEqual(self.node.mode, 'door_align')
+
+    def test_pending_door_intent_does_not_briefly_capture_wall_following(self):
+        self.observe_front_door(center=(3.3168, 1.149), heading=.4428, width=1.3008)
+        self.node.raw = np.array([.8977, .5182])
+        self.node.wall_side = 1
+
+        self.node.update_reference()
+
+        self.assertEqual(self.node.mode, 'manual')
+        self.assertEqual(self.node.wall_side, 0)
 
     def test_door_centerline_freezes_after_commit(self):
         self.confirm_door(center=(1., 0.), heading=0., width=1.)
         self.node.pose = (.10, 0., 0.)
         self.node.update_reference()
+        self.finish_door_plan()
         self.assertEqual(self.node.mode, 'door_pass')
         frozen = self.node.door
 
         self.observe_front_door(center=(1.15, .12), heading=.1, width=1.)
+        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
         self.node.update_reference()
 
         self.assertEqual(self.node.door, frozen)
         self.assertEqual(self.node.mode, 'door_pass')
 
+    def test_oblique_door_reference_stays_fixed_while_chair_advances(self):
+        references = []
+        self.node.reference = SimpleNamespace(publish=references.append)
+        self.node.client = SimpleNamespace(server_is_ready=lambda: False)
+        self.confirm_door(center=(2.32, .34), heading=math.radians(45.), width=1.22)
+
+        self.node.update_reference()
+        self.node.door_plan_request[0].result(timeout=1.)
+        self.node.raw_time = self.node.odom_time = time.monotonic()
+        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.update_reference()
+        first = np.array([(pose.pose.position.x, pose.pose.position.y)
+                          for pose in references[-1].poses])
+        self.node.pose = (.2, -.05, -.1)
+        self.node.update_reference()
+        second = np.array([(pose.pose.position.x, pose.pose.position.y)
+                           for pose in references[-1].poses])
+
+        np.testing.assert_allclose(second, first, atol=1e-9)
+
+    def test_locked_door_reference_is_not_resubmitted_after_takeover(self):
+        requests = []
+        handle = SimpleNamespace(accepted=True, cancel_goal_async=lambda: None)
+
+        class Future:
+            def add_done_callback(self, callback):
+                callback(SimpleNamespace(result=lambda: handle))
+
+        self.node.client = SimpleNamespace(
+            server_is_ready=lambda: True,
+            send_goal_async=lambda request: (requests.append(request), Future())[1])
+        self.confirm_door(center=(2.32, .34), heading=math.radians(45.), width=1.22)
+
+        self.node.update_reference()
+        self.finish_door_plan()
+        self.node.update_reference()
+
+        self.assertEqual(len(requests), 2)
+
+    def test_door_acquisition_replaces_navigation_only_after_path_is_feasible(self):
+        requests = []
+        cancelled = []
+        old_goal = SimpleNamespace(cancel_goal_async=lambda: cancelled.append('old'))
+        pending_goal = SimpleNamespace(
+            accepted=True, cancel_goal_async=lambda: cancelled.append('pending'))
+        door_goal = SimpleNamespace(accepted=True)
+        handles = iter((pending_goal, door_goal))
+
+        class Future:
+            def __init__(self, handle):
+                self.handle = handle
+
+            def add_done_callback(self, callback):
+                callback(SimpleNamespace(result=lambda: self.handle))
+
+        self.node.goal = old_goal
+        self.node.client = SimpleNamespace(
+            server_is_ready=lambda: True,
+            send_goal_async=lambda request: (requests.append(request), Future(next(handles)))[1])
+        self.confirm_door(center=(2.32, .34), heading=math.radians(45.), width=1.22)
+
+        self.node.update_reference()
+        self.node.door_plan_request[0].result(timeout=1.)
+        self.node.raw_time = self.node.odom_time = time.monotonic()
+        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.update_reference()
+
+        self.assertEqual(cancelled, ['pending'])
+        self.assertEqual(len(requests), 2)
+        self.assertIs(self.node.goal, door_goal)
+
+    def test_door_takeover_waits_for_a_feasible_reference(self):
+        from smart_wheelchair_safety.unified_geometry import arc_path
+        cancelled = []
+        old_goal = SimpleNamespace(cancel_goal_async=lambda: cancelled.append(True))
+        self.node.goal = old_goal
+        self.confirm_door(center=(4.32, -.68), heading=0., width=1.11)
+
+        with patch.object(self.node, '_local_door_path', return_value=arc_path(.5, 0.)):
+            self.node.door_path_feasible = False
+            self.node.update_reference()
+
+        self.assertEqual(self.node.mode, 'manual')
+        self.assertIs(self.node.goal, old_goal)
+        self.assertEqual(cancelled, [])
+
     def test_aligned_door_commits_within_staging_heading_control_band(self):
         self.confirm_door(center=(1.15, 0.), heading=0., width=1.)
 
         self.node.update_reference()
+        self.finish_door_plan()
 
         self.assertEqual(self.node.mode, 'door_pass')
 
@@ -266,6 +658,81 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.update_reference()
 
         self.assertIsNone(self.node.door)
+
+    def test_successful_door_clear_discards_remembered_jambs(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.door = Opening((-.30, 0.), 0., 1., ())
+        self.node.door_phase = 'door_pass'
+        self.node.door_obstacles = np.array([[.2, .5]])
+
+        self.assertIsNone(self.node._local_tracked_door())
+
+        self.assertEqual(len(self.node.door_obstacles), 0)
+
+    def test_door_clear_progressively_returns_steering_to_joystick(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.mode = 'door_clear'
+        self.node.door_phase = 'door_clear'
+        self.node.raw = np.array([.5, .5])
+        with patch.object(self.node, '_door_preview_angular', return_value=.1):
+            expected = ((0., .1), (.145, .3), (.29, .5), (.40, .5))
+            for progress, angular in expected:
+                with self.subTest(progress=progress):
+                    self.node.door = Opening((-progress, 0.), 0., 1., ())
+                    self.assertAlmostEqual(self.node._door_angular(.4), angular)
+
+    def test_door_pass_keeps_locked_path_steering(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.mode = 'door_pass'
+        self.node.door_phase = 'door_pass'
+        self.node.door = Opening((.20, 0.), 0., 1., ())
+        self.node.raw = np.array([.5, .5])
+        with patch.object(self.node, '_door_preview_angular', return_value=.1):
+            self.assertAlmostEqual(self.node._door_angular(.4), .1)
+
+    def test_stale_door_pass_after_plane_uses_clearance_handoff(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.mode = 'door_pass'
+        self.node.door_phase = 'door_pass'
+        self.node.door = Opening((-.145, 0.), 0., 1., ())
+        self.node.raw = np.array([.5, .5])
+        with patch.object(self.node, '_door_preview_angular', return_value=.1):
+            self.assertAlmostEqual(self.node._door_angular(.4), .3)
+
+    def test_door_clear_handoff_applies_to_planner_and_fallback(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        for planner_fresh in (True, False):
+            with self.subTest(planner_fresh=planner_fresh):
+                self.node.mode = 'door_clear'
+                self.node.door_phase = 'door_clear'
+                self.node.door = Opening((-.29, 0.), 0., 1., ())
+                self.node.door_path = np.array([[0., 0., 0.], [1., 0., 0.]])
+                self.node.door_path_feasible = True
+                self.node.raw = np.array([.5, .5])
+                self.node.planned = np.array([.3, 0.])
+                self.node.plan_time = time.monotonic() if planner_fresh else 0.
+                self.node.raw_time = self.node.odom_time = time.monotonic()
+                self.node.scans = {
+                    side: (self.node.raw_time, points)
+                    for side, (_, points) in self.node.scans.items()
+                }
+                self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+                self.node.output[:] = 0.
+                self.node.acceleration[:] = 0.
+                with patch.object(self.node, '_door_angular', return_value=.4) as angular:
+                    for _ in range(12):
+                        now = time.monotonic()
+                        self.node.raw_time = self.node.odom_time = now
+                        self.node.scans = {
+                            side: (now, points)
+                            for side, (_, points) in self.node.scans.items()
+                        }
+                        self.node.odom_stamp = (
+                            self.node.get_clock().now().nanoseconds / 1e9)
+                        self.node.last_tick -= .1
+                        self.node.control()
+                self.assertTrue(angular.called)
+                self.assertGreater(self.commands[-1].angular.z, 0.)
 
     def test_stop_and_reverse_cancel_door_immediately(self):
         for phase in ('door_align', 'door_pass', 'door_clear'):
@@ -510,19 +977,133 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertEqual(self.node.opening_candidates, [])
         self.assertEqual(self.node.confirmed_openings, [])
 
-    def test_door_align_uses_heading_feedback_at_staging_instead_of_looping(self):
+    def test_door_align_stops_instead_of_rotating_in_place(self):
         self.node.door = self.front_opening(center=(1., 0.), heading=.08, width=1.)
         self.node.door_phase = 'door_align'
         self.node.mode = 'door_align'
         self.node.raw = np.array([.6, 0.])
-        self.node.planned = np.array([.2, -.2])
+        self.node.planned = np.array([0., .3])
 
         for _ in range(10):
             self.node.last_tick -= .1
             self.node.control()
 
         self.assertAlmostEqual(self.commands[-1].linear.x, 0.)
+        self.assertAlmostEqual(self.commands[-1].angular.z, 0.)
+
+    def test_feasible_door_path_keeps_a_safe_minimum_alignment_speed(self):
+        self.node.door = self.front_opening(center=(2., .2), heading=.2, width=1.)
+        self.node.door_phase = 'door_align'
+        self.node.mode = 'door_align'
+        self.node.door_path = np.array([[0., 0., 0.], [.3, .02, .1], [2., .2, .2]])
+        self.node.door_path_feasible = True
+        self.node.raw = np.array([.8, 0.])
+        self.node.planned = np.array([0., 0.])
+
+        for _ in range(30):
+            self.node.raw_time = self.node.odom_time = time.monotonic()
+            self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreaterEqual(self.commands[-1].linear.x, .17)
         self.assertGreater(self.commands[-1].angular.z, 0.)
+
+    def test_feasible_door_path_survives_planner_action_timeout(self):
+        self.node.door = self.front_opening(center=(2., .2), heading=.2, width=1.)
+        self.node.door_phase = 'door_align'
+        self.node.mode = 'door_align'
+        self.node.door_path = np.array([[0., 0., 0.], [.3, .02, .1], [2., .2, .2]])
+        self.node.door_path_feasible = True
+        self.node.raw = np.array([.8, 0.])
+        self.node.plan_time = 0.
+
+        for _ in range(30):
+            self.node.raw_time = self.node.odom_time = time.monotonic()
+            self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreaterEqual(self.commands[-1].linear.x, .17)
+        self.assertNotEqual(self.node.reason, 'planner_timeout')
+
+    def test_door_speed_slew_preserves_preview_curvature(self):
+        self.node.door = self.front_opening(center=(2., .2), heading=.2, width=1.)
+        self.node.door_phase = 'door_align'
+        self.node.mode = 'door_align'
+        self.node.door_path = np.array([[0., 0., 0.], [.3, .03, .1], [2., .2, .2]])
+        self.node.door_path_feasible = True
+        self.node.raw = np.array([.8, 0.])
+        self.node.output = np.array([.05, -.1])
+        self.node.acceleration = np.array([0., 0.])
+
+        self.node.last_tick -= .1
+        self.node.control()
+
+        command = self.commands[-1]
+        self.assertAlmostEqual(command.angular.z,
+                               self.node._door_preview_angular(command.linear.x))
+        self.assertGreater(command.angular.z, 0.)
+
+    def test_door_tracking_keeps_short_initial_avoidance_curvature(self):
+        self.node.door_path = np.array([
+            [0., 0., 0.],
+            [.07996, .00240, .06],
+            [.15982, .00719, .06],
+            [.23967, .01199, .06],
+        ])
+        self.node.pose = (.03999, .00060, .03)
+
+        curvature = self.node._door_preview_angular(.1) / .1
+
+        self.assertAlmostEqual(curvature, .75, delta=.12)
+
+    def test_nearly_aligned_door_creeps_instead_of_stalling_on_map_noise(self):
+        from smart_wheelchair_safety.unified_geometry import Opening
+        self.node.door = Opening((.97, .184), .184, 1.221, ())
+        self.node.door_phase = 'door_align'
+        self.node.mode = 'door_align'
+        self.node.door_path = np.array([[0., 0., 0.], [.25, .04, .16], [1., .2, .16]])
+        self.node.raw = np.array([.6, 0.])
+        self.node.planned = np.array([0., 0.])
+
+        for _ in range(10):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreater(self.commands[-1].linear.x, 0.)
+        self.assertGreater(self.commands[-1].angular.z, .02)
+
+    def test_door_align_keeps_forward_motion_while_steering(self):
+        self.node.door = self.front_opening(center=(2., .2), heading=.2, width=1.)
+        self.node.door_phase = 'door_align'
+        self.node.mode = 'door_align'
+        self.node.raw = np.array([.6, 0.])
+        self.node.planned = np.array([.2, .3])
+
+        for _ in range(10):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreater(self.commands[-1].linear.x, 0.)
+        self.assertGreater(self.commands[-1].angular.z, 0.)
+
+    def test_door_align_uses_locked_path_preview_steering(self):
+        from smart_wheelchair_safety.unified_geometry import door_alignment_reference
+        door = self.front_opening(center=(2.32, .34), heading=math.radians(45.), width=1.22)
+        self.node.door = door
+        self.node.door_phase = 'door_align'
+        self.node.mode = 'door_align'
+        self.node.door_path = door_alignment_reference(door, 'align')
+        self.node.raw = np.array([.6, 0.])
+        self.node.planned = np.array([.2, 0.])
+
+        for _ in range(10):
+            self.node.last_tick -= .1
+            self.node.control()
+
+        self.assertGreater(self.commands[-1].linear.x, 0.)
+        self.assertGreater(self.commands[-1].angular.z, .02)
 
     def test_stale_planner_never_replays_old_motion(self):
         self.node.output = np.array([.4, .1])
@@ -555,9 +1136,32 @@ class UnifiedNodeTest(unittest.TestCase):
 
         self.send_raw(.6, .30)
         self.node.update_reference()
+        self.finish_door_plan()
 
         self.assertFalse(self.node.override)
         self.assertEqual(self.node.mode, 'door_align')
+
+    def test_oversteered_current_door_intent_beats_wall_following(self):
+        self.confirm_door(center=(3.3168, 1.1490), heading=.4428, width=1.3008)
+        self.node.raw = np.array([.8977, .5182])
+        self.node.wall_side = 1
+
+        self.node.update_reference()
+        self.finish_door_plan()
+
+        self.assertEqual(self.node.mode, 'door_align')
+
+    def test_side_front_door_recaptures_after_wall_has_turned_chair(self):
+        self.confirm_door(center=(1.63, 1.20), heading=math.radians(69.), width=1.22)
+        self.node.wall_side = -1
+        self.node.mode = 'wall'
+
+        self.send_raw(.3, 0.)
+        self.node.update_reference()
+        self.finish_door_plan()
+
+        self.assertEqual(self.node.mode, 'door_align')
+        self.assertIsNotNone(self.node.door)
 
     def test_straight_oblique_door_intent_tolerates_lidar_fit_variation(self):
         self.confirm_door(center=(2.6, .9), heading=.262, width=1.02)
@@ -566,6 +1170,14 @@ class UnifiedNodeTest(unittest.TestCase):
         world, _ = self.node._intended_door()
 
         self.assertIsNotNone(world)
+
+    def test_full_speed_straight_does_not_capture_distant_side_opening(self):
+        self.confirm_door(center=(3.023, .985), heading=.466, width=1.18)
+        self.node.raw = np.array([1.667, 0.])
+
+        world, _ = self.node._intended_door()
+
+        self.assertIsNone(world)
 
     def test_untargeted_offset_door_does_not_capture_straight_command(self):
         self.confirm_door(center=(2., 1.25), heading=0., width=1.)
@@ -582,6 +1194,86 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.control()
         self.assertEqual(self.commands[-1].linear.x, 0.)
 
+    def test_door_memory_uses_latest_complete_frame_without_accumulating_noise(self):
+        self.node.door_obstacles = np.array([[1., .4401], [1., -.5]])
+        observed = np.array([[1., .452], [1.1, .452], [1.2, .452],
+                             [1., -.5], [1.1, -.5], [1.2, -.5]])
+
+        self.node._refresh_door_obstacles(observed)
+
+        self.assertFalse(np.any(np.all(self.node.door_obstacles == [1., .4401], axis=1)))
+        refreshed = self.node.door_obstacles.copy()
+        self.node._refresh_door_obstacles(observed[:2])
+        np.testing.assert_array_equal(self.node.door_obstacles, refreshed)
+
+    def test_failed_door_path_is_retried_with_the_next_scan(self):
+        fallback = np.array([[0., 0., 0.], [1., .1, .1]])
+        feasible = np.array([[0., 0., 0.], [.08, 0., 0.], [1., .1, .1]])
+        self.node.door_phase = 'door_align'
+        self.node.door_path = None
+        with patch(
+            'smart_wheelchair_safety.unified_control_node.collision_aware_door_reference',
+            side_effect=[None, feasible],
+        ) as planner, patch(
+            'smart_wheelchair_safety.unified_control_node.door_alignment_reference',
+            return_value=fallback,
+        ):
+            self.node._local_door_path(self.front_opening(), np.empty((0, 2)))
+            self.node.door_plan_request[0].result(timeout=1.)
+            self.node._local_door_path(self.front_opening(), np.empty((0, 2)))
+            self.node.door_plan_request[0].result(timeout=1.)
+            self.node._local_door_path(self.front_opening(), np.empty((0, 2)))
+
+        self.assertEqual(planner.call_count, 2)
+        self.assertTrue(self.node.door_path_feasible)
+
+    def test_door_path_search_does_not_block_control_callbacks(self):
+        started = threading.Event()
+        release = threading.Event()
+        feasible = np.array([[0., 0., 0.], [.08, 0., 0.], [1., .1, .1]])
+
+        def delayed_plan(*_):
+            started.set()
+            release.wait(1.)
+            return feasible
+
+        self.node.door_phase = 'door_align'
+        with patch(
+            'smart_wheelchair_safety.unified_control_node.collision_aware_door_reference',
+            side_effect=delayed_plan,
+        ):
+            before = time.monotonic()
+            self.node._local_door_path(self.front_opening(), np.empty((0, 2)))
+            elapsed = time.monotonic()-before
+            release.set()
+
+        self.assertTrue(started.is_set())
+        self.assertLess(elapsed, .05)
+
+    def test_reference_timer_runs_at_five_hz(self):
+        self.assertAlmostEqual(self.node.reference_timer.timer_period_ns / 1e9, .2)
+
+    def test_command_ramp_reaches_acceleration_limits_within_point_two_seconds(self):
+        self.node.raw = np.array([.8, .65])
+        self.node.planned = np.array([.8, .65])
+        self.node.output[:] = 0.
+        self.node.acceleration[:] = 0.
+        samples = []
+        increment_limits = []
+        for _ in range(4):
+            self.node.last_tick -= .05
+            previous_tick = self.node.last_tick
+            self.node.control()
+            samples.append([self.commands[-1].linear.x,
+                            self.commands[-1].angular.z])
+            dt = min(.1, max(.001, self.node.last_tick-previous_tick))
+            increment_limits.append(np.array([.5, .8])*dt)
+        samples = np.asarray(samples)
+
+        np.testing.assert_allclose(self.node.acceleration, [.5, .8], atol=.01)
+        increments = np.diff(np.vstack(([0., 0.], samples)), axis=0)
+        self.assertTrue(np.all(increments <= np.asarray(increment_limits) + 1e-6))
+
     def test_driver_stop_is_immediate_and_clears_acceleration(self):
         self.node.raw[:] = 0.
         self.node.output[:] = .4
@@ -594,6 +1286,8 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.mode = 'front_stop'
         self.node.raw = np.array([0., .4])
         self.node.plan_time = 0.
+        self.node.raw_time = self.node.odom_time = time.monotonic()
+        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
         self.node.last_tick -= .05
         self.node.control()
         self.assertEqual(self.commands[-1].linear.x, 0.)
@@ -649,10 +1343,22 @@ class UnifiedNodeTest(unittest.TestCase):
 
     def test_cancelling_door_assistance_keeps_nearby_jamb_observations(self):
         self.node.door_obstacles = np.array([[.2, .5], [8., .5]])
+        self.node.door_obstacle_time = time.monotonic()
         self.node.door = None
         self.node.raw[:] = 0.
         self.node.update_reference()
         np.testing.assert_array_equal(self.node.door_obstacles, [[.2, .5]])
+
+    def test_cancelled_door_jamb_memory_expires(self):
+        self.node.door_obstacles = np.array([[.2, .5]])
+        self.node.door_obstacle_time = 100.
+        self.node.door = None
+
+        with patch('smart_wheelchair_safety.unified_control_node.time.monotonic',
+                   return_value=101.51):
+            self.node.update_reference()
+
+        self.assertEqual(len(self.node.door_obstacles), 0)
 
     def test_delayed_odometry_does_not_refresh_watchdog(self):
         from nav_msgs.msg import Odometry

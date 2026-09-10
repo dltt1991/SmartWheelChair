@@ -85,8 +85,17 @@ right-side branch. These candidates join the existing two-frame observation and
 association pipeline, so one noisy fit cannot start a turn. They are emitted only
 for the wide-opening band and cannot become `0.92-1.50 m` narrow-door candidates.
 Once confirmed, the existing opening-turn rear-clearance gate, MPPI footprint
-check, and independent braking guard remain authoritative; no new turn controller
-or autonomous reverse behavior is introduced.
+check, and independent braking guard remain authoritative. While waiting for the
+rear axle to clear the near edge, freeze the approach heading from the detected
+longitudinal wall tangent rather than the chair's instantaneous, possibly drifting
+heading. Track that approach line with a 0.8 m preview so heading-only correction
+cannot carry lateral drift into the wall.
+
+For straight wall following, retain MPPI as the primary controller but enforce a
+bounded preview correction when its instantaneous output understeers a reference
+that is moving away from the followed wall. This correction never pulls the chair
+toward the wall and does not apply to explicit joystick turns. The existing angular
+acceleration, jerk, and braking limits still apply.
 
 ### Safety and fallback
 
@@ -103,7 +112,8 @@ an opposite-side wall-follow decision.
   longitudinal wall endpoint and a perpendicular far boundary.
 - `unified_control_node.py`: run reference updates at 5 Hz, maintain wall-side
   selection memory, release stale escape override for an explicitly targeted
-  side opening, and use the higher jerk limits.
+  side opening, use the detected wall tangent during opening-clearance waiting,
+  apply bounded away-from-wall preview correction, and use the higher jerk limits.
 - `test_unified_geometry.py`: cover explicit left/right selection, straight-side
   retention, absence of fallback to the opposite wall, mirrored corner-bounded
   intersections, and rejection when the perpendicular boundary misses the wall.
@@ -131,5 +141,7 @@ No new package, node, topic, parameter, or controller is introduced.
   motion begins, while a disconnected perpendicular segment produces none.
 - Existing two-frame confirmation is still required before a corner-bounded
   opening can start `opening_turn`.
+- Mirrored straight runs past the same opening stay on the entry side without
+  either being pulled into the opening or drifting into the followed wall.
 - Existing wall following, opening turns, door traversal, reverse motion,
   emergency stop, stale-input handling, and braking-envelope tests remain green.

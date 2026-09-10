@@ -7,6 +7,7 @@ WORLD = pathlib.Path(__file__).parents[1] / "worlds" / "m6_room.sdf"
 LAUNCH = pathlib.Path(__file__).parents[1] / "launch" / "sim.launch.py"
 CMAKE = pathlib.Path(__file__).parents[1] / "CMakeLists.txt"
 GUI_CONFIG = pathlib.Path(__file__).parents[1] / "config" / "top_down_gui.config"
+UNIFIED_CONFIG = pathlib.Path(__file__).parents[1] / "config" / "unified_control.yaml"
 GUI_SCRIPT = pathlib.Path(__file__).parents[4] / "docker" / "gazebo-gui-vnc.sh"
 TRAJECTORY_PLUGIN = pathlib.Path(__file__).parents[1] / "src" / "trajectory_preview_system.cc"
 WHEELCHAIR_MODEL = pathlib.Path(__file__).parents[1] / "models" / "smart_wheelchair" / "model.sdf"
@@ -82,6 +83,11 @@ class WorldLayoutTest(unittest.TestCase):
         self.assertIn('IfCondition(unified)', source)
         self.assertIn('("cmd_vel", "cmd_vel_planned")', source)
         self.assertIn('/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock', source)
+
+    def test_planner_output_is_stamped_for_mode_transition_barrier(self):
+        config = UNIFIED_CONFIG.read_text()
+
+        self.assertIn("enable_stamped_cmd_vel: true", config)
 
     def test_launch_bridges_raw_joystick_for_gazebo_preview_plugin(self):
         launch_source = LAUNCH.read_text()

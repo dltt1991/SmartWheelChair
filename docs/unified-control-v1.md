@@ -23,12 +23,37 @@ The new coordinator is intentionally not a global navigator. It produces a
 short reference from the joystick and observed geometry; Nav2 MPPI chooses
 the motion, and the independent guard can reject even a planner output.
 
+## Manual and assist modes
+
+The web joystick at `http://localhost:8090` starts in assist mode. Its mode
+switch publishes `/assist_enabled` and is synchronized through the web
+node's `GET /mode` and `POST /mode` endpoints. Each response includes a random
+node-session identifier and a mode revision that browser commands echo, so
+delayed requests from another tab or a previous web-node process cannot resume
+motion. Changing mode immediately publishes a zero command, clears active
+wall/door/planner state, and requires the joystick to return to neutral before
+motion can resume.
+
+In manual mode, the unified coordinator remains the only `/cmd_vel` publisher
+and forwards each fresh `/cmd_vel_raw` command without obstacle avoidance,
+wall following, doorway alignment, MPPI, comfort limiting, or braking guard.
+The web input and coordinator command watchdogs still stop stale input. The
+joystick center is gray in manual mode and teal in assist mode. Status reports
+manual motion as `manual_direct`.
+
+Nav2 publishes stamped planned commands. After assistance is re-enabled, the
+coordinator rejects every planned command stamped before the replacement
+FollowPath goal was accepted, preventing queued output from the cancelled goal
+from being replayed after the neutral transition.
+
 ## Parameters and frames
 
-- Planner: 20 Hz simulation time, 60 x 0.05 s horizon, 600 samples, one iteration.
-- Local map: 8 x 8 m, 0.025 m cells, 10 Hz, full rectangular footprint checks.
+- Planner: 20 Hz simulation time, 60 x 0.05 s horizon, 600 samples, one iteration;
+  reference paths refresh at 5 Hz.
+- Local map: 8 x 8 m, 0.025 m cells, 10 Hz, full physical-footprint checks;
+  the independent guard owns the 0.04 m runtime safety margin.
 - Forward/reverse/angular command bounds: 0.8 m/s, 0.4 m/s, 0.65 rad/s.
-- Door alignment/pass speed limits: 0.25/0.45 m/s. Wide-opening turns are
+- Door alignment/pass speed limits: 0.35/0.55 m/s. Wide-opening turns are
   limited to 0.5 m/s while entering. No autonomous reverse recovery.
 - Both simulated lidars use a 5.0 m maximum range. The hardware sensor's
   stated 12 m maximum is reserved for later hardware calibration.
@@ -36,12 +61,23 @@ the motion, and the independent guard can reject even a planner output.
   0.52 m from the rear axle when parallel. The 0.04 m hard guard margin is
   unchanged. Approach, corner and door transitions are not forced inside
   the 0.15 m steady-following acceptance band.
+- At intersections, explicit left/right steering selects the same-side wall.
+  Straight input retains the entry wall side; if that side is not visible, the
+  guarded joystick path is used instead of selecting the opposite wall.
+- Wide side branches may be represented by a longitudinal wall endpoint and a
+  near-perpendicular far boundary, not only two coplanar wall pieces. Only gaps
+  in the 1.8-3.2 m band are inferred this way, and two observations are required.
+- Before turning into a wide branch, the rear-clearance wait follows the detected
+  wall tangent with a 0.8 m preview. Straight wall following uses the same preview
+  only to enforce a bounded correction away from the followed wall when MPPI
+  understeers; explicit joystick turns remain authoritative.
 - Normal acceleration limits: 0.5 m/s^2, 0.8 rad/s^2, with acceleration slew
-  limits of 1 m/s^3 and 2 rad/s^3. Target snapping and emergency overrides
+  limits of 2.5 m/s^3 and 4.0 rad/s^3. Target snapping and emergency overrides
   mean these are smoothing settings, not a formal jerk guarantee.
 - Braking check: hold measured motion through 0.2 s reaction time, transition
   within acceleration limits, then brake to rest. Add 0.04 m geometric margin
-  and sampling padding. A zero command does not erase measured momentum.
+  as radial distance from the rectangular footprint, plus sampling padding.
+  A zero command does not erase measured momentum.
 - Front-wall soft stop: target 0.12 m clearance, including deceleration ramp
   time. Keep the stop intent latched until the driver stops/reverses/rotates.
 - Watchdogs: joystick 0.3 s, odometry 0.1 s, each laser 0.45 s, planner 0.25 s.
@@ -49,7 +85,9 @@ the motion, and the independent guard can reject even a planner output.
   upstream timeout. Odom/scan acquisition stamps are checked separately.
   Odometry acquisition age is checked again on every control tick, including
   manual override. The guard includes travel since that pose and an additional
-  acceleration-uncertainty margin over its braking horizon.
+  acceleration-uncertainty margin over its braking horizon. That uncertainty
+  scales from measured motion, so a delayed stationary sample does not invent
+  acceleration from a future candidate command.
 
 Gazebo wheel odometry integrates rear-axle differential drive motion. The new
 TF exposes it as `odom -> rear_axle`; the Gazebo odometry child-frame label
@@ -63,6 +101,20 @@ calibrating a different chassis. Hardware odometry needs its own frame audit.
 `/shared_control/reference` is the selected geometric reference, not the
 optimizer's final time-varying trajectory. Existing Gazebo preview cylinders
 still show constant-twist predictions for raw and final commands.
+
+Door alignment first searches a forward-only, whole-footprint-safe path and
+tracks its closest segment with curvature feedforward plus heading/lateral
+feedback. The bounded search runs on a single background worker so a difficult
+far or oblique doorway cannot starve odometry, lidar, watchdog or stop-command
+callbacks. The chair waits while planning; a failed search is not cached and
+is retried on fresh scans. While both jambs are visible, the latest complete
+frame replaces the previous jamb memory; the final complete frame is retained
+through the door so one range outlier cannot permanently shrink the opening.
+After the rear axle crosses the door plane, angular control blends linearly
+from the locked door path to the joystick as rear-clearance progress increases
+from 0 to the existing 0.29 m threshold. This uses live geometry even if the
+5 Hz phase update still reports `door_pass`; the independent braking guard
+remains authoritative for rear-corner sweep safety.
 
 ## Reproduce the checks
 
@@ -80,6 +132,7 @@ python3 scripts/probe_unified_control.py wall_gap --wall-side right --seconds 7
 python3 scripts/probe_unified_control.py opening_turn --wall-side left --seconds 14
 python3 scripts/probe_unified_control.py opening_turn --wall-side right --seconds 14
 python3 scripts/probe_unified_control.py opening_straight --wall-side left --seconds 10
+python3 scripts/probe_unified_control.py opening_straight --wall-side right --seconds 10
 ```
 
 These cases require `m6_room.sdf`. Restart the simulation before each case:
@@ -119,6 +172,7 @@ not statistical safety guarantees):
 | Wide left/right corridor turn | Heading changed +1.586/-1.650 rad; minimum sampled clearance 0.111/0.080 m |
 | Straight past the same opening | No opening-turn mode; heading drift 0.0073 rad |
 | 1.0 m door, four-second active alignment from +/-15-degree heading and +/-0.20 m body offset | Both rear axles cleared the door without wall mode; minimum sampled clearance 0.090/0.085 m |
+| Current oblique 1.30 m `m6_room` doorway | Door captured in 0.64 s; alignment reached 0.168 m/s, pass reached 0.460 m/s, rear axle cleared at 15.1 s; minimum sampled clearance 0.046 m |
 | Steering away during wall following | Exited to override mode and followed -0.42 rad/s requested steering |
 
 The automated suite also covers corners versus fictitious diagonal walls,
@@ -146,9 +200,10 @@ confirmed doorway remains part of the door intent. Front cross walls remain
 stop obstacles unless a valid doorway in the requested direction is identified.
 The doorway target persists in odom
 until the rear of the wheelchair is clear. Nearby observed jamb points remain
-in the guard even when assistance is cancelled; they are spatially pruned
-beyond 4.5 m. This static memory is intentionally conservative and has no
-dynamic-door clearing model in V1.
+in the guard while assistance is active. Successful rear clearance removes
+them immediately; cancellation retains them for a 1.5 s braking-tail grace
+period before current lidar data becomes authoritative again. Distance pruning
+beyond 4.5 m remains an additional bound.
 
 Safety validation includes the rectangular body envelope and a braking tail,
 not just the axle/wheel preview lines. Margins, latency and achievable braking

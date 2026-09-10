@@ -1,6 +1,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import math
+import secrets
 import threading
 import time
 
@@ -8,6 +9,7 @@ from geometry_msgs.msg import Twist
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
+from std_msgs.msg import Bool
 
 from smart_wheelchair_safety.joystick import camera_frame_payload, joystick_to_velocity
 
@@ -44,9 +46,12 @@ PAGE = """<!doctype html>
     }
     h1 {
       margin: 0;
+      max-width: 100%;
       font-size: 24px;
       font-weight: 700;
       letter-spacing: 0;
+      overflow-wrap: anywhere;
+      text-align: center;
     }
     .status {
       min-height: 24px;
@@ -96,6 +101,11 @@ PAGE = """<!doctype html>
       background: #2dd4bf;
       box-shadow: 0 12px 32px rgba(45,212,191,.35), inset 0 -10px 18px rgba(15,23,42,.25);
       transform: translate(0, 0);
+      transition: background .18s ease, box-shadow .18s ease;
+    }
+    body[data-assist="false"] .knob {
+      background: #9ca3af;
+      box-shadow: 0 12px 32px rgba(15,23,42,.28), inset 0 -10px 18px rgba(15,23,42,.20);
     }
     .readout {
       width: 100%;
@@ -120,10 +130,23 @@ PAGE = """<!doctype html>
       font-weight: 700;
       cursor: pointer;
     }
+    button:disabled {
+      cursor: wait;
+      opacity: .65;
+    }
+    .mode-toggle {
+      min-width: 112px;
+      min-height: 40px;
+    }
+    body[data-assist="false"] .mode-toggle {
+      color: #f9fafb;
+      background: #4b5563;
+    }
     .control, .camera {
       display: grid;
       gap: 18px;
       justify-items: center;
+      min-width: 0;
       width: 100%;
     }
     .control {
@@ -131,7 +154,9 @@ PAGE = """<!doctype html>
       justify-self: center;
     }
     .camera canvas {
+      display: block;
       width: 100%;
+      max-width: 100%;
       aspect-ratio: 16 / 9;
       border-radius: 8px;
       background: #020617;
@@ -148,7 +173,7 @@ PAGE = """<!doctype html>
     }
   </style>
 </head>
-<body>
+<body data-assist="true">
   <main>
     <div class="camera">
       <canvas id="camera" width="640" height="360"></canvas>
@@ -157,6 +182,8 @@ PAGE = """<!doctype html>
     <div class="control">
       <h1>SmartWheelChair Joystick</h1>
       <div class="status" id="status">连接中...</div>
+      <button id="mode" class="mode-toggle" type="button"
+              role="switch" aria-checked="true">辅助模式</button>
       <div class="pad" id="pad" aria-label="virtual joystick">
         <div class="axis"></div>
         <div class="knob" id="knob"></div>
@@ -175,6 +202,7 @@ PAGE = """<!doctype html>
     const linearEl = document.getElementById("linear");
     const angularEl = document.getElementById("angular");
     const stopButton = document.getElementById("stop");
+    const modeButton = document.getElementById("mode");
     const cameraCanvas = document.getElementById("camera");
     const cameraStatus = document.getElementById("cameraStatus");
     const cameraContext = cameraCanvas.getContext("2d");
@@ -190,6 +218,11 @@ PAGE = """<!doctype html>
     const clientId = crypto.randomUUID ? crypto.randomUUID() : String(Date.now());
     let dragging = false;
     let current = {x: 0, y: 0};
+    let assistEnabled = true;
+    let modeRevision = null;
+    let modeSession = null;
+    let nextModeSequence = 0;
+    let appliedModeSequence = 0;
 
     function send(x, y) {
       current = {x, y};
@@ -198,7 +231,9 @@ PAGE = """<!doctype html>
       fetch("/cmd", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({...current, client_id: clientId}),
+        body: JSON.stringify({...current, client_id: clientId,
+                              mode_revision: modeRevision,
+                              mode_session: modeSession}),
         keepalive: true
       }).then(() => {
         statusEl.textContent = "已连接";
@@ -208,8 +243,42 @@ PAGE = """<!doctype html>
     }
 
     function center() {
+      dragging = false;
       knob.style.transform = "translate(0px, 0px)";
       send(0, 0);
+    }
+
+    function renderMode(enabled) {
+      assistEnabled = enabled;
+      document.body.dataset.assist = String(enabled);
+      modeButton.textContent = enabled ? "辅助模式" : "手动模式";
+      modeButton.setAttribute("aria-checked", String(enabled));
+    }
+
+    function acceptMode(payload, responseSequence) {
+      if (typeof payload.assist_enabled !== "boolean" ||
+          !Number.isInteger(payload.revision) ||
+          typeof payload.session !== "string") throw new Error("bad mode");
+      if (responseSequence < appliedModeSequence) return;
+      appliedModeSequence = responseSequence;
+      const changed = payload.assist_enabled !== assistEnabled ||
+                      payload.revision !== modeRevision ||
+                      payload.session !== modeSession;
+      modeRevision = payload.revision;
+      modeSession = payload.session;
+      renderMode(payload.assist_enabled);
+      if (changed) center();
+    }
+
+    function refreshMode() {
+      if (modeButton.disabled) return;
+      const responseSequence = ++nextModeSequence;
+      fetch("/mode").then(response => {
+        if (!response.ok) throw new Error("mode unavailable");
+        return response.json();
+      }).then(payload => acceptMode(payload, responseSequence)).catch(() => {
+        statusEl.textContent = "连接错误";
+      });
     }
 
     function hasCommand() {
@@ -247,11 +316,29 @@ PAGE = """<!doctype html>
       center();
     });
     stopButton.addEventListener("click", center);
+    modeButton.addEventListener("click", () => {
+      modeButton.disabled = true;
+      const responseSequence = ++nextModeSequence;
+      fetch("/mode", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({assist_enabled: !assistEnabled})
+      }).then(response => {
+        if (!response.ok) throw new Error("mode rejected");
+        return response.json();
+      }).then(payload => acceptMode(payload, responseSequence)).catch(() => {
+        statusEl.textContent = "连接错误";
+      }).finally(() => {
+        modeButton.disabled = false;
+      });
+    });
     setInterval(() => {
       if (dragging || hasCommand()) send(current.x, current.y);
     }, 100);
     setInterval(updateCamera, 200);
+    setInterval(refreshMode, 1000);
     center();
+    refreshMode();
 
     function updateCamera() {
       fetch("/camera/rear/frame").then(response => {
@@ -377,7 +464,13 @@ class WebJoystickNode(Node):
         self._last_input_time = 0.0
         self._active_client_id = None
         self._camera_frame = None
+        self._assist_enabled = True
+        self._mode_session = secrets.token_hex(8)
+        self._mode_revision = 0
+        self._mode_revision_required = False
+        self._mode_requires_neutral = False
         self._pub = self.create_publisher(Twist, "cmd_vel_raw", 10)
+        self._mode_pub = self.create_publisher(Bool, "assist_enabled", 10)
         self.create_subscription(Image, "camera/rear/image", self._on_camera_image, 10)
         self.create_timer(0.05, self._publish_command)
 
@@ -388,7 +481,8 @@ class WebJoystickNode(Node):
     def _start_http_server(self, port):
         server = ThreadingHTTPServer(
             ("0.0.0.0", port),
-            _handler_class(self._handle_message, self._camera_payload),
+            _handler_class(self._handle_message, self._camera_payload,
+                           self._mode_payload, self._set_mode),
         )
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -403,17 +497,69 @@ class WebJoystickNode(Node):
         with self._lock:
             return self._camera_frame
 
+    def _mode_payload(self):
+        with self._lock:
+            return {
+                "assist_enabled": self._assist_enabled,
+                "revision": self._mode_revision,
+                "session": self._mode_session,
+            }
+
+    def _set_mode(self, message):
+        try:
+            enabled = json.loads(message)["assist_enabled"]
+            if type(enabled) is not bool:
+                return None
+        except (KeyError, TypeError, json.JSONDecodeError):
+            return None
+        with self._lock:
+            changed = enabled != self._assist_enabled
+            self._assist_enabled = enabled
+            if changed:
+                self._mode_revision += 1
+                self._mode_revision_required = True
+                self._last_input = (0.0, 0.0)
+                self._last_input_time = time.monotonic()
+                self._active_client_id = None
+                self._mode_requires_neutral = True
+                self._pub.publish(Twist())
+                self._mode_pub.publish(Bool(data=enabled))
+            return {
+                "assist_enabled": enabled,
+                "revision": self._mode_revision,
+                "session": self._mode_session,
+            }
+
     def _handle_message(self, message):
+        valid = True
         try:
             data = json.loads(message)
             x = float(data.get("x", 0.0))
             y = float(data.get("y", 0.0))
             client_id = data.get("client_id")
+            mode_revision = data.get("mode_revision")
+            mode_session = data.get("mode_session")
+            valid = math.isfinite(x) and math.isfinite(y)
         except (TypeError, ValueError, json.JSONDecodeError):
             x = 0.0
             y = 0.0
             client_id = None
+            mode_revision = None
+            mode_session = None
+            valid = False
         with self._lock:
+            if not valid:
+                return
+            versioned = mode_revision is not None or mode_session is not None
+            if (versioned and (mode_revision != self._mode_revision
+                               or mode_session != self._mode_session)):
+                return
+            if self._mode_revision_required and not versioned:
+                return
+            if self._mode_requires_neutral:
+                if math.hypot(x, y) > 0.001:
+                    return
+                self._mode_requires_neutral = False
             now = time.monotonic()
             has_active_command = (
                 math.hypot(*self._last_input) > 0.001
@@ -432,35 +578,67 @@ class WebJoystickNode(Node):
 
     def _publish_command(self):
         timeout = float(self.get_parameter("command_timeout_s").value)
-        with self._lock:
-            x, y = self._last_input
-            fresh = time.monotonic() - self._last_input_time <= timeout
-        if not fresh:
-            x = 0.0
-            y = 0.0
-
         max_forward_linear = float(self.get_parameter("max_forward_linear_mps").value)
         max_reverse_linear = float(self.get_parameter("max_reverse_linear_mps").value)
         max_angular = float(self.get_parameter("max_angular_rps").value)
         deadzone = float(self.get_parameter("deadzone").value)
-        linear, angular = joystick_to_velocity(
-            x,
-            y,
-            max_forward_linear,
-            max_angular,
-            deadzone,
-            max_reverse_linear,
-        )
+        with self._lock:
+            x, y = self._last_input
+            if time.monotonic() - self._last_input_time > timeout:
+                x = 0.0
+                y = 0.0
+            linear, angular = joystick_to_velocity(
+                x,
+                y,
+                max_forward_linear,
+                max_angular,
+                deadzone,
+                max_reverse_linear,
+            )
 
-        msg = Twist()
-        msg.linear.x = linear
-        msg.angular.z = angular
-        self._pub.publish(msg)
+            msg = Twist()
+            msg.linear.x = linear
+            msg.angular.z = angular
+            self._pub.publish(msg)
+            self._mode_pub.publish(Bool(data=self._assist_enabled))
 
 
-def _handler_class(on_message, camera_payload):
+def _handler_class(on_message, camera_payload, mode_payload, set_mode):
     class JoystickHandler(BaseHTTPRequestHandler):
+        def _send_json(self, status, payload):
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _read_json_body(self):
+            content_type = self.headers.get("Content-Type", "")
+            if content_type.split(";", 1)[0].strip().lower() != "application/json":
+                self._send_json(415, {"error": "application/json required"})
+                return None
+            try:
+                length = int(self.headers.get("Content-Length", ""))
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return None
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return None
+            if length > 4096:
+                self._send_json(413, {"error": "request body too large"})
+                return None
+            try:
+                return self.rfile.read(length).decode("utf-8")
+            except UnicodeDecodeError:
+                self._send_json(400, {"error": "request body must be UTF-8"})
+                return None
+
         def do_GET(self):
+            if self.path == "/mode":
+                self._send_json(200, mode_payload())
+                return
             if self.path == "/camera/rear/frame":
                 payload = camera_payload()
                 if payload is None:
@@ -485,11 +663,22 @@ def _handler_class(on_message, camera_payload):
             self.wfile.write(body)
 
         def do_POST(self):
-            if self.path != "/cmd":
+            if self.path not in ("/cmd", "/mode"):
                 self.send_error(404)
                 return
-            length = int(self.headers.get("Content-Length", "0"))
-            on_message(self.rfile.read(length).decode("utf-8"))
+            message = self._read_json_body()
+            if message is None:
+                return
+            if self.path == "/mode":
+                result = set_mode(message)
+                if result is None:
+                    self._send_json(400, {
+                        "error": "assist_enabled must be boolean",
+                    })
+                else:
+                    self._send_json(200, result)
+                return
+            on_message(message)
             self.send_response(204)
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()

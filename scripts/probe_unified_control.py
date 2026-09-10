@@ -32,7 +32,7 @@ def main():
     import rclpy
     from rclpy.node import Node
     from rclpy.qos import qos_profile_sensor_data
-    from geometry_msgs.msg import Twist
+    from geometry_msgs.msg import Twist, TwistStamped
     from nav_msgs.msg import Odometry
     from sensor_msgs.msg import LaserScan
     from std_msgs.msg import String
@@ -63,8 +63,12 @@ def main():
             mode_history.append({'t': round(time.monotonic()-start, 3),
                                  'mode': data['status'].get('mode', 'missing')})
 
-    for topic in ['cmd_vel_raw', 'cmd_vel_planned', 'cmd_vel']:
+    for topic in ['cmd_vel_raw', 'cmd_vel']:
         node.create_subscription(Twist, topic, lambda m, t=topic: data.update({t: [m.linear.x, m.angular.z]}), 10)
+    node.create_subscription(
+        TwistStamped, 'cmd_vel_planned',
+        lambda m: data.update(cmd_vel_planned=[m.twist.linear.x,
+                                                m.twist.angular.z]), 10)
     node.create_subscription(String, 'shared_control/status', on_status, 10)
     node.create_subscription(Odometry, 'odom', lambda m: data.update(odom=[
         m.pose.pose.position.x, m.pose.pose.position.y,

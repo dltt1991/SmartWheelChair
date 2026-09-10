@@ -10,9 +10,11 @@ about 0.275 m of unwanted straight travel.
 
 ## Decision
 
-Keep the existing door phases and safety geometry. During `door_clear`, blend
-the angular command from the locked door-path curvature to the driver's raw
-angular command according to rear-clearance progress:
+Keep the existing door phases and safety geometry. Once `door_pass` geometry
+shows that the rear axle has crossed the door plane, blend the angular command
+from the locked door-path curvature to the driver's raw angular command
+according to rear-clearance progress. This must not depend on the 2 Hz phase
+label reaching `door_clear`:
 
 - at the door plane (`progress <= 0`), use only the door-path angular command;
 - between the plane and the existing 0.29 m rear-clear threshold, linearly
@@ -28,10 +30,11 @@ braking check, so blending does not authorize an unsafe rear-corner sweep.
 ## Code Shape
 
 Add one small door angular-command helper in `unified_control_node.py`. It
-computes the existing preview curvature and applies the progress blend only in
-`door_clear`; `door_align` and `door_pass` remain unchanged. Use the helper in
-both the normal planner path and the planner-timeout door fallback so their
-behavior stays consistent.
+computes the existing preview curvature and applies the progress blend in the
+committed pass/clear phases whenever live progress is positive; `door_align`
+and pre-plane `door_pass` remain unchanged. Use the helper in both the normal
+planner path and the planner-timeout door fallback so their behavior stays
+consistent.
 
 Do not change timer frequencies, door detection, path generation, clear
 distance, footprint dimensions, margins, or speed limits.
@@ -51,7 +54,8 @@ distance, footprint dimensions, margins, or speed limits.
 
 Add deterministic node tests that prove:
 
-- `door_pass` still ignores post-door handoff logic;
+- pre-plane `door_pass` still ignores post-door handoff logic;
+- post-plane `door_pass` does not wait for the `door_clear` phase update;
 - `door_clear` has no joystick contribution at the plane;
 - joystick contribution increases midway through rear clearance;
 - the full joystick angular command is available at the 0.29 m threshold;
