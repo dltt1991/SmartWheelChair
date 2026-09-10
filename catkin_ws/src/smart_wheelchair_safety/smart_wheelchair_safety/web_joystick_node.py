@@ -6,8 +6,7 @@ import threading
 import time
 
 from geometry_msgs.msg import Twist
-import rclpy
-from rclpy.node import Node
+import rospy
 from sensor_msgs.msg import Image
 from std_msgs.msg import Bool
 
@@ -449,16 +448,8 @@ PAGE = """<!doctype html>
 """
 
 
-class WebJoystickNode(Node):
+class WebJoystickNode:
     def __init__(self):
-        super().__init__("web_joystick_node")
-        self.declare_parameter("http_port", 8090)
-        self.declare_parameter("max_forward_linear_mps", 1.6666667)
-        self.declare_parameter("max_reverse_linear_mps", 0.8333333)
-        self.declare_parameter("max_angular_rps", 1.4)
-        self.declare_parameter("deadzone", 0.08)
-        self.declare_parameter("command_timeout_s", 1.0)
-
         self._lock = threading.Lock()
         self._last_input = (0.0, 0.0)
         self._last_input_time = 0.0
@@ -469,14 +460,18 @@ class WebJoystickNode(Node):
         self._mode_revision = 0
         self._mode_revision_required = False
         self._mode_requires_neutral = False
-        self._pub = self.create_publisher(Twist, "cmd_vel_raw", 10)
-        self._mode_pub = self.create_publisher(Bool, "assist_enabled", 10)
-        self.create_subscription(Image, "camera/rear/image", self._on_camera_image, 10)
-        self.create_timer(0.05, self._publish_command)
+        self._pub = rospy.Publisher("/cmd_vel_raw", Twist, queue_size=10,
+                                    latch=False)
+        self._mode_pub = rospy.Publisher("/assist_enabled", Bool,
+                                         queue_size=10, latch=False)
+        self._camera_sub = rospy.Subscriber(
+            "/camera/rear/image", Image, self._on_camera_image, queue_size=10)
+        self._timer = rospy.Timer(rospy.Duration(0.05), self._publish_command)
+        rospy.on_shutdown(self._shutdown)
 
-        http_port = int(self.get_parameter("http_port").value)
+        http_port = int(rospy.get_param("~http_port", 8090))
         self._start_http_server(http_port)
-        self.get_logger().info(f"Web joystick: http://localhost:{http_port}")
+        rospy.loginfo("Web joystick: http://localhost:%d", http_port)
 
     def _start_http_server(self, port):
         server = ThreadingHTTPServer(
@@ -564,7 +559,7 @@ class WebJoystickNode(Node):
             has_active_command = (
                 math.hypot(*self._last_input) > 0.001
                 and now - self._last_input_time
-                <= float(self.get_parameter("command_timeout_s").value)
+                <= float(rospy.get_param("~command_timeout_s", 1.0))
             )
             if math.hypot(x, y) <= 0.001 and has_active_command:
                 if client_id is None or client_id != self._active_client_id:
@@ -576,12 +571,14 @@ class WebJoystickNode(Node):
             self._last_input = (x, y)
             self._last_input_time = now
 
-    def _publish_command(self):
-        timeout = float(self.get_parameter("command_timeout_s").value)
-        max_forward_linear = float(self.get_parameter("max_forward_linear_mps").value)
-        max_reverse_linear = float(self.get_parameter("max_reverse_linear_mps").value)
-        max_angular = float(self.get_parameter("max_angular_rps").value)
-        deadzone = float(self.get_parameter("deadzone").value)
+    def _publish_command(self, _event=None):
+        timeout = float(rospy.get_param("~command_timeout_s", 1.0))
+        max_forward_linear = float(rospy.get_param(
+            "~max_forward_linear_mps", 1.6666667))
+        max_reverse_linear = float(rospy.get_param(
+            "~max_reverse_linear_mps", 0.8333333))
+        max_angular = float(rospy.get_param("~max_angular_rps", 1.4))
+        deadzone = float(rospy.get_param("~deadzone", 0.08))
         with self._lock:
             x, y = self._last_input
             if time.monotonic() - self._last_input_time > timeout:
@@ -601,6 +598,12 @@ class WebJoystickNode(Node):
             msg.angular.z = angular
             self._pub.publish(msg)
             self._mode_pub.publish(Bool(data=self._assist_enabled))
+
+    def _shutdown(self):
+        with self._lock:
+            self._last_input = (0.0, 0.0)
+            self._last_input_time = 0.0
+            self._pub.publish(Twist())
 
 
 def _handler_class(on_message, camera_payload, mode_payload, set_mode):
@@ -689,11 +692,7 @@ def _handler_class(on_message, camera_payload, mode_payload, set_mode):
     return JoystickHandler
 
 
-def main(args=None):
-    rclpy.init(args=args)
+def main():
+    rospy.init_node("web_joystick_node")
     node = WebJoystickNode()
-    try:
-        rclpy.spin(node)
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    rospy.spin()

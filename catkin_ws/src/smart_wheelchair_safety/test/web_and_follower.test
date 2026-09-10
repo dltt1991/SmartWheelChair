@@ -1,0 +1,6 @@
+<launch>
+  <test pkg="smart_wheelchair_safety" type="test_web_joystick.py"
+        test-name="web_joystick" time-limit="60" />
+  <test pkg="smart_wheelchair_safety" type="test_local_path_follower_node.py"
+        test-name="local_path_follower_node" time-limit="60" />
+</launch>

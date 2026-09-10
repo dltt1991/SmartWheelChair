@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import importlib.util
 import json
 import threading
@@ -10,15 +11,21 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 
-ROS_AVAILABLE = importlib.util.find_spec("rclpy") is not None
+ROS_AVAILABLE = importlib.util.find_spec("rospy") is not None
+
+if ROS_AVAILABLE:
+    import rospy
+
+    rospy.init_node("test_web_joystick", anonymous=True, disable_signals=True)
 
 
 @unittest.skipUnless(ROS_AVAILABLE, "requires ROS")
 class WebModeStateTest(unittest.TestCase):
     def setUp(self):
-        import rclpy
+        import rospy
         from smart_wheelchair_safety.web_joystick_node import WebJoystickNode
-        rclpy.init()
+        self.timer_patch = patch.object(rospy, "Timer")
+        self.timer_patch.start()
         self.server_patch = patch.object(WebJoystickNode, "_start_http_server")
         self.server_patch.start()
         self.node = WebJoystickNode()
@@ -36,10 +43,8 @@ class WebModeStateTest(unittest.TestCase):
         self.node._handle_message(json.dumps(payload))
 
     def tearDown(self):
-        import rclpy
-        self.node.destroy_node()
         self.server_patch.stop()
-        rclpy.shutdown()
+        self.timer_patch.stop()
 
     def test_mode_change_stops_and_requires_neutral(self):
         self.command(0.3, 0.5, revision=0,
@@ -104,6 +109,14 @@ class WebModeStateTest(unittest.TestCase):
         self.node._publish_command()
 
         self.assertTrue(self.modes[-1].data)
+
+    def test_shutdown_publishes_zero(self):
+        self.command(0.3, 0.5)
+
+        self.node._shutdown()
+
+        self.assertEqual((self.commands[-1].linear.x,
+                          self.commands[-1].angular.z), (0.0, 0.0))
 
     def test_mode_switch_cannot_be_overwritten_by_stale_timer_heartbeat(self):
         publish_started = threading.Event()
@@ -249,3 +262,9 @@ class WebModePageTest(unittest.TestCase):
 
         self.assertIn('min-width: 0;', PAGE)
         self.assertIn('overflow-wrap: anywhere;', PAGE)
+
+
+if __name__ == "__main__":
+    import rostest
+
+    rostest.rosrun("smart_wheelchair_safety", "web_joystick", "__main__")

@@ -252,7 +252,7 @@ def intended_front_door(openings, v, w, corridor_tolerance=.25):
     return min(matches, key=lambda item: item[0], default=(None, None))[1]
 
 
-def active_aperture_targeted(door, v, w) -> bool | None:
+def active_aperture_targeted(door, v, w):
     """Return True for in-aperture traversal, False for departure, None if unknown.
 
     No acquisition range/progress filters or speed floor apply to an active

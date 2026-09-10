@@ -8,8 +8,15 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_python_setup()
 catkin_package(CATKIN_DEPENDS geometry_msgs nav_msgs rospy sensor_msgs std_msgs tf2_ros)
 
+catkin_install_python(PROGRAMS
+  nodes/local_path_follower_node
+  nodes/web_joystick_node
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
   catkin_add_nosetests(test/test_joystick.py)
   catkin_add_nosetests(test/test_unified_geometry.py)
+  add_rostest(test/web_and_follower.test)
 endif()
