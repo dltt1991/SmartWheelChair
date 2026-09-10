@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import importlib.util
 import math
 import threading
@@ -8,28 +9,36 @@ from unittest.mock import patch
 import numpy as np
 
 
-@unittest.skipUnless(importlib.util.find_spec('rclpy'), 'requires ROS')
+ROS_AVAILABLE = importlib.util.find_spec('rospy') is not None
+if ROS_AVAILABLE:
+    import rospy
+    rospy.init_node('test_unified_control', anonymous=True, disable_signals=True)
+
+
+def parameter(node, name):
+    return node.parameter(name)
+
+
+@unittest.skipUnless(ROS_AVAILABLE, 'requires ROS')
 class UnifiedNodeTest(unittest.TestCase):
     def setUp(self):
-        import rclpy
         from smart_wheelchair_safety.unified_control_node import UnifiedControlNode
-        rclpy.init(args=['--ros-args', '-r', '__ns:=/unified_regression'])
-        self.node = UnifiedControlNode()
+        with patch.object(rospy, 'Timer') as timer:
+            self.node = UnifiedControlNode()
+        self.timer_calls = timer.call_args_list
         self.commands = []
         self.node.pub = SimpleNamespace(publish=self.commands.append)
         self.node.pose = (0., 0., 0.)
         now = time.monotonic()
         self.node.raw_time = self.node.odom_time = self.node.plan_time = now
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.scans = {side: (now, np.array([[3., 2.], [3., -2.]])) for side in ('left', 'right')}
         self.node.raw = np.array([.5, 0.])
         self.node.planned = np.array([.5, 0.])
         self.node.mode = 'wall'
 
     def tearDown(self):
-        import rclpy
         self.node.destroy_node()
-        rclpy.shutdown()
 
     def wall_opening(self, side=1):
         from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings
@@ -80,7 +89,7 @@ class UnifiedNodeTest(unittest.TestCase):
     def finish_door_plan(self):
         self.node.door_plan_request[0].result(timeout=2.)
         self.node.raw_time = self.node.odom_time = time.monotonic()
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.update_reference()
 
     def send_raw(self, linear, angular):
@@ -243,7 +252,7 @@ class UnifiedNodeTest(unittest.TestCase):
         self.send_raw(.5, 0.)
         now = time.monotonic()
         self.node.raw_time = self.node.odom_time = self.node.plan_time = now
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.scans = {
             side: (now, np.array([[3., 2.], [3., -2.]]))
             for side in ('left', 'right')
@@ -252,10 +261,8 @@ class UnifiedNodeTest(unittest.TestCase):
 
         self.assertNotEqual(self.node.mode, 'manual_direct')
 
-    def test_assist_restoration_ignores_old_plan_until_new_goal_is_accepted(self):
-        from concurrent.futures import Future
+    def test_assist_restoration_ignores_old_plan_until_new_reference_is_published(self):
         from geometry_msgs.msg import TwistStamped
-        from rclpy.time import Time
         from std_msgs.msg import Bool
         self.node.on_assist_enabled(Bool(data=False))
         self.send_raw(0., 0.)
@@ -269,36 +276,28 @@ class UnifiedNodeTest(unittest.TestCase):
         np.testing.assert_array_equal(self.node.planned, [0., 0.])
         self.assertEqual(self.node.plan_time, 0.)
 
-        accepted = SimpleNamespace(accepted=True)
-        response = Future()
-        response.set_result(accepted)
-        self.node.client = SimpleNamespace(
-            server_is_ready=lambda: True,
-            send_goal_async=lambda _: response,
-        )
         self.send_raw(.5, 0.)
         now = time.monotonic()
         self.node.raw_time = self.node.odom_time = self.node.plan_time = now
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.update_reference()
 
         self.node.on_planned(old)
 
         np.testing.assert_array_equal(self.node.planned, [0., 0.])
         fresh = TwistStamped()
-        fresh.header.stamp = Time(
-            nanoseconds=self.node.planned_after_stamp + 1).to_msg()
+        fresh.header.stamp = rospy.Time.from_sec(self.node.planned_after_stamp + .001)
         fresh.twist.linear.x = .7
         self.node.on_planned(fresh)
 
         self.assertAlmostEqual(self.node.planned[0], .7)
 
-    def test_startup_and_cancel_ignore_plans_until_new_goal_is_accepted(self):
+    def test_startup_and_cancel_ignore_plans_until_new_reference_is_published(self):
         from geometry_msgs.msg import TwistStamped
         self.node.planned[:] = 0.
         self.node.plan_time = 0.
         command = TwistStamped()
-        command.header.stamp = self.node.get_clock().now().to_msg()
+        command.header.stamp = rospy.Time.now()
         command.twist.linear.x = .7
 
         self.node.on_planned(command)
@@ -310,7 +309,7 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertAlmostEqual(self.node.planned[0], .7)
 
         self.node.cancel()
-        command.header.stamp = self.node.get_clock().now().to_msg()
+        command.header.stamp = rospy.Time.now()
         self.node.on_planned(command)
 
         self.assertFalse(self.node.accept_planned)
@@ -546,7 +545,7 @@ class UnifiedNodeTest(unittest.TestCase):
         frozen = self.node.door
 
         self.observe_front_door(center=(1.15, .12), heading=.1, width=1.)
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.update_reference()
 
         self.assertEqual(self.node.door, frozen)
@@ -555,13 +554,12 @@ class UnifiedNodeTest(unittest.TestCase):
     def test_oblique_door_reference_stays_fixed_while_chair_advances(self):
         references = []
         self.node.reference = SimpleNamespace(publish=references.append)
-        self.node.client = SimpleNamespace(server_is_ready=lambda: False)
         self.confirm_door(center=(2.32, .34), heading=math.radians(45.), width=1.22)
 
         self.node.update_reference()
         self.node.door_plan_request[0].result(timeout=1.)
         self.node.raw_time = self.node.odom_time = time.monotonic()
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.update_reference()
         first = np.array([(pose.pose.position.x, pose.pose.position.y)
                           for pose in references[-1].poses])
@@ -572,62 +570,45 @@ class UnifiedNodeTest(unittest.TestCase):
 
         np.testing.assert_allclose(second, first, atol=1e-9)
 
-    def test_locked_door_reference_is_not_resubmitted_after_takeover(self):
-        requests = []
-        handle = SimpleNamespace(accepted=True, cancel_goal_async=lambda: None)
-
-        class Future:
-            def add_done_callback(self, callback):
-                callback(SimpleNamespace(result=lambda: handle))
-
-        self.node.client = SimpleNamespace(
-            server_is_ready=lambda: True,
-            send_goal_async=lambda request: (requests.append(request), Future())[1])
+    def test_locked_door_reference_stays_fixed_after_takeover(self):
+        references = []
+        self.node.reference = SimpleNamespace(publish=references.append)
         self.confirm_door(center=(2.32, .34), heading=math.radians(45.), width=1.22)
 
         self.node.update_reference()
         self.finish_door_plan()
+        frozen = references[-1]
+        epoch = self.node.epoch
         self.node.update_reference()
 
-        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(references), 3)
+        self.assertEqual(self.node.epoch, epoch)
+        self.assertEqual([pose.pose for pose in references[-1].poses],
+                         [pose.pose for pose in frozen.poses])
 
     def test_door_acquisition_replaces_navigation_only_after_path_is_feasible(self):
-        requests = []
-        cancelled = []
-        old_goal = SimpleNamespace(cancel_goal_async=lambda: cancelled.append('old'))
-        pending_goal = SimpleNamespace(
-            accepted=True, cancel_goal_async=lambda: cancelled.append('pending'))
-        door_goal = SimpleNamespace(accepted=True)
-        handles = iter((pending_goal, door_goal))
-
-        class Future:
-            def __init__(self, handle):
-                self.handle = handle
-
-            def add_done_callback(self, callback):
-                callback(SimpleNamespace(result=lambda: self.handle))
-
-        self.node.goal = old_goal
-        self.node.client = SimpleNamespace(
-            server_is_ready=lambda: True,
-            send_goal_async=lambda request: (requests.append(request), Future(next(handles)))[1])
+        references = []
+        self.node.reference = SimpleNamespace(publish=references.append)
+        epoch = self.node.epoch
         self.confirm_door(center=(2.32, .34), heading=math.radians(45.), width=1.22)
 
         self.node.update_reference()
+        self.assertEqual(self.node.epoch, epoch)
+        self.assertEqual(self.node.mode, 'manual')
         self.node.door_plan_request[0].result(timeout=1.)
         self.node.raw_time = self.node.odom_time = time.monotonic()
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.update_reference()
 
-        self.assertEqual(cancelled, ['pending'])
-        self.assertEqual(len(requests), 2)
-        self.assertIs(self.node.goal, door_goal)
+        self.assertEqual(self.node.epoch, epoch + 1)
+        self.assertEqual(len(references), 2)
+        self.assertTrue(self.node.mode.startswith('door_'))
+        self.assertTrue(self.node.accept_planned)
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
 
     def test_door_takeover_waits_for_a_feasible_reference(self):
         from smart_wheelchair_safety.unified_geometry import arc_path
-        cancelled = []
-        old_goal = SimpleNamespace(cancel_goal_async=lambda: cancelled.append(True))
-        self.node.goal = old_goal
+        epoch = self.node.epoch
         self.confirm_door(center=(4.32, -.68), heading=0., width=1.11)
 
         with patch.object(self.node, '_local_door_path', return_value=arc_path(.5, 0.)):
@@ -635,8 +616,7 @@ class UnifiedNodeTest(unittest.TestCase):
             self.node.update_reference()
 
         self.assertEqual(self.node.mode, 'manual')
-        self.assertIs(self.node.goal, old_goal)
-        self.assertEqual(cancelled, [])
+        self.assertEqual(self.node.epoch, epoch)
 
     def test_aligned_door_commits_within_staging_heading_control_band(self):
         self.confirm_door(center=(1.15, 0.), heading=0., width=1.)
@@ -716,7 +696,7 @@ class UnifiedNodeTest(unittest.TestCase):
                     side: (self.node.raw_time, points)
                     for side, (_, points) in self.node.scans.items()
                 }
-                self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+                self.node.odom_stamp = rospy.Time.now().to_sec()
                 self.node.output[:] = 0.
                 self.node.acceleration[:] = 0.
                 with patch.object(self.node, '_door_angular', return_value=.4) as angular:
@@ -728,7 +708,7 @@ class UnifiedNodeTest(unittest.TestCase):
                             for side, (_, points) in self.node.scans.items()
                         }
                         self.node.odom_stamp = (
-                            self.node.get_clock().now().nanoseconds / 1e9)
+                            rospy.Time.now().to_sec())
                         self.node.last_tick -= .1
                         self.node.control()
                 self.assertTrue(angular.called)
@@ -1002,7 +982,7 @@ class UnifiedNodeTest(unittest.TestCase):
 
         for _ in range(30):
             self.node.raw_time = self.node.odom_time = time.monotonic()
-            self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+            self.node.odom_stamp = rospy.Time.now().to_sec()
             self.node.last_tick -= .1
             self.node.control()
 
@@ -1020,7 +1000,7 @@ class UnifiedNodeTest(unittest.TestCase):
 
         for _ in range(30):
             self.node.raw_time = self.node.odom_time = time.monotonic()
-            self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+            self.node.odom_stamp = rospy.Time.now().to_sec()
             self.node.last_tick -= .1
             self.node.control()
 
@@ -1251,7 +1231,48 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertLess(elapsed, .05)
 
     def test_reference_timer_runs_at_five_hz(self):
-        self.assertAlmostEqual(self.node.reference_timer.timer_period_ns / 1e9, .2)
+        self.assertAlmostEqual(self.timer_calls[0].args[0].to_sec(), .2)
+        self.assertAlmostEqual(self.timer_calls[1].args[0].to_sec(), .05)
+
+    def test_reference_publishes_ros1_path_and_float_speed_limit(self):
+        from nav_msgs.msg import Path
+        from std_msgs.msg import Float32
+        references, limits = [], []
+        self.node.reference = SimpleNamespace(publish=references.append)
+        self.node.limit_pub = SimpleNamespace(publish=limits.append)
+
+        self.node.update_reference()
+
+        self.assertIsInstance(references[-1], Path)
+        self.assertEqual(references[-1].header.frame_id, 'odom')
+        self.assertIsInstance(limits[-1], Float32)
+        self.assertAlmostEqual(limits[-1].data,
+                               min(self.node.raw[0], parameter(self.node, 'max_speed')))
+        self.assertTrue(self.node.accept_planned)
+        self.assertGreaterEqual(self.node.planned_after_stamp,
+                                references[-1].header.stamp.to_sec())
+
+    def test_non_positive_or_non_finite_parameters_are_rejected(self):
+        from smart_wheelchair_safety.unified_control_node import UnifiedControlNode
+        for value in (0., -.1, float('nan'), float('inf')):
+            with self.subTest(value=value), patch.object(rospy, 'get_param', return_value=value):
+                with self.assertRaisesRegex(ValueError, 'finite and positive'):
+                    UnifiedControlNode()
+
+    def test_shutdown_stops_once_and_discards_queued_callbacks(self):
+        from geometry_msgs.msg import Twist
+        self.node.raw[:] = 0.
+        queued = self.node._serialized(self.node.on_raw)
+        command = Twist()
+        command.linear.x = .7
+
+        self.node.destroy_node()
+        queued(command)
+        self.node.destroy_node()
+
+        np.testing.assert_array_equal(self.node.raw, [0., 0.])
+        self.assertEqual(len(self.commands), 1)
+        self.assertEqual(self.commands[-1].linear.x, 0.)
 
     def test_command_ramp_reaches_acceleration_limits_within_point_two_seconds(self):
         self.node.raw = np.array([.8, .65])
@@ -1287,7 +1308,7 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.raw = np.array([0., .4])
         self.node.plan_time = 0.
         self.node.raw_time = self.node.odom_time = time.monotonic()
-        self.node.odom_stamp = self.node.get_clock().now().nanoseconds / 1e9
+        self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.last_tick -= .05
         self.node.control()
         self.assertEqual(self.commands[-1].linear.x, 0.)
@@ -1322,7 +1343,7 @@ class UnifiedNodeTest(unittest.TestCase):
         transform.transform.rotation.w = 1.
         self.node.tf = SimpleNamespace(lookup_transform=lambda *args: transform)
         scan = LaserScan()
-        scan.header.stamp = self.node.get_clock().now().to_msg()
+        scan.header.stamp = rospy.Time.now()
         scan.range_min, scan.range_max = .05, 8.
         scan.ranges = [float('inf')] * 10
         scan.angle_increment = .1
@@ -1334,7 +1355,7 @@ class UnifiedNodeTest(unittest.TestCase):
     def test_corrupt_scan_does_not_refresh_watchdog(self):
         from sensor_msgs.msg import LaserScan
         scan = LaserScan()
-        scan.header.stamp = self.node.get_clock().now().to_msg()
+        scan.header.stamp = rospy.Time.now()
         scan.range_min, scan.range_max = .05, 8.
         scan.ranges = [float('nan')] * 10
         self.node.scans.clear()
@@ -1374,3 +1395,8 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.output = np.array([.8, .2])
         self.node.control()
         np.testing.assert_array_equal(self.node.output, [0., 0.])
+
+
+if __name__ == '__main__':
+    import rostest
+    rostest.rosrun('smart_wheelchair_safety', 'unified_control', UnifiedNodeTest)

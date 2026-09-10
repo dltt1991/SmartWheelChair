@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import unittest
 
 import numpy as np
@@ -34,3 +35,8 @@ class LocalPathFollowerTest(unittest.TestCase):
                                                    np.empty((0, 2)), .8), [0., 0.])
         path = np.array([[0., 0., float("nan")]])
         np.testing.assert_allclose(select_velocity(path, np.empty((0, 2)), .8), [0., 0.])
+
+
+if __name__ == '__main__':
+    import rostest
+    rostest.rosrun('smart_wheelchair_safety', 'local_path_follower', LocalPathFollowerTest)

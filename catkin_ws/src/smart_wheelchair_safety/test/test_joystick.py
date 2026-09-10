@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import unittest
 from pathlib import Path
 
@@ -76,3 +77,8 @@ class JoystickMappingTest(unittest.TestCase):
         self.assertIn('drawPath(rearAxlePath, "#00ffff", width, height);', page_source)
         self.assertIn('drawPath(leftPath, "#ffff00", width, height);', page_source)
         self.assertIn('drawPath(rightPath, "#ff0000", width, height);', page_source)
+
+
+if __name__ == '__main__':
+    import rostest
+    rostest.rosrun('smart_wheelchair_safety', 'joystick', JoystickMappingTest)

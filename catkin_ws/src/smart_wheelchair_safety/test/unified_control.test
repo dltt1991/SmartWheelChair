@@ -1,0 +1,5 @@
+<launch>
+  <test pkg="smart_wheelchair_safety" type="test_unified_node.py"
+        ns="unified_regression"
+        test-name="unified_control" time-limit="180" />
+</launch>

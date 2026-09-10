@@ -1,22 +1,17 @@
-"""Shared-control references for Nav2 MPPI, followed by an independent guard."""
+"""Shared-control references for the local follower, with an independent guard."""
 
 from concurrent.futures import ThreadPoolExecutor
 import copy
 import json
 import math
+import threading
 import time
 import numpy as np
-import rclpy
-from rclpy.action import ActionClient
-from rclpy.node import Node
-from rclpy.time import Time
-from rclpy.qos import qos_profile_sensor_data
+import rospy
 from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, TwistStamped
 from nav_msgs.msg import Odometry, Path
-from nav2_msgs.action import FollowPath
-from nav2_msgs.msg import SpeedLimit
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, Float32, String
 from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, TransformListener, TransformException
 
 from smart_wheelchair_safety.unified_geometry import (
@@ -38,18 +33,25 @@ REFERENCE_PERIOD = .2
 JERK_LIMITS = np.array([2.5, 4.0])
 
 
-class UnifiedControlNode(Node):
+class UnifiedControlNode:
     def __init__(self):
-        super().__init__('unified_control')
-        for name, value in {'max_speed': .8, 'scan_timeout': .45,
-                            'odom_timeout': .10,
-                            'command_timeout': .3, 'braking_deceleration': .5,
-                            'reaction_time': .2, 'hard_margin': .04,
-                            'wall_clearance': .12,
-                            'front_stop_margin': .12}.items():
-            self.declare_parameter(name, value)
-            if not math.isfinite(self.get_parameter(name).value) or self.get_parameter(name).value <= 0:
-                raise ValueError(f'{name} must be finite and positive')
+        defaults = {'max_speed': .8, 'scan_timeout': .45,
+                    'odom_timeout': .10,
+                    'command_timeout': .3, 'braking_deceleration': .5,
+                    'reaction_time': .2, 'hard_margin': .04,
+                    'wall_clearance': .12,
+                    'front_stop_margin': .12}
+        self.parameters = {
+            name: float(rospy.get_param('~' + name, default))
+            for name, default in defaults.items()
+        }
+        if any(not math.isfinite(value) or value <= 0.
+               for value in self.parameters.values()):
+            raise ValueError('control parameters must be finite and positive')
+        # rospy dispatches subscribers and timers on separate threads. Preserve
+        # the serialized state transitions of the original executor.
+        self.callback_lock = threading.RLock()
+        self.stopped = False
         self.raw = np.zeros(2)
         self.measured = np.zeros(2)
         self.planned = np.zeros(2)
@@ -89,14 +91,12 @@ class UnifiedControlNode(Node):
         self.accept_planned = False
         self.override = False
         self.reason = 'starting'
-        self.goal = None
-        self.pending_goal = False
         self.epoch = 0
-        self.last_tick = self.get_clock().now().nanoseconds / 1e9
+        self.last_tick = rospy.Time.now().to_sec()
         self.tf = Buffer()
-        self.listener = TransformListener(self.tf, self)
-        self.transforms = TransformBroadcaster(self)
-        self.static = StaticTransformBroadcaster(self)
+        self.listener = TransformListener(self.tf)
+        self.transforms = TransformBroadcaster()
+        self.static = StaticTransformBroadcaster()
         frames = []
         for side, y in [('left', .26), ('right', -.26)]:
             t = TransformStamped()
@@ -107,22 +107,40 @@ class UnifiedControlNode(Node):
             t.transform.rotation.w = 1.
             frames.append(t)
         self.static.sendTransform(frames)
-        self.pub = self.create_publisher(Twist, 'cmd_vel', 10)
-        self.status = self.create_publisher(String, 'shared_control/status', 10)
-        self.reference = self.create_publisher(Path, 'shared_control/reference', 10)
-        self.limit_pub = self.create_publisher(SpeedLimit, 'speed_limit', 10)
-        self.scan_pubs = {side: self.create_publisher(LaserScan, f'unified_scan_{side}', 10)
+        self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
+        self.status = rospy.Publisher('shared_control/status', String, queue_size=10)
+        self.reference = rospy.Publisher('shared_control/reference', Path, queue_size=10)
+        self.limit_pub = rospy.Publisher('speed_limit', Float32, queue_size=10)
+        self.scan_pubs = {side: rospy.Publisher(f'unified_scan_{side}', LaserScan, queue_size=10)
                           for side in ('left', 'right')}
-        self.create_subscription(Twist, 'cmd_vel_raw', self.on_raw, 10)
-        self.create_subscription(TwistStamped, 'cmd_vel_planned', self.on_planned, 10)
-        self.create_subscription(Bool, 'assist_enabled', self.on_assist_enabled, 10)
-        self.create_subscription(Odometry, 'odom', self.on_odom, 10)
+        self.publishers = [self.pub, self.status, self.reference, self.limit_pub,
+                           *self.scan_pubs.values()]
+        self.subscribers = [
+            rospy.Subscriber(topic, message, self._serialized(callback), queue_size=10)
+            for topic, message, callback in (
+                ('cmd_vel_raw', Twist, self.on_raw),
+                ('cmd_vel_planned', TwistStamped, self.on_planned),
+                ('assist_enabled', Bool, self.on_assist_enabled),
+                ('odom', Odometry, self.on_odom))
+        ]
         for side in ('left', 'right'):
-            self.create_subscription(LaserScan, f'scan_{side}',
-                                     lambda msg, side=side: self.on_scan(msg, side), qos_profile_sensor_data)
-        self.client = ActionClient(self, FollowPath, 'follow_path')
-        self.reference_timer = self.create_timer(REFERENCE_PERIOD, self.update_reference)
-        self.create_timer(.05, self.control)
+            self.subscribers.append(rospy.Subscriber(
+                f'scan_{side}', LaserScan,
+                self._serialized(lambda msg, side=side: self.on_scan(msg, side)), queue_size=1))
+        self.reference_timer = rospy.Timer(
+            rospy.Duration(REFERENCE_PERIOD), self._serialized(lambda _: self.update_reference()))
+        self.control_timer = rospy.Timer(
+            rospy.Duration(.05), self._serialized(lambda _: self.control()))
+
+    def parameter(self, name):
+        return self.parameters[name]
+
+    def _serialized(self, callback):
+        def invoke(*args):
+            with self.callback_lock:
+                if not self.stopped:
+                    return callback(*args)
+        return invoke
 
     def on_raw(self, msg):
         self.raw = np.array([msg.linear.x, msg.angular.z])
@@ -208,7 +226,7 @@ class UnifiedControlNode(Node):
         self.pub.publish(Twist())
 
     def on_planned(self, msg):
-        stamp = Time.from_msg(msg.header.stamp).nanoseconds
+        stamp = msg.header.stamp.to_sec()
         if (not self.assist_enabled or not self.mode_neutral_seen
                 or not self.accept_planned
                 or stamp <= self.planned_after_stamp):
@@ -219,9 +237,9 @@ class UnifiedControlNode(Node):
     def on_odom(self, msg):
         q = msg.pose.pose.orientation
         p = msg.pose.pose.position
-        age = (self.get_clock().now().nanoseconds-Time.from_msg(msg.header.stamp).nanoseconds)/1e9
+        age = (rospy.Time.now().to_sec() - msg.header.stamp.to_sec())
         values = [p.x, p.y, q.x, q.y, q.z, q.w, msg.twist.twist.linear.x, msg.twist.twist.angular.z]
-        if not -.05 <= age <= self.get_parameter('odom_timeout').value or not np.isfinite(values).all():
+        if not -.05 <= age <= self.parameter('odom_timeout') or not np.isfinite(values).all():
             return
         if abs(q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w-1.) > .01:
             return
@@ -229,7 +247,7 @@ class UnifiedControlNode(Node):
         self.pose = (p.x, p.y, yaw)
         self.measured = np.array([msg.twist.twist.linear.x, msg.twist.twist.angular.z])
         self.odom_time = time.monotonic()
-        self.odom_stamp = Time.from_msg(msg.header.stamp).nanoseconds / 1e9
+        self.odom_stamp = msg.header.stamp.to_sec()
         t = TransformStamped()
         t.header = msg.header
         t.header.frame_id = 'odom'
@@ -239,8 +257,8 @@ class UnifiedControlNode(Node):
         self.transforms.sendTransform(t)
 
     def on_scan(self, msg, side):
-        scan_age = (self.get_clock().now().nanoseconds - Time.from_msg(msg.header.stamp).nanoseconds) / 1e9
-        if not -.05 <= scan_age <= self.get_parameter('scan_timeout').value:
+        scan_age = (rospy.Time.now().to_sec() - msg.header.stamp.to_sec())
+        if not -.05 <= scan_age <= self.parameter('scan_timeout'):
             return
         if (not np.isfinite([msg.angle_min, msg.angle_increment, msg.range_min, msg.range_max]).all()
                 or msg.angle_increment == 0. or not 0. <= msg.range_min < msg.range_max):
@@ -253,7 +271,8 @@ class UnifiedControlNode(Node):
         outgoing.header.frame_id = f'unified_lidar_{side}'
         self.scan_pubs[side].publish(outgoing)
         try:
-            t = self.tf.lookup_transform('odom', outgoing.header.frame_id, Time.from_msg(msg.header.stamp))
+            t = self.tf.lookup_transform('odom', outgoing.header.frame_id,
+                                         msg.header.stamp, rospy.Duration(.15))
         except TransformException:
             return
         angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
@@ -304,7 +323,7 @@ class UnifiedControlNode(Node):
                                 local = future.result()
                                 plan_pose = requested_pose
                             except Exception as error:
-                                self.get_logger().error(f'door path search failed: {error}')
+                                rospy.logerr('door path search failed: %s', error)
                 if local is None and self.door_plan_request is None:
                     plan_pose = tuple(self.pose)
                     future = self.door_plan_executor.submit(
@@ -355,9 +374,9 @@ class UnifiedControlNode(Node):
             speed = (best[0]+high)/2
             candidate = np.array([speed, self._door_angular(speed)])
             if braking_clear(points, candidate, self.measured,
-                             margin=self.get_parameter('hard_margin').value,
-                             reaction=self.get_parameter('reaction_time').value,
-                             deceleration=self.get_parameter('braking_deceleration').value,
+                             margin=self.parameter('hard_margin'),
+                             reaction=self.parameter('reaction_time'),
+                             deceleration=self.parameter('braking_deceleration'),
                              state_age=state_age):
                 best = candidate
             else:
@@ -521,25 +540,18 @@ class UnifiedControlNode(Node):
         now = time.monotonic()
         return (np.isfinite(self.raw).all() and np.isfinite(self.measured).all()
                 and self.pose is not None and np.isfinite(self.pose).all()
-                and now-self.raw_time < self.get_parameter('command_timeout').value
+                and now-self.raw_time < self.parameter('command_timeout')
                 and self.odom_stamp is not None
-                and -.05 <= self.get_clock().now().nanoseconds/1e9-self.odom_stamp < self.get_parameter('odom_timeout').value
-                and now-self.odom_time < self.get_parameter('odom_timeout').value and len(self.scans) == 2
-                and all(now-stamp < self.get_parameter('scan_timeout').value for stamp, _ in self.scans.values()))
+                and -.05 <= rospy.Time.now().to_sec()-self.odom_stamp < self.parameter('odom_timeout')
+                and now-self.odom_time < self.parameter('odom_timeout') and len(self.scans) == 2
+                and all(now-stamp < self.parameter('scan_timeout') for stamp, _ in self.scans.values()))
 
     def cancel(self):
         self.epoch += 1
         self.accept_planned = False
-        self.planned_after_stamp = self.get_clock().now().nanoseconds
+        self.planned_after_stamp = rospy.Time.now().to_sec()
         self.planned[:] = 0.
         self.plan_time = 0.
-        if self.goal is not None:
-            self.goal.cancel_goal_async()
-            self.goal = None
-
-    def _goal_finished(self, handle, epoch):
-        if epoch == self.epoch and self.goal is handle:
-            self.goal = None
 
     def update_reference(self):
         self.wall_preview_heading = None
@@ -625,7 +637,7 @@ class UnifiedControlNode(Node):
         else:
             local_path, self.mode, self.wall_side = wall_reference(
                 lines, *self.raw,
-                body_clearance=self.get_parameter('wall_clearance').value,
+                body_clearance=self.parameter('wall_clearance'),
                 preferred_side=self.wall_preference)
             if self.mode == 'wall':
                 self.wall_preference = self.wall_side
@@ -643,7 +655,7 @@ class UnifiedControlNode(Node):
         world_xy = transform_points(local_path[:, :2], self.pose)
         path = Path()
         path.header.frame_id = 'odom'
-        path.header.stamp = self.get_clock().now().to_msg()
+        path.header.stamp = rospy.Time.now()
         for xy, angle in zip(world_xy, local_path[:, 2] + self.pose[2]):
             p = PoseStamped()
             p.header = path.header
@@ -651,40 +663,17 @@ class UnifiedControlNode(Node):
             p.pose.orientation.z, p.pose.orientation.w = math.sin(angle/2), math.cos(angle/2)
             path.poses.append(p)
         self.reference.publish(path)
-        limit = SpeedLimit()
-        limit.speed_limit = min(self.raw[0], self.get_parameter('max_speed').value,
-                                .35 if self.mode == 'door_align'
-                                else .55 if self.mode in ('door_pass', 'door_clear')
-                                else .5 if self.mode == 'opening_turn' else 10.)
-        self.limit_pub.publish(limit)
-        if (not self.pending_goal and self.client.server_is_ready()
-                and (self.goal is None or not self.mode.startswith('door_'))
-                and (not self.mode.startswith('door_') or self.door_path_feasible)):
-            request = FollowPath.Goal()
-            request.path = path
-            request.controller_id, request.goal_checker_id, request.progress_checker_id = 'FollowPath', 'goal', 'progress'
-            self.pending_goal = True
-            epoch = self.epoch
-            def accepted(future):
-                self.pending_goal = False
-                handle = future.result()
-                if handle.accepted:
-                    if epoch != self.epoch:
-                        handle.cancel_goal_async()
-                    else:
-                        self.goal = handle
-                        self.accept_planned = True
-                        self.planned_after_stamp = self.get_clock().now().nanoseconds
-                        self.planned[:] = 0.
-                        self.plan_time = 0.
-                        if hasattr(handle, 'get_result_async'):
-                            handle.get_result_async().add_done_callback(
-                                lambda _: self._goal_finished(handle, epoch))
-            self.client.send_goal_async(request).add_done_callback(accepted)
+        limit = min(self.raw[0], self.parameter('max_speed'),
+                    .35 if self.mode == 'door_align'
+                    else .55 if self.mode in ('door_pass', 'door_clear')
+                    else .5 if self.mode == 'opening_turn' else 10.)
+        self.limit_pub.publish(Float32(data=limit))
+        self.accept_planned = True
+        self.planned_after_stamp = rospy.Time.now().to_sec()
 
     def control(self):
         now = time.monotonic()
-        stamp = self.get_clock().now().nanoseconds / 1e9
+        stamp = rospy.Time.now().to_sec()
         dt = min(.1, max(.001, stamp-self.last_tick))
         self.last_tick = stamp
         command = np.zeros(2)
@@ -692,7 +681,7 @@ class UnifiedControlNode(Node):
         if not self.assist_enabled or not self.mode_neutral_seen:
             fresh_raw = (np.isfinite(self.raw).all()
                          and now-self.raw_time
-                         < self.get_parameter('command_timeout').value)
+                         < self.parameter('command_timeout'))
             if not self.assist_enabled and self.mode_neutral_seen and fresh_raw:
                 command = self.raw.copy()
             self.mode = 'manual_direct' if not self.assist_enabled else 'manual'
@@ -730,12 +719,12 @@ class UnifiedControlNode(Node):
                 if self.mode == 'front_stop' and self.raw[0] > .02 and not self.override:
                     desired[1] = 0.
                     front = points[(points[:, 0] > 0.) & (np.abs(points[:, 1]) <= .44)]
-                    gap = (float(front[:, 0].min())-.97-self.get_parameter('front_stop_margin').value
+                    gap = (float(front[:, 0].min())-.97-self.parameter('front_stop_margin')
                            if len(front) else 0.)
-                    a = self.get_parameter('braking_deceleration').value
+                    a = self.parameter('braking_deceleration')
                     # Also reserve the ramp to comfortable deceleration at
                     # the normal linear jerk limit of 1 m/s^3.
-                    ar = a*(self.get_parameter('reaction_time').value+a/1.)
+                    ar = a*(self.parameter('reaction_time')+a/1.)
                     allowed = math.sqrt(ar*ar+2*a*max(0., gap))-ar if gap > .01 else 0.
                     desired[0] = min(desired[0], allowed)
             elif door_fallback:
@@ -782,7 +771,7 @@ class UnifiedControlNode(Node):
                 desired = np.zeros(2)
                 self.reason = 'planner_timeout'
             desired[0] = np.clip(desired[0], -.4 if self.raw[0] < 0. else 0.,
-                                 min(max(0., self.raw[0]), self.get_parameter('max_speed').value))
+                                 min(max(0., self.raw[0]), self.parameter('max_speed')))
             desired[1] = np.clip(desired[1], -.65, .65)
             # Slew-limit acceleration; snap at the target to avoid overshoot.
             # The independent safety rejection below bypasses comfort limits.
@@ -797,9 +786,9 @@ class UnifiedControlNode(Node):
             for scale in (1., .8, .6, .4, .2, 0.):
                 candidate = command * scale
                 if braking_clear(points, candidate, self.measured,
-                                 margin=self.get_parameter('hard_margin').value,
-                                 reaction=self.get_parameter('reaction_time').value,
-                                 deceleration=self.get_parameter('braking_deceleration').value,
+                                 margin=self.parameter('hard_margin'),
+                                 reaction=self.parameter('reaction_time'),
+                                 deceleration=self.parameter('braking_deceleration'),
                                  state_age=max(0., stamp-self.odom_stamp)):
                     command = candidate
                     if scale < 1.:
@@ -827,16 +816,31 @@ class UnifiedControlNode(Node):
         self.status.publish(String(data=json.dumps(status)))
 
     def destroy_node(self):
-        self.door_plan_executor.shutdown(wait=False, cancel_futures=True)
-        return super().destroy_node()
+        with self.callback_lock:
+            if self.stopped:
+                return
+            self.stopped = True
+            self.reference_timer.shutdown()
+            self.control_timer.shutdown()
+            for subscriber in self.subscribers:
+                subscriber.unregister()
+            self.cancel()
+            self.pub.publish(Twist())
+            if self.door_plan_request is not None:
+                self.door_plan_request[0].cancel()
+            self.door_plan_executor.shutdown(wait=False)
+        self.listener.unregister()
+        for publisher in self.publishers:
+            publisher.unregister()
+        self.transforms.pub_tf.unregister()
+        self.static.pub_tf.unregister()
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    rospy.init_node('unified_control', argv=args)
     node = UnifiedControlNode()
+    rospy.on_shutdown(node.destroy_node)
     try:
-        rclpy.spin(node)
-    finally:
-        node.pub.publish(Twist())
-        node.destroy_node()
-        rclpy.shutdown()
+        rospy.spin()
+    except rospy.ROSInterruptException:
+        pass

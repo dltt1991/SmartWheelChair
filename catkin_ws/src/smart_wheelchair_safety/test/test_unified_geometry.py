@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import math
 import unittest
 import numpy as np
@@ -421,3 +422,8 @@ class UnifiedGeometryTest(unittest.TestCase):
         path = arc_path(.5, .5, duration=2.)
         self.assertAlmostEqual(path[-1, 0], math.sin(1.), places=5)
         self.assertAlmostEqual(path[-1, 1], 1. - math.cos(1.), places=5)
+
+
+if __name__ == '__main__':
+    import rostest
+    rostest.rosrun('smart_wheelchair_safety', 'unified_geometry', UnifiedGeometryTest)
