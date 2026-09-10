@@ -4,12 +4,34 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import re
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[4]
 
 
 class RuntimeWiringTest(unittest.TestCase):
+    def test_registered_rostests_do_not_share_result_files(self):
+        package = ROOT / 'catkin_ws/src/smart_wheelchair_safety'
+        names = []
+
+        def collect(path):
+            launch = ET.parse(path).getroot()
+            names.extend(test.attrib['test-name'] for test in launch.iter('test'))
+            for include in launch.iter('include'):
+                collect(Path(include.attrib['file'].replace(
+                    '$(find smart_wheelchair_safety)', str(package))))
+
+        for filename in re.findall(r'add_rostest\(([^)]+)\)',
+                                   (package / 'CMakeLists.txt').read_text()):
+            collect(package / filename)
+        self.assertEqual(len(names), len(set(names)),
+                         'parallel rostests must not overwrite the same rosunit XML')
+        self.assertEqual(set(names), {'joystick', 'unified_geometry',
+                                     'local_path_follower', 'local_path_follower_node',
+                                     'web_joystick', 'unified_control'})
+
     def test_runtime_checks_are_registered_with_catkin(self):
         cmake = (ROOT / 'catkin_ws/src/smart_wheelchair_gazebo/CMakeLists.txt').read_text()
         self.assertIn('catkin_add_nosetests(test)', cmake)

@@ -21,7 +21,6 @@ if(CATKIN_ENABLE_TESTING)
   catkin_add_nosetests(test/test_joystick.py)
   catkin_add_nosetests(test/test_unified_geometry.py)
   catkin_add_nosetests(test/test_odom_frame_relay.py)
-  add_rostest(test/web_and_follower.test)
-  add_rostest(test/unified_control.test)
+  # The aggregate includes both focused launch files; register each test once.
   add_rostest(test/safety_regression.test)
 endif()
