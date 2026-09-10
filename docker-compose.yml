@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     platform: linux/arm64
-    image: smart-wheelchair-ros:jazzy
+    image: smart-wheelchair-ros:noetic
     network_mode: host
     ipc: host
     environment:
@@ -23,7 +23,8 @@ services:
       context: .
       dockerfile: docker/Dockerfile
     platform: linux/arm64
-    image: smart-wheelchair-ros:jazzy
+    image: smart-wheelchair-ros:noetic
+    stop_grace_period: 60s
     ipc: private
     shm_size: "512m"
     environment:

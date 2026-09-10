@@ -18,6 +18,7 @@ target_compile_features(SmartWheelChairGuiOnlyVisual PRIVATE cxx_std_14)
 target_link_libraries(SmartWheelChairGuiOnlyVisual ${GAZEBO_LIBRARIES})
 
 if(CATKIN_ENABLE_TESTING)
+  catkin_add_nosetests(test)
   add_executable(trajectory_preview_render_check test/trajectory_preview_render_check.cc)
   target_compile_features(trajectory_preview_render_check PRIVATE cxx_std_14)
   target_link_libraries(trajectory_preview_render_check ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})

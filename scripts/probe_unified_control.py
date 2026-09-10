@@ -1,7 +1,7 @@
 """Controlled Gazebo-only smoke tests. Runs movement; never use on hardware.
 
 Run inside the sourced GUI container with no other joystick client active.
-Door requires unified_door.sdf; other cases require a fresh m6_room.sdf.
+Door requires unified_door.world; other cases require a fresh m6_room.world.
 Results are sampled sensor/odometry evidence, not a contact or safety proof.
 """
 
@@ -29,9 +29,8 @@ def check_door_modes(modes):
 
 def main():
     import numpy as np
-    import rclpy
-    from rclpy.node import Node
-    from rclpy.qos import qos_profile_sensor_data
+    import rospy
+    import yaml
     from geometry_msgs.msg import Twist, TwistStamped
     from nav_msgs.msg import Odometry
     from sensor_msgs.msg import LaserScan
@@ -51,8 +50,7 @@ def main():
                         help='Steer toward the door for four seconds during takeover')
     parser.add_argument('--output', default='/tmp/unified-probe.json')
     args = parser.parse_args()
-    rclpy.init()
-    node = Node('unified_sim_probe')
+    rospy.init_node('unified_sim_probe')
     data, scans, records = {}, {}, []
     motion_started = False
     mode_history = []
@@ -64,17 +62,17 @@ def main():
                                  'mode': data['status'].get('mode', 'missing')})
 
     for topic in ['cmd_vel_raw', 'cmd_vel']:
-        node.create_subscription(Twist, topic, lambda m, t=topic: data.update({t: [m.linear.x, m.angular.z]}), 10)
-    node.create_subscription(
-        TwistStamped, 'cmd_vel_planned',
+        rospy.Subscriber(topic, Twist, lambda m, t=topic: data.update({t: [m.linear.x, m.angular.z]}), queue_size=10)
+    rospy.Subscriber(
+        'cmd_vel_planned', TwistStamped,
         lambda m: data.update(cmd_vel_planned=[m.twist.linear.x,
-                                                m.twist.angular.z]), 10)
-    node.create_subscription(String, 'shared_control/status', on_status, 10)
-    node.create_subscription(Odometry, 'odom', lambda m: data.update(odom=[
+                                                m.twist.angular.z]), queue_size=10)
+    rospy.Subscriber('shared_control/status', String, on_status, queue_size=10)
+    rospy.Subscriber('odom', Odometry, lambda m: data.update(odom=[
         m.pose.pose.position.x, m.pose.pose.position.y,
-        2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)]), 10)
+        2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)]), queue_size=10)
     for side in ['left', 'right']:
-        node.create_subscription(LaserScan, 'scan_'+side, lambda m, s=side: scans.update({s: m}), qos_profile_sensor_data)
+        rospy.Subscriber('scan_'+side, LaserScan, lambda m, s=side: scans.update({s: m}), queue_size=5)
 
     def command(x=0., y=0.):
         nonlocal motion_started
@@ -85,9 +83,14 @@ def main():
         motion_started = motion_started or x != 0. or y != 0.
 
     try:
-        services = subprocess.run(['gz', 'service', '-l'], capture_output=True, text=True, check=True, timeout=5).stdout
+        properties = yaml.safe_load(subprocess.run(
+            ['rosservice', 'call', '/gazebo/get_world_properties', '{}'],
+            capture_output=True, text=True, check=True, timeout=5).stdout)
         world = 'unified_door' if args.case == 'door' else 'm6_room'
-        if f'/world/{world}/set_pose' not in services:
+        # Classic's world-properties service exposes model names, not the world name.
+        fixture_models = ({'left_jamb', 'right_jamb', 'exit_wall'} if args.case == 'door'
+                          else {'outer_north_wall', 'outer_south_wall'})
+        if not properties['success'] or not (fixture_models | {'smart_wheelchair'}).issubset(properties['model_names']):
             raise RuntimeError(f'Requires running Gazebo world {world}; no motion sent')
         command()
         if args.case == 'door':
@@ -102,17 +105,18 @@ def main():
                       'opening_turn': (-3.5, .77 if args.wall_side == 'left' else -.77),
                       'opening_straight': (-3.5, .77 if args.wall_side == 'left' else -.77)}
             x, y = starts.get(args.case, (-4., 0.))
-        req = (f'name: "smart_wheelchair", position: {{x: {x}, y: {y}, z: 0.04}}, '
-               f'orientation: {{z: {math.sin(yaw/2)}, w: {math.cos(yaw/2)}}}')
-        subprocess.run(['gz', 'service', '-s', f'/world/{world}/set_pose',
-            '--reqtype', 'gz.msgs.Pose', '--reptype', 'gz.msgs.Boolean',
-            '--timeout', '2000', '--req', req], check=True, timeout=5)
-        subprocess.run(['ros2', 'service', 'call', '/local_costmap/clear_entirely_local_costmap',
-            'nav2_msgs/srv/ClearEntireCostmap', '{}'], check=True, timeout=10)
+        req = {'model_state': {'model_name': 'smart_wheelchair', 'reference_frame': 'world',
+                              'pose': {'position': {'x': x, 'y': y, 'z': .04},
+                                       'orientation': {'z': math.sin(yaw/2), 'w': math.cos(yaw/2)}}}}
+        placed = yaml.safe_load(subprocess.run(
+            ['rosservice', 'call', '/gazebo/set_model_state', json.dumps(req)],
+            capture_output=True, text=True, check=True, timeout=5).stdout)
+        if not placed['success']:
+            raise RuntimeError(placed['status_message'])
         start = time.monotonic()
         last_send = last_log = 0.
         initial_odom = None
-        while time.monotonic()-start < args.seconds+2:
+        while not rospy.is_shutdown() and time.monotonic()-start < args.seconds+2:
             now = time.monotonic()
             elapsed = now-start
             if now-last_send >= .08:
@@ -126,7 +130,7 @@ def main():
                     turn = math.copysign(.22, args.lateral_m)
                 command(turn if elapsed > 2 else 0., .5 if elapsed > 2 else 0.)
                 last_send = now
-            rclpy.spin_once(node, timeout_sec=.005)
+            time.sleep(.005)  # rospy dispatches subscriptions on its own threads.
             if now-last_log < .1 or len(scans) < 2 or 'odom' not in data:
                 continue
             last_log = now
@@ -135,7 +139,7 @@ def main():
             clearances = []
             wall_clearances = []
             scan_lines = []
-            for side, msg in scans.items():
+            for side, msg in list(scans.items()):
                 ranges = np.array(msg.ranges)
                 angles = msg.angle_min + np.arange(len(ranges))*msg.angle_increment
                 valid = np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)
@@ -218,8 +222,7 @@ def main():
         try:
             command()
         finally:
-            node.destroy_node()
-            rclpy.shutdown()
+            rospy.signal_shutdown('probe complete')
 
 
 if __name__ == '__main__':

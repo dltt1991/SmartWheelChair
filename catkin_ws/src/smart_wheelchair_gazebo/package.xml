@@ -16,6 +16,7 @@
   <test_depend>sensor_msgs</test_depend>
   <test_depend>rospy</test_depend>
   <test_depend>rosgraph_msgs</test_depend>
+  <test_depend>python3-nose</test_depend>
   <export>
     <gazebo_ros gazebo_model_path="${prefix}/models" plugin_path="${prefix}/../../lib"/>
   </export>

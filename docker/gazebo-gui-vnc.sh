@@ -5,47 +5,62 @@ export DISPLAY="${VNC_DISPLAY:-:1}"
 export LIBGL_ALWAYS_SOFTWARE=1
 export MESA_GL_VERSION_OVERRIDE="${MESA_GL_VERSION_OVERRIDE:-3.3}"
 export QT_X11_NO_MITSHM=1
-export HOME="${HOME:-/root}"
+
+launch_pid=
+xvfb_pid=
+desktop_pids=()
+cleanup() {
+  trap '' TERM INT
+  # roslaunch signals and reaps gzserver/gzclient while their display still exists.
+  if [[ -n "$launch_pid" ]]; then
+    kill -INT "$launch_pid" 2>/dev/null || true
+    wait "$launch_pid" || true
+  fi
+  for pid in "${desktop_pids[@]}"; do
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  done
+  if [[ -n "$xvfb_pid" ]]; then
+    kill "$xvfb_pid" 2>/dev/null || true
+    wait "$xvfb_pid" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+trap 'exit 143' TERM
+trap 'exit 130' INT
 
 rm -f "/tmp/.X${DISPLAY#:}-lock"
 
 Xvfb "$DISPLAY" -screen 0 "${VNC_GEOMETRY:-1600x1000x24}" -ac +extension GLX +render -noreset >/tmp/xvfb.log 2>&1 &
+xvfb_pid=$!
 for _ in {1..40}; do
   xdpyinfo -display "$DISPLAY" >/dev/null 2>&1 && break
   sleep 0.25
 done
+xdpyinfo -display "$DISPLAY" >/dev/null 2>&1
 
 mkdir -p "$HOME/.fluxbox"
 printf 'session.screen0.rootCommand:\n' > "$HOME/.fluxbox/init"
 fluxbox >/tmp/fluxbox.log 2>&1 &
+desktop_pids+=($!)
 (
   sleep 1
   pkill -f '^xmessage .*fbsetbg' || true
 ) &
+desktop_pids+=($!)
 x11vnc -display "$DISPLAY" -forever -shared -nopw -noxdamage -repeat -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
+desktop_pids+=($!)
 websockify --web=/usr/share/novnc/ 0.0.0.0:6080 localhost:5900 >/tmp/novnc.log 2>&1 &
+desktop_pids+=($!)
 
-cd /workspaces/SmartWheelChair/ros2_ws
-colcon build --symlink-install
-source install/setup.bash
-
-(
-  for _ in {1..40}; do
-    if gz service -s /gui/move_to/pose \
-      --reqtype gz.msgs.GUICamera \
-      --reptype gz.msgs.Boolean \
-      --timeout 1000 \
-      --req 'pose: {position: {x: -6.7, y: 0.0, z: 9.0}, orientation: {x: 0.0, y: 0.7071068, z: 0.0, w: 0.7071068}}' >/tmp/gazebo-camera-pose.log 2>&1 &&
-      grep -q 'data: true' /tmp/gazebo-camera-pose.log; then
-      exit 0
-    fi
-    sleep 0.5
-  done
-  cat /tmp/gazebo-camera-pose.log >&2 || true
-) &
+cd /workspaces/SmartWheelChair/catkin_ws
+catkin_make
+source devel/setup.bash
 
 args=(gui:=true)
 if [[ -n "${WHEELCHAIR_WORLD:-}" ]]; then
   args+=("world:=$WHEELCHAIR_WORLD")
 fi
-exec ros2 launch smart_wheelchair_gazebo sim.launch.py "${args[@]}"
+roslaunch smart_wheelchair_gazebo sim.launch "${args[@]}" &
+launch_pid=$!
+wait "$launch_pid"
