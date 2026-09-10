@@ -21,6 +21,11 @@ entering the intersection.
 - The persistent wall escape override is derived from the previous wall side.
   At an intersection it can suppress reacquisition of the new, explicitly
   requested turn side.
+- Wide T and cross intersections are not always represented by two coplanar
+  wall segments. In the current right-turn scene, the near longitudinal wall
+  ends about 2.7 m before a perpendicular far boundary. The coplanar-only
+  opening detector therefore recognizes the branch too late, after continued
+  wall following has reached the braking envelope.
 
 ## Design
 
@@ -62,6 +67,27 @@ responds immediately. A confirmed wide opening in the newly commanded direction
 releases stale override state, allowing the opening-turn logic to take ownership
 and preventing the old wall side from blocking a cross-intersection turn.
 
+### Corner-bounded wide intersections
+
+Extend general opening extraction with a second representation for wide side
+branches. A candidate consists of a longitudinal side wall whose forward endpoint
+forms the near edge and an observed near-perpendicular boundary whose intersection
+with the wall plane forms the far edge. Accept it only when:
+
+- the boundary heading is within 0.15 rad of perpendicular to the longitudinal
+  wall, and their intersection lies within 0.08 m of its observed segment;
+- the near-to-far distance is within the existing `1.8-3.2 m` wide-opening band;
+- the opening center remains within the existing 4.5 m intent range; and
+- no coplanar longitudinal segment occupies the proposed gap.
+
+The inferred crossing heading points left for a left-side branch and right for a
+right-side branch. These candidates join the existing two-frame observation and
+association pipeline, so one noisy fit cannot start a turn. They are emitted only
+for the wide-opening band and cannot become `0.92-1.50 m` narrow-door candidates.
+Once confirmed, the existing opening-turn rear-clearance gate, MPPI footprint
+check, and independent braking guard remain authoritative; no new turn controller
+or autonomous reverse behavior is introduced.
+
 ### Safety and fallback
 
 No footprint dimensions, clearances, obstacle ranges, speed caps, MPPI collision
@@ -73,11 +99,14 @@ an opposite-side wall-follow decision.
 ## Implementation Scope
 
 - `unified_geometry.py`: add preferred-side filtering to `wall_reference()`.
+- `unified_geometry.py`: recognize corner-bounded wide side openings from a
+  longitudinal wall endpoint and a perpendicular far boundary.
 - `unified_control_node.py`: run reference updates at 5 Hz, maintain wall-side
   selection memory, release stale escape override for an explicitly targeted
   side opening, and use the higher jerk limits.
 - `test_unified_geometry.py`: cover explicit left/right selection, straight-side
-  retention, and absence of fallback to the opposite wall.
+  retention, absence of fallback to the opposite wall, mirrored corner-bounded
+  intersections, and rejection when the perpendicular boundary misses the wall.
 - `test_unified_node.py`: cover timer period, wall-side memory lifecycle,
   intersection override release, and faster but still bounded command ramps.
 - Update the unified-control documentation with the final timing and selection
@@ -98,5 +127,9 @@ No new package, node, topic, parameter, or controller is introduced.
   a closer opposite wall.
 - Missing evidence for the intended side produces manual guarded travel, not
   opposite-side wall following.
+- Mirrored T/cross-intersection geometry produces left/right wide openings before
+  motion begins, while a disconnected perpendicular segment produces none.
+- Existing two-frame confirmation is still required before a corner-bounded
+  opening can start `opening_turn`.
 - Existing wall following, opening turns, door traversal, reverse motion,
   emergency stop, stale-input handling, and braking-envelope tests remain green.
