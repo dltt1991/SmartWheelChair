@@ -23,9 +23,11 @@ def parameter(node, name):
 class UnifiedNodeTest(unittest.TestCase):
     def setUp(self):
         from smart_wheelchair_safety.unified_control_node import UnifiedControlNode
-        with patch.object(rospy, 'Timer') as timer:
+        with patch.object(rospy, 'Timer') as timer, patch.object(
+                rospy, 'Subscriber', wraps=rospy.Subscriber) as subscriber:
             self.node = UnifiedControlNode()
         self.timer_calls = timer.call_args_list
+        self.callbacks = {call.args[0]: call.args[2] for call in subscriber.call_args_list}
         self.commands = []
         self.node.pub = SimpleNamespace(publish=self.commands.append)
         self.node.pose = (0., 0., 0.)
@@ -286,7 +288,7 @@ class UnifiedNodeTest(unittest.TestCase):
 
         np.testing.assert_array_equal(self.node.planned, [0., 0.])
         fresh = TwistStamped()
-        fresh.header.stamp = rospy.Time.from_sec(self.node.planned_after_stamp + .001)
+        fresh.header.stamp = self.node.active_reference_stamp
         fresh.twist.linear.x = .7
         self.node.on_planned(fresh)
 
@@ -304,7 +306,7 @@ class UnifiedNodeTest(unittest.TestCase):
 
         np.testing.assert_array_equal(self.node.planned, [0., 0.])
         self.node.accept_planned = True
-        self.node.planned_after_stamp = -1
+        self.node.active_reference_stamp = command.header.stamp
         self.node.on_planned(command)
         self.assertAlmostEqual(self.node.planned[0], .7)
 
@@ -315,6 +317,41 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertFalse(self.node.accept_planned)
         np.testing.assert_array_equal(self.node.planned, [0., 0.])
         self.assertEqual(self.node.plan_time, 0.)
+
+    def test_replaced_reference_rejects_late_result_and_stamps_increase_when_time_stalls(self):
+        from geometry_msgs.msg import TwistStamped
+        references = []
+        self.node.reference = SimpleNamespace(publish=references.append)
+        instant = rospy.Time.now()
+        with patch.object(rospy.Time, 'now', return_value=instant):
+            self.node.update_reference()
+            old = references[-1].header.stamp
+            self.node.update_reference()
+            current = references[-1].header.stamp
+
+        self.assertGreater(current, old)
+        late = TwistStamped()
+        late.header.stamp = old
+        late.twist.linear.x = .7
+        self.node.planned[:] = 0.
+        self.node.plan_time = 0.
+        self.node.on_planned(late)
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
+        self.assertEqual(self.node.plan_time, 0.)
+
+        # A computation stamped only at publication time has no valid
+        # reference identity, even though it is newer than the replacement.
+        late.header.stamp = current + rospy.Duration(nsecs=1)
+        self.node.on_planned(late)
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
+        self.assertEqual(self.node.plan_time, 0.)
+
+        late.header.stamp = current
+        self.node.on_planned(late)
+        self.assertAlmostEqual(self.node.planned[0], .7)
+        self.node.cancel()
+        self.node.on_planned(late)
+        np.testing.assert_array_equal(self.node.planned, [0., 0.])
 
     def test_confirmed_opening_survives_temporary_lidar_occlusion_until_passed(self):
         opening = self.wall_opening(side=-1)
@@ -1249,8 +1286,7 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertAlmostEqual(limits[-1].data,
                                min(self.node.raw[0], parameter(self.node, 'max_speed')))
         self.assertTrue(self.node.accept_planned)
-        self.assertGreaterEqual(self.node.planned_after_stamp,
-                                references[-1].header.stamp.to_sec())
+        self.assertEqual(self.node.active_reference_stamp, references[-1].header.stamp)
 
     def test_non_positive_or_non_finite_parameters_are_rejected(self):
         from smart_wheelchair_safety.unified_control_node import UnifiedControlNode
@@ -1351,6 +1387,70 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.on_scan(scan, 'left')
         self.assertIn('left', self.node.scans)
         self.assertEqual(len(self.node.scans['left'][1]), 0)
+
+    def test_odometry_callback_runs_during_scan_tf_wait_then_scan_commits(self):
+        from geometry_msgs.msg import TransformStamped
+        from nav_msgs.msg import Odometry
+        from sensor_msgs.msg import LaserScan
+        waiting, release, odom_done = threading.Event(), threading.Event(), threading.Event()
+        transform = TransformStamped()
+        transform.transform.rotation.w = 1.
+
+        def lookup(*_):
+            waiting.set()
+            release.wait(1.)
+            return transform
+
+        self.node.tf = SimpleNamespace(lookup_transform=lookup)
+        scan = LaserScan(angle_increment=.1, range_min=.05, range_max=8.,
+                         ranges=[float('inf')] * 10)
+        scan.header.stamp = rospy.Time.now()
+        odom = Odometry()
+        odom.header.stamp = scan.header.stamp
+        odom.pose.pose.position.x = .2
+        odom.pose.pose.orientation.w = 1.
+        observed_poses = []
+        self.node._observe_openings = lambda _: observed_poses.append(self.node.pose)
+
+        def receive_odom():
+            self.callbacks['odom'](odom)
+            odom_done.set()
+
+        scanner = threading.Thread(target=self.callbacks['scan_left'], args=(scan,))
+        odometry = threading.Thread(target=receive_odom)
+        scanner.start()
+        try:
+            self.assertTrue(waiting.wait(.5))
+            odometry.start()
+            self.assertTrue(odom_done.wait(.1), 'TF lookup blocked odometry callback')
+        finally:
+            release.set()
+            scanner.join(1.)
+            if odometry.ident is not None:
+                odometry.join(1.)
+        self.assertFalse(scanner.is_alive())
+        self.assertEqual(len(self.node.scans['left'][1]), 0)
+        self.assertEqual(observed_poses[-1], (.2, 0., 0.))
+
+    def test_scan_waiting_on_tf_does_not_commit_after_shutdown(self):
+        from geometry_msgs.msg import TransformStamped
+        from sensor_msgs.msg import LaserScan
+        previous = self.node.scans['left']
+        transform = TransformStamped()
+        transform.transform.rotation.w = 1.
+
+        def lookup(*_):
+            self.node.destroy_node()
+            return transform
+
+        self.node.tf = SimpleNamespace(lookup_transform=lookup)
+        scan = LaserScan(angle_increment=.1, range_min=.05, range_max=8.,
+                         ranges=[float('inf')] * 10)
+        scan.header.stamp = rospy.Time.now()
+        self.callbacks['scan_left'](scan)
+
+        self.assertIs(self.node.scans['left'], previous)
+        self.assertTrue(self.node.stopped)
 
     def test_corrupt_scan_does_not_refresh_watchdog(self):
         from sensor_msgs.msg import LaserScan

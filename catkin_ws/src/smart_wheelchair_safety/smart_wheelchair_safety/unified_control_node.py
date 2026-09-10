@@ -59,7 +59,8 @@ class UnifiedControlNode:
         self.acceleration = np.zeros(2)
         self.pose = None
         self.raw_time = self.odom_time = self.plan_time = 0.
-        self.planned_after_stamp = -1
+        self.active_reference_stamp = None
+        self.last_reference_stamp = rospy.Time()
         self.odom_stamp = None
         self.scans = {}
         self.door = None
@@ -126,7 +127,7 @@ class UnifiedControlNode:
         for side in ('left', 'right'):
             self.subscribers.append(rospy.Subscriber(
                 f'scan_{side}', LaserScan,
-                self._serialized(lambda msg, side=side: self.on_scan(msg, side)), queue_size=1))
+                lambda msg, side=side: self.on_scan(msg, side), queue_size=1))
         self.reference_timer = rospy.Timer(
             rospy.Duration(REFERENCE_PERIOD), self._serialized(lambda _: self.update_reference()))
         self.control_timer = rospy.Timer(
@@ -226,10 +227,9 @@ class UnifiedControlNode:
         self.pub.publish(Twist())
 
     def on_planned(self, msg):
-        stamp = msg.header.stamp.to_sec()
         if (not self.assist_enabled or not self.mode_neutral_seen
                 or not self.accept_planned
-                or stamp <= self.planned_after_stamp):
+                or msg.header.stamp != self.active_reference_stamp):
             return
         self.planned = np.array([msg.twist.linear.x, msg.twist.angular.z])
         self.plan_time = time.monotonic()
@@ -257,6 +257,7 @@ class UnifiedControlNode:
         self.transforms.sendTransform(t)
 
     def on_scan(self, msg, side):
+        received = time.monotonic()
         scan_age = (rospy.Time.now().to_sec() - msg.header.stamp.to_sec())
         if not -.05 <= scan_age <= self.parameter('scan_timeout'):
             return
@@ -269,7 +270,12 @@ class UnifiedControlNode:
             return
         outgoing = copy.deepcopy(msg)
         outgoing.header.frame_id = f'unified_lidar_{side}'
-        self.scan_pubs[side].publish(outgoing)
+        with self.callback_lock:
+            if self.stopped:
+                return
+            self.scan_pubs[side].publish(outgoing)
+        # TF may need a fresh odometry callback to supply this transform.
+        # Never hold the state-machine lock while waiting for it.
         try:
             t = self.tf.lookup_transform('odom', outgoing.header.frame_id,
                                          msg.header.stamp, rospy.Duration(.15))
@@ -287,13 +293,18 @@ class UnifiedControlNode:
         outside = ((axle_local[:, 0] < -.25) | (axle_local[:, 0] > .97)
                    | (np.abs(axle_local[:, 1]) > .4))
         world = world[outside]
-        self.scans[side] = (time.monotonic(), world)
-        now = time.monotonic()
-        if self.pose is not None and len(self.scans) == 2 and now-self.opening_observation_time >= .08:
-            groups, _ = self.points()
-            lines = [line for group in groups for line in extract_opening_lines(group)]
-            self._observe_openings(find_openings(lines))
-            self.opening_observation_time = now
+        with self.callback_lock:
+            scan_age = rospy.Time.now().to_sec() - msg.header.stamp.to_sec()
+            if (self.stopped or not -.05 <= scan_age <= self.parameter('scan_timeout')
+                    or received < self.scans.get(side, (0., None))[0]):
+                return
+            self.scans[side] = (received, world)
+            now = time.monotonic()
+            if self.pose is not None and len(self.scans) == 2 and now-self.opening_observation_time >= .08:
+                groups, _ = self.points()
+                lines = [line for group in groups for line in extract_opening_lines(group)]
+                self._observe_openings(find_openings(lines))
+                self.opening_observation_time = now
 
     def _world_opening(self, opening):
         center = transform_points([opening.center], self.pose)[0]
@@ -549,7 +560,7 @@ class UnifiedControlNode:
     def cancel(self):
         self.epoch += 1
         self.accept_planned = False
-        self.planned_after_stamp = rospy.Time.now().to_sec()
+        self.active_reference_stamp = None
         self.planned[:] = 0.
         self.plan_time = 0.
 
@@ -656,6 +667,9 @@ class UnifiedControlNode:
         path = Path()
         path.header.frame_id = 'odom'
         path.header.stamp = rospy.Time.now()
+        if path.header.stamp <= self.last_reference_stamp:
+            path.header.stamp = self.last_reference_stamp + rospy.Duration(nsecs=1)
+        self.last_reference_stamp = path.header.stamp
         for xy, angle in zip(world_xy, local_path[:, 2] + self.pose[2]):
             p = PoseStamped()
             p.header = path.header
@@ -669,7 +683,7 @@ class UnifiedControlNode:
                     else .5 if self.mode == 'opening_turn' else 10.)
         self.limit_pub.publish(Float32(data=limit))
         self.accept_planned = True
-        self.planned_after_stamp = rospy.Time.now().to_sec()
+        self.active_reference_stamp = path.header.stamp
 
     def control(self):
         now = time.monotonic()

@@ -57,7 +57,8 @@ class LocalPathFollowerNode:
             for pose in message.poses
         ], dtype=float).reshape((-1, 3))
         with self._lock:
-            self._reference = (self._clock(), path)
+            self._reference = (self._clock(), path,
+                               rospy.Time(message.header.stamp.secs, message.header.stamp.nsecs))
 
     def on_speed_limit(self, message):
         with self._lock:
@@ -93,6 +94,7 @@ class LocalPathFollowerNode:
         with self._lock:
             inputs = (self._reference, self._odom, self._speed_limit,
                       self._scans["left"], self._scans["right"])
+            reference_stamp = self._reference[2] if self._reference else rospy.Time()
             if any(value is None or now - value[0] > STALE_TIMEOUT_S
                    for value in inputs):
                 command = np.zeros(2)
@@ -113,7 +115,9 @@ class LocalPathFollowerNode:
             self._previous_velocity = np.asarray(command, dtype=float)
 
         message = TwistStamped()
-        message.header.stamp = rospy.Time.now()
+        # Preserve the identity of the reference consumed by this computation,
+        # including when a replacement arrives before publication.
+        message.header.stamp = reference_stamp
         message.header.frame_id = "rear_axle"
         message.twist.linear.x = float(command[0])
         message.twist.angular.z = float(command[1])
