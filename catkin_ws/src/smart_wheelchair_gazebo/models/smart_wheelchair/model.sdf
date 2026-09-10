@@ -310,6 +310,11 @@
 
     <plugin name="differential_drive_controller" filename="libgazebo_ros_diff_drive.so">
       <robotNamespace>/</robotNamespace>
+      <rosDebugLevel>na</rosDebugLevel>
+      <publishWheelJointState>false</publishWheelJointState>
+      <wheelAcceleration>0</wheelAcceleration>
+      <wheelTorque>5</wheelTorque>
+      <publishTf>true</publishTf>
       <alwaysOn>true</alwaysOn>
       <updateRate>50</updateRate>
       <leftJoint>left_rear_wheel_joint</leftJoint>

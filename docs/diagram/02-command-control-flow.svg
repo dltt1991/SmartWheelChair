@@ -73,15 +73,15 @@
 <text x="460" y="705" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">处于可行门洞跟踪？</text>
 <text x="945.0" y="693" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">门洞专用跟踪</text>
 <text x="945.0" y="717" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">曲率反馈 + 七轮安全速度试探</text>
-<text x="945.0" y="739" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">MPPI 超时仍可走此分支</text>
+<text x="945.0" y="739" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">跟踪器 超时仍可走此分支</text>
 <text x="607" y="688" font-size="14" fill="#a78bfa" text-anchor="start" font-weight="400">是</text>
 <text x="477" y="771" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">否</text>
-<text x="460" y="845" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">MPPI 输出新鲜？</text>
+<text x="460" y="845" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">跟踪器 输出新鲜？</text>
 <text x="945.0" y="833" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">本周期输出零</text>
 <text x="945.0" y="857" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">planner_timeout</text>
 <text x="607" y="828" font-size="14" fill="#fb7185" text-anchor="start" font-weight="400">否</text>
 <text x="477" y="914" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">是</text>
-<text x="460.0" y="973" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">MPPI 候选速度</text>
+<text x="460.0" y="973" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">跟踪器 候选速度</text>
 <text x="460.0" y="997" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">叠加沿墙 / 开口转向修正</text>
 <text x="460.0" y="1128" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">辅助限幅与速度平滑</text>
 <text x="460.0" y="1152" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">门洞分支按平滑后的 v 重算 ω</text>

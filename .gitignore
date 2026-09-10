@@ -1,5 +1,8 @@
 .DS_Store
 build/
+catkin_ws/devel/
+catkin_ws/.catkin_workspace
+catkin_ws/src/CMakeLists.txt
 install/
 log/
 superpowers/

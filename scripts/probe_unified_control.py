@@ -70,7 +70,8 @@ def main():
     rospy.Subscriber('shared_control/status', String, on_status, queue_size=10)
     rospy.Subscriber('odom', Odometry, lambda m: data.update(odom=[
         m.pose.pose.position.x, m.pose.pose.position.y,
-        2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)]), queue_size=10)
+        2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)],
+        odom_velocity=[m.twist.twist.linear.x, m.twist.twist.angular.z]), queue_size=10)
     for side in ['left', 'right']:
         rospy.Subscriber('scan_'+side, LaserScan, lambda m, s=side: scans.update({s: m}), queue_size=5)
 
@@ -174,12 +175,26 @@ def main():
                 row['world_yaw'] = data['odom'][2]-initial_odom[2]+yaw
             records.append(row)
         command()
+        # Observe physical settling after release, not just the sent zero request.
+        time.sleep(.2)
+        stop_deadline = time.monotonic() + 3.
+        while time.monotonic() < stop_deadline:
+            if all(abs(value) < .02 for key in ('cmd_vel', 'odom_velocity')
+                   for value in data.get(key, [99.])):
+                break
+            time.sleep(.05)
         moving = moving_records(records)
+        sequence = []
+        for entry in mode_history:
+            if not sequence or sequence[-1] != entry['mode']:
+                sequence.append(entry['mode'])
         result = {'case': args.case, 'samples': len(moving),
                   'min_sampled_clearance': min((r['clearance'] for r in moving), default=0.),
                   'max_speed': max((r.get('cmd_vel', [0])[0] for r in moving), default=0.),
                   'modes': sorted({r['mode'] for r in mode_history}
                                   | {r.get('status', {}).get('mode', 'missing') for r in moving}),
+                  'mode_sequence': sequence,
+                  'final_stop': {key: data.get(key) for key in ('cmd_vel', 'odom_velocity')},
                   'last': records[-1] if records else None}
         if args.case == 'wall_gap':
             gaps = [r['wall_clearance'] for r in moving if r['wall_clearance'] is not None
@@ -193,11 +208,20 @@ def main():
                                                'mode_history': mode_history}, indent=2)+'\n')
         print(json.dumps(result, indent=2))
         assert moving and result['min_sampled_clearance'] > .02, 'missing data or insufficient sampled clearance'
+        assert all(abs(value) < .02 for key in ('cmd_vel', 'odom_velocity')
+                   for value in data.get(key, [99.])), 'release did not stop command and physical motion'
+        assert result['max_speed'] <= .800001, 'assisted speed limit exceeded'
         if args.case == 'door':
             check_door_modes(result['modes'])
+            assert 'door_clear' in sequence, 'door tail-clear phase was not observed'
+            assert sequence.index('door_align') < sequence.index('door_pass') < sequence.index('door_clear'), \
+                'door phases were observed out of order'
             assert any(r['world_axle'][0] > .6 for r in moving), 'rear axle did not clear doorway'
         elif args.case == 'front':
+            assert 'front_stop' in result['modes'], 'front obstacle stop mode was not observed'
             assert abs(moving[-1].get('cmd_vel', [99])[0]) < .02, 'did not stop at front wall'
+        elif args.case == 'wall':
+            assert 'wall' in result['modes'], 'wall following was not observed'
         elif args.case == 'override':
             assert any(r['t'] > 13 and r.get('cmd_vel', [0, 0])[1] < -.3
                        and r.get('status', {}).get('mode') == 'override' for r in moving), 'override not observed'

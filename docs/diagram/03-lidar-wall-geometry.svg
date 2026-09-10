@@ -61,4 +61,4 @@
 <text x="972.5" y="688" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">意图选边与参考</text>
 <text x="972.5" y="712" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">保持侧别 · Hermite 曲线</text>
 <text x="40" y="625" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="600">扫描点处理链（协调器 / 制动检查所用点集）</text>
-<text x="40" y="794" font-size="15" fill="#fbbf24" text-anchor="start" font-weight="400">Nav2 接收的是校验并重标 frame_id 的扫描副本，不复用协调器去自回波后的点集。</text></svg>
+<text x="40" y="794" font-size="15" fill="#fbbf24" text-anchor="start" font-weight="400">跟踪器 接收的是校验并重标 frame_id 的扫描副本，不复用协调器去自回波后的点集。</text></svg>

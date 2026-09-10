@@ -304,7 +304,7 @@ def intended_side_opening(openings, wall_side, v, w):
 
 
 def approach_path(target, heading, length=3., steps=41):
-    """A tangent-continuous reference; MPPI and the guard check feasibility."""
+    """A tangent-continuous reference; the local follower and the guard check feasibility."""
     end = np.asarray(target, dtype=float)
     t = np.linspace(0., 1., steps)[:, None]
     scale = min(length, float(np.linalg.norm(end)))
@@ -344,7 +344,7 @@ def door_alignment_reference(door, phase):
 def collision_aware_door_reference(door, obstacles, margin=.045):
     """Find a forward-only reference to the door centerline.
 
-    This deterministic lattice only supplies MPPI with a collision-free
+    This deterministic lattice only supplies the local follower with a collision-free
     geometric reference. The controller and braking guard remain responsible
     for dynamics and final command safety.
     """
