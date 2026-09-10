@@ -13,6 +13,10 @@
 
 当前版本刻意不实现真实 GD32/RK3568 通信协议、SLAM、自主导航和认证级安全控制。
 
+## 方案文档
+
+- [当前方案架构与算法详解](docs/architecture-and-algorithms.md)：含系统架构、控制流程、沿墙几何、窄门通过和制动检查五张配图，以及算法参数、源码链接与复测说明。
+
 ## 构建 Docker 镜像
 
 Dockerfile 默认使用 DaoCloud 的 Docker Hub 公共镜像作为 ARM64 ROS 基础镜像源，并使用清华源安装 Ubuntu/ROS apt 软件包。`docker-compose.yml` 针对 Apple Silicon Mac 固定为 `linux/arm64`；如果在模拟环境中跑 amd64 ROS desktop 镜像，Gazebo GUI 可能无法正确映射窗口，导致 VNC 桌面黑屏。
@@ -231,7 +235,7 @@ UNIFIED_CONTROL=true docker compose up -d gui
 WHEELCHAIR_WORLD=/workspaces/SmartWheelChair/ros2_ws/src/smart_wheelchair_gazebo/worlds/unified_door.sdf docker compose up -d gui
 ```
 
-恢复原场景：`docker compose up -d gui`。门洞辅助目前仅针对静态、平面、可观测的室内场景，不包含动态行人预测、台阶/悬空检测和自动倒车脱困。实车还需要验证遮挡、打滑、定位误差、执行延迟与真实制动能力。实现说明与复测方法见 [统一控制 V1](docs/unified-control-v1.md)。
+恢复原场景：`docker compose up -d gui`。门洞辅助目前仅针对静态、平面、可观测的室内场景，不包含动态行人预测、台阶/悬空检测和自动倒车脱困。实车还需要验证遮挡、打滑、定位误差、执行延迟与真实制动能力。实现说明与复测方法见 [当前方案架构与算法详解](docs/architecture-and-algorithms.md)。
 
 ## 键盘遥控
 

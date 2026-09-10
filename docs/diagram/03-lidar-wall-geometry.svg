@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 830" role="img" aria-labelledby="title desc"><title id="title">03  感知与沿墙几何：所有判断统一到后轴中心</title><desc id="desc">智能轮椅当前实现的架构或算法示意；文字、连接与参数依据方案文档。</desc><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern><marker id="arrow-cyan" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#22d3ee"/></marker><marker id="arrow-green" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#34d399"/></marker><marker id="arrow-purple" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#a78bfa"/></marker><marker id="arrow-amber" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fbbf24"/></marker><marker id="arrow-rose" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb7185"/></marker><marker id="arrow-orange" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb923c"/></marker><marker id="arrow-slate" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#94a3b8"/></marker><marker id="arrow-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#60a5fa"/></marker></defs><style>text { font-family: "JetBrains Mono", "Noto Sans SC", "PingFang SC", sans-serif; }</style><rect width="1120" height="830" fill="#0f172a"/><rect width="1120" height="830" fill="url(#grid)"/><rect x="40" y="120" width="495" height="470" rx="12" fill="#0f172a"/>
+<rect x="40" y="120" width="495" height="470" rx="12" fill="#94a3b8" fill-opacity="0.035" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+<rect x="575" y="120" width="505" height="470" rx="12" fill="#0f172a"/>
+<rect x="575" y="120" width="505" height="470" rx="12" fill="#94a3b8" fill-opacity="0.035" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+<path d="M 155,407 L 470,407" fill="none" stroke="#22d3ee" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-cyan)"/>
+<path d="M 155,407 L 155,230" fill="none" stroke="#22d3ee" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-cyan)"/>
+<path d="M 328.8,349.8 L 433.8,249.8" fill="none" stroke="#fb923c" stroke-width="1" stroke-dasharray="3 6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 328.8,349.8 L 483.8,349.8" fill="none" stroke="#fb923c" stroke-width="1" stroke-dasharray="3 6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 328.8,349.8 L 433.8,449.8" fill="none" stroke="#fb923c" stroke-width="1" stroke-dasharray="3 6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 328.8,464.2 L 433.8,364.2" fill="none" stroke="#fb923c" stroke-width="1" stroke-dasharray="3 6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 328.8,464.2 L 483.8,464.2" fill="none" stroke="#fb923c" stroke-width="1" stroke-dasharray="3 6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 328.8,464.2 L 433.8,564.2" fill="none" stroke="#fb923c" stroke-width="1" stroke-dasharray="3 6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 610,224 L 1045,224" fill="none" stroke="#fbbf24" stroke-width="7" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 640,224 L 640,328" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 632,224 L 648,224" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 632,328 L 648,328" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1000,224 L 1000,248" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 992,224 L 1008,224" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 992,248 L 1008,248" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1000,248 L 1018,274" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 255,702 L 315,702" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 530,702 L 590,702" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 805,702 L 865,702" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<rect x="40" y="660" width="215" height="85" rx="10" fill="#0f172a"/>
+<rect x="40" y="660" width="215" height="85" rx="10" fill="#fb923c" fill-opacity="0.13" stroke="#fb923c" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="315" y="660" width="215" height="85" rx="10" fill="#0f172a"/>
+<rect x="315" y="660" width="215" height="85" rx="10" fill="#a78bfa" fill-opacity="0.13" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="590" y="660" width="215" height="85" rx="10" fill="#0f172a"/>
+<rect x="590" y="660" width="215" height="85" rx="10" fill="#34d399" fill-opacity="0.13" stroke="#34d399" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="865" y="660" width="215" height="85" rx="10" fill="#0f172a"/>
+<rect x="865" y="660" width="215" height="85" rx="10" fill="#22d3ee" fill-opacity="0.13" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray=""/>
+<g transform="translate(155,407) rotate(0)"><rect x="-55.0" y="-88.0" width="268.4" height="176.0" rx="5" fill="#22d3ee" fill-opacity="0.15" stroke="#22d3ee" stroke-width="2"/><line x1="0" y1="-88.0" x2="0" y2="88.0" stroke="#22d3ee" stroke-dasharray="4 4"/><path d="M 10,0 L 143.0,0" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/><circle r="4" fill="#22d3ee"/></g>
+<circle cx="328.8" cy="349.8" r="6" fill="#fb923c"/>
+<circle cx="328.8" cy="464.2" r="6" fill="#fb923c"/>
+<g transform="translate(735,328) rotate(0)"><rect x="-50.0" y="-80.0" width="244.0" height="160.0" rx="5" fill="#22d3ee" fill-opacity="0.15" stroke="#22d3ee" stroke-width="2"/><line x1="0" y1="-80.0" x2="0" y2="80.0" stroke="#22d3ee" stroke-dasharray="4 4"/><path d="M 10,0 L 130.0,0" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/><circle r="4" fill="#22d3ee"/></g>
+<path d="M 615,328 L 1035,328" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="8 5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<text x="40" y="48" font-size="26" fill="#f8fafc" text-anchor="start" font-weight="700">03  感知与沿墙几何：所有判断统一到后轴中心</text>
+<text x="40" y="80" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">左：车体坐标与双雷达安装位置；右：平行沿墙时的目标净距 · 示意图不表示完整雷达视场</text>
+<text x="58" y="147" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">后轴坐标与整车轮廓</text>
+<text x="593" y="147" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">沿墙参考与距离的区别</text>
+<text x="463" y="394" font-size="15" fill="#22d3ee" text-anchor="end" font-weight="400">+x 前</text>
+<text x="165" y="236" font-size="15" fill="#22d3ee" text-anchor="start" font-weight="400">+y 左</text>
+<text x="73" y="543" font-size="17" fill="#e2e8f0" text-anchor="start" font-weight="400">x = [-0.25, 0.97] m</text>
+<text x="73" y="569" font-size="17" fill="#e2e8f0" text-anchor="start" font-weight="400">y = [-0.40, 0.40] m</text>
+<text x="168" y="435" font-size="15" fill="#22d3ee" text-anchor="start" font-weight="400">后轴 (0,0)</text>
+<text x="315" y="285" font-size="14" fill="#fb923c" text-anchor="middle" font-weight="400">左雷达 (0.79, +0.26)</text>
+<text x="315" y="518" font-size="14" fill="#fb923c" text-anchor="middle" font-weight="400">右雷达 (0.79, −0.26)</text>
+<text x="1015" y="202" font-size="16" fill="#fbbf24" text-anchor="end" font-weight="400">墙线  n·p = d</text>
+<text x="1018" y="442" font-size="16" fill="#34d399" text-anchor="end" font-weight="400">墙切向参考 t →</text>
+<text x="625" y="281" font-size="14" fill="#e2e8f0" text-anchor="end" font-weight="400">0.52 m</text>
+<text x="1018" y="296" font-size="16" fill="#fb7185" text-anchor="middle" font-weight="400">0.12 m</text>
+<text x="610" y="485" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="400">后轴距墙 = 半车宽 + 车身边沿净距</text>
+<text x="610" y="517" font-size="20" fill="#34d399" text-anchor="start" font-weight="600">0.52 m = 0.40 m + 0.12 m</text>
+<text x="610" y="558" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">斜向接近时用切向连续曲线接入参考线。</text>
+<text x="147.5" y="688" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">采集时刻 TF</text>
+<text x="147.5" y="712" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">scan → odom</text>
+<text x="422.5" y="688" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">去除自回波</text>
+<text x="422.5" y="712" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">使用采集时车体轮廓</text>
+<text x="697.5" y="688" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">分段 SVD 拟合</text>
+<text x="697.5" y="712" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">墙线 / 短门框片段</text>
+<text x="972.5" y="688" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">意图选边与参考</text>
+<text x="972.5" y="712" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">保持侧别 · Hermite 曲线</text>
+<text x="40" y="625" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="600">扫描点处理链（协调器 / 制动检查所用点集）</text>
+<text x="40" y="794" font-size="15" fill="#fbbf24" text-anchor="start" font-weight="400">Nav2 接收的是校验并重标 frame_id 的扫描副本，不复用协调器去自回波后的点集。</text></svg>

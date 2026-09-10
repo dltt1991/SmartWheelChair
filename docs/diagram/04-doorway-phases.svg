@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 870" role="img" aria-labelledby="title desc"><title id="title">04  窄门通过：后轴过门后逐步交还转向</title><desc id="desc">智能轮椅当前实现的架构或算法示意；文字、连接与参数依据方案文档。</desc><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern><marker id="arrow-cyan" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#22d3ee"/></marker><marker id="arrow-green" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#34d399"/></marker><marker id="arrow-purple" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#a78bfa"/></marker><marker id="arrow-amber" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fbbf24"/></marker><marker id="arrow-rose" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb7185"/></marker><marker id="arrow-orange" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb923c"/></marker><marker id="arrow-slate" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#94a3b8"/></marker><marker id="arrow-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#60a5fa"/></marker></defs><style>text { font-family: "JetBrains Mono", "Noto Sans SC", "PingFang SC", sans-serif; }</style><rect width="1120" height="870" fill="#0f172a"/><rect width="1120" height="870" fill="url(#grid)"/><rect x="40" y="610" width="505" height="220" rx="12" fill="#0f172a"/>
+<rect x="40" y="610" width="505" height="220" rx="12" fill="#94a3b8" fill-opacity="0.035" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+<path d="M 360,155 L 400,155" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 720,155 L 760,155" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 280,245 L 280,285" fill="none" stroke="#fbbf24" stroke-width="12" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 280,405 L 280,455" fill="none" stroke="#fbbf24" stroke-width="12" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 280,233 L 280,466" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4 5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 80,345 L 435,345" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="7 5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 640,245 L 640,285" fill="none" stroke="#fbbf24" stroke-width="12" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 640,405 L 640,455" fill="none" stroke="#fbbf24" stroke-width="12" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 640,233 L 640,466" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4 5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 440,345 L 795,345" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="7 5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 900,245 L 900,285" fill="none" stroke="#fbbf24" stroke-width="12" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 900,405 L 900,455" fill="none" stroke="#fbbf24" stroke-width="12" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 900,233 L 900,466" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="4 5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 700,345 L 1055,345" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="7 5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 95,784 L 493,784" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 95,784 L 95,663" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 95,784 L 360,676 L 480,676" fill="none" stroke="#a78bfa" stroke-width="3" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 360,676 L 360,784" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 4" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="40" y="120" width="320" height="70" rx="10" fill="#0f172a"/>
+<rect x="40" y="120" width="320" height="70" rx="10" fill="#22d3ee" fill-opacity="0.13" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="400" y="120" width="320" height="70" rx="10" fill="#0f172a"/>
+<rect x="400" y="120" width="320" height="70" rx="10" fill="#34d399" fill-opacity="0.13" stroke="#34d399" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="760" y="120" width="320" height="70" rx="10" fill="#0f172a"/>
+<rect x="760" y="120" width="320" height="70" rx="10" fill="#a78bfa" fill-opacity="0.13" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="585" y="610" width="495" height="150" rx="10" fill="#0f172a"/>
+<rect x="585" y="610" width="495" height="150" rx="10" fill="#a78bfa" fill-opacity="0.13" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray=""/>
+<g transform="translate(140,345) rotate(-8)"><rect x="-30.0" y="-48.0" width="146.4" height="96.0" rx="5" fill="#22d3ee" fill-opacity="0.15" stroke="#22d3ee" stroke-width="2"/><line x1="0" y1="-48.0" x2="0" y2="48.0" stroke="#22d3ee" stroke-dasharray="4 4"/><path d="M 10,0 L 78.0,0" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/><circle r="4" fill="#22d3ee"/></g>
+<g transform="translate(590,345) rotate(0)"><rect x="-30.0" y="-48.0" width="146.4" height="96.0" rx="5" fill="#34d399" fill-opacity="0.15" stroke="#34d399" stroke-width="2"/><line x1="0" y1="-48.0" x2="0" y2="48.0" stroke="#34d399" stroke-dasharray="4 4"/><path d="M 10,0 L 78.0,0" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/><circle r="4" fill="#34d399"/></g>
+<g transform="translate(923,345) rotate(0)"><rect x="-30.0" y="-48.0" width="146.4" height="96.0" rx="5" fill="#a78bfa" fill-opacity="0.15" stroke="#a78bfa" stroke-width="2"/><line x1="0" y1="-48.0" x2="0" y2="48.0" stroke="#a78bfa" stroke-dasharray="4 4"/><path d="M 10,0 L 78.0,0" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-purple)"/><circle r="4" fill="#a78bfa"/></g>
+<path d="M 90 385 C 160 375 180 345 268 345" fill="none" stroke="#22d3ee" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-cyan)"/>
+<text x="40" y="48" font-size="26" fill="#f8fafc" text-anchor="start" font-weight="700">04  窄门通过：后轴过门后逐步交还转向</text>
+<text x="40" y="80" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">门洞先经多帧确认与前进路径搜索 · 门平面进度以实时后轴位置计算 · 几何示意，非实测轨迹</text>
+<text x="200.0" y="148" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">door_align</text>
+<text x="200.0" y="172" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">沿可行路径对正</text>
+<text x="560.0" y="148" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">door_pass</text>
+<text x="560.0" y="172" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">车头通过，后轴接近门平面</text>
+<text x="920.0" y="148" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">door_clear</text>
+<text x="920.0" y="172" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">后轴已过平面，车尾尚未清空</text>
+<text x="380" y="215" font-size="12" fill="#94a3b8" text-anchor="middle" font-weight="400">净空 &gt; 0</text>
+<text x="740" y="215" font-size="12" fill="#94a3b8" text-anchor="middle" font-weight="400">进度 &gt; 0</text>
+<text x="280" y="493" font-size="14" fill="#fbbf24" text-anchor="middle" font-weight="400">门平面</text>
+<text x="640" y="493" font-size="14" fill="#fbbf24" text-anchor="middle" font-weight="400">门平面</text>
+<text x="900" y="493" font-size="14" fill="#fbbf24" text-anchor="middle" font-weight="400">门平面</text>
+<text x="200" y="532" font-size="14" fill="#e2e8f0" text-anchor="middle" font-weight="400">entry_clearance &gt; 0 才进入 pass</text>
+<text x="560" y="532" font-size="14" fill="#e2e8f0" text-anchor="middle" font-weight="400">progress = −center · normal</text>
+<text x="920" y="532" font-size="14" fill="#e2e8f0" text-anchor="middle" font-weight="400">progress &gt; 0.29 m 后解除锁定</text>
+<text x="40" y="574" font-size="16" fill="#34d399" text-anchor="start" font-weight="400">门洞限速：对正 0.35 m/s；通过与车尾清空 0.55 m/s。任一阶段都保留整车制动检查。</text>
+<text x="58" y="637" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">转向交还比例 α</text>
+<text x="80" y="680" font-size="13" fill="#94a3b8" text-anchor="end" font-weight="400">1</text>
+<text x="80" y="788" font-size="13" fill="#94a3b8" text-anchor="end" font-weight="400">0</text>
+<text x="95" y="808" font-size="13" fill="#94a3b8" text-anchor="middle" font-weight="400">0</text>
+<text x="360" y="808" font-size="13" fill="#94a3b8" text-anchor="middle" font-weight="400">0.29 m</text>
+<text x="480" y="808" font-size="13" fill="#94a3b8" text-anchor="middle" font-weight="400">progress</text>
+<text x="832.5" y="638" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">路径角速度与用户转向线性混合</text>
+<text x="832.5" y="662" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">α = clip(progress / 0.29, 0, 1)</text>
+<text x="832.5" y="684" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">ω = (1 − α) × ω_path + α × ω_raw</text>
+<text x="832.5" y="706" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">20 Hz 控制按实时进度交还，不等待阶段标签刷新</text>
+<text x="585" y="794" font-size="14" fill="#fb7185" text-anchor="start" font-weight="400">松杆 / 倒车立即取消；明显持续转离 0.35 s 可取消。</text>
+<text x="585" y="820" font-size="14" fill="#94a3b8" text-anchor="start" font-weight="400">0.29 m = 后轴后方尾长 0.25 m + 裕量 0.04 m。</text></svg>

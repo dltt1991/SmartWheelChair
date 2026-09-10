@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 1430" role="img" aria-labelledby="title desc"><title id="title">02  最终指令流程：先检查入口，再选择速度来源</title><desc id="desc">智能轮椅当前实现的架构或算法示意；文字、连接与参数依据方案文档。</desc><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern><marker id="arrow-cyan" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#22d3ee"/></marker><marker id="arrow-green" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#34d399"/></marker><marker id="arrow-purple" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#a78bfa"/></marker><marker id="arrow-amber" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fbbf24"/></marker><marker id="arrow-rose" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb7185"/></marker><marker id="arrow-orange" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb923c"/></marker><marker id="arrow-slate" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#94a3b8"/></marker><marker id="arrow-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#60a5fa"/></marker></defs><style>text { font-family: "JetBrains Mono", "Noto Sans SC", "PingFang SC", sans-serif; }</style><rect width="1120" height="1430" fill="#0f172a"/><rect width="1120" height="1430" fill="url(#grid)"/><path d="M 270,140 L 335,140" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 585,140 L 820,140" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-rose)"/>
+<path d="M 460,178 L 460,242" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 585,280 L 820,280" fill="none" stroke="#22d3ee" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-cyan)"/>
+<path d="M 460,318 L 460,382" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 585,420 L 820,420" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-rose)"/>
+<path d="M 460,458 L 460,522" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 335,560 L 270,560" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<path d="M 460,598 L 460,662" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 585,700 L 820,700" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-purple)"/>
+<path d="M 460,738 L 460,802" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 585,840 L 820,840" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-rose)"/>
+<path d="M 460,878 L 460,945" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 157,615 L 157,1060 L 460,1060" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 1070,715 L 1090,715 L 1090,1060 L 460,1060" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 460,1020 L 460,1100" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<path d="M 460,1175 L 460,1215" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<path d="M 460,1290 L 460,1330" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<rect x="45" y="110" width="225" height="60" rx="10" fill="#0f172a"/>
+<rect x="45" y="110" width="225" height="60" rx="10" fill="#60a5fa" fill-opacity="0.13" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray=""/>
+<polygon points="460,102 585,140 460,178 335,140" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+<rect x="820" y="110" width="250" height="85" rx="10" fill="#0f172a"/>
+<rect x="820" y="110" width="250" height="85" rx="10" fill="#fb7185" fill-opacity="0.13" stroke="#fb7185" stroke-width="1.5" stroke-dasharray=""/>
+<polygon points="460,242 585,280 460,318 335,280" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+<rect x="820" y="245" width="250" height="100" rx="10" fill="#0f172a"/>
+<rect x="820" y="245" width="250" height="100" rx="10" fill="#22d3ee" fill-opacity="0.13" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray=""/>
+<polygon points="460,382 585,420 460,458 335,420" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+<rect x="820" y="385" width="250" height="85" rx="10" fill="#0f172a"/>
+<rect x="820" y="385" width="250" height="85" rx="10" fill="#fb7185" fill-opacity="0.13" stroke="#fb7185" stroke-width="1.5" stroke-dasharray=""/>
+<polygon points="460,522 585,560 460,598 335,560" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+<rect x="45" y="525" width="225" height="90" rx="10" fill="#0f172a"/>
+<rect x="45" y="525" width="225" height="90" rx="10" fill="#34d399" fill-opacity="0.13" stroke="#34d399" stroke-width="1.5" stroke-dasharray=""/>
+<polygon points="460,662 585,700 460,738 335,700" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+<rect x="820" y="665" width="250" height="100" rx="10" fill="#0f172a"/>
+<rect x="820" y="665" width="250" height="100" rx="10" fill="#a78bfa" fill-opacity="0.13" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray=""/>
+<polygon points="460,802 585,840 460,878 335,840" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+<rect x="820" y="805" width="250" height="85" rx="10" fill="#0f172a"/>
+<rect x="820" y="805" width="250" height="85" rx="10" fill="#fb7185" fill-opacity="0.13" stroke="#fb7185" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="340" y="945" width="240" height="75" rx="10" fill="#0f172a"/>
+<rect x="340" y="945" width="240" height="75" rx="10" fill="#60a5fa" fill-opacity="0.13" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="300" y="1100" width="320" height="75" rx="10" fill="#0f172a"/>
+<rect x="300" y="1100" width="320" height="75" rx="10" fill="#34d399" fill-opacity="0.13" stroke="#34d399" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="300" y="1215" width="320" height="75" rx="10" fill="#0f172a"/>
+<rect x="300" y="1215" width="320" height="75" rx="10" fill="#fb7185" fill-opacity="0.13" stroke="#fb7185" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="300" y="1330" width="320" height="60" rx="10" fill="#0f172a"/>
+<rect x="300" y="1330" width="320" height="60" rx="10" fill="#60a5fa" fill-opacity="0.13" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray=""/>
+<circle cx="460" cy="1060" r="4" fill="#34d399"/>
+<text x="40" y="48" font-size="26" fill="#f8fafc" text-anchor="start" font-weight="700">02  最终指令流程：先检查入口，再选择速度来源</text>
+<text x="40" y="80" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">对应 control() 的主要分支 · mode 由 5 Hz 参考更新决定 · 此图不展开各几何模式的内部状态</text>
+<text x="157.5" y="138" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">20 Hz 控制周期</text>
+<text x="460" y="145" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">已回中且指令有效？</text>
+<text x="945.0" y="138" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">本周期输出零</text>
+<text x="945.0" y="162" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">模式切换 / 输入失效</text>
+<text x="607" y="128" font-size="14" fill="#fb7185" text-anchor="start" font-weight="400">否</text>
+<text x="477" y="211" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">是</text>
+<text x="460" y="285" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">辅助开启？</text>
+<text x="945.0" y="273" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">手动直接发布</text>
+<text x="945.0" y="297" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">/cmd_vel = /cmd_vel_raw</text>
+<text x="945.0" y="319" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">跳过辅助限幅、平滑与制动</text>
+<text x="607" y="268" font-size="14" fill="#22d3ee" text-anchor="start" font-weight="400">否</text>
+<text x="477" y="351" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">是</text>
+<text x="460" y="425" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">传感有效且未松杆？</text>
+<text x="945.0" y="413" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">本周期输出零</text>
+<text x="945.0" y="437" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">stale_input / user_stop</text>
+<text x="607" y="408" font-size="14" fill="#fb7185" text-anchor="start" font-weight="400">否</text>
+<text x="477" y="491" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">是</text>
+<text x="460" y="565" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">使用直接候选？</text>
+<text x="157.5" y="553" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">用户输入 / 横墙限速</text>
+<text x="157.5" y="577" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">倒车 / 原地 / override</text>
+<text x="157.5" y="599" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">或 front_stop 横墙限速</text>
+<text x="306" y="548" font-size="14" fill="#34d399" text-anchor="start" font-weight="400">是</text>
+<text x="477" y="631" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">否</text>
+<text x="460" y="705" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">处于可行门洞跟踪？</text>
+<text x="945.0" y="693" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">门洞专用跟踪</text>
+<text x="945.0" y="717" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">曲率反馈 + 七轮安全速度试探</text>
+<text x="945.0" y="739" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">MPPI 超时仍可走此分支</text>
+<text x="607" y="688" font-size="14" fill="#a78bfa" text-anchor="start" font-weight="400">是</text>
+<text x="477" y="771" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">否</text>
+<text x="460" y="845" font-size="15" fill="#f8fafc" text-anchor="middle" font-weight="600">MPPI 输出新鲜？</text>
+<text x="945.0" y="833" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">本周期输出零</text>
+<text x="945.0" y="857" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">planner_timeout</text>
+<text x="607" y="828" font-size="14" fill="#fb7185" text-anchor="start" font-weight="400">否</text>
+<text x="477" y="914" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">是</text>
+<text x="460.0" y="973" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">MPPI 候选速度</text>
+<text x="460.0" y="997" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">叠加沿墙 / 开口转向修正</text>
+<text x="460.0" y="1128" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">辅助限幅与速度平滑</text>
+<text x="460.0" y="1152" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">门洞分支按平滑后的 v 重算 ω</text>
+<text x="460.0" y="1243" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">独立制动检查</text>
+<text x="460.0" y="1267" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">1.0 → 0.8 → 0.6 → 0.4 → 0.2 → 0</text>
+<text x="460.0" y="1358" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">发布 /cmd_vel 与 status</text>
+<text x="690" y="1150" font-size="16" fill="#fb7185" text-anchor="start" font-weight="400">全部候选不通过 → 输出零</text>
+<text x="690" y="1180" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">每次检查都保留实测动量</text></svg>

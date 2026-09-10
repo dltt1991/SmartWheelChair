@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 910" role="img" aria-labelledby="title desc"><title id="title">05  独立制动检查：检查整个车体未来扫过的区域</title><desc id="desc">智能轮椅当前实现的架构或算法示意；文字、连接与参数依据方案文档。</desc><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern><marker id="arrow-cyan" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#22d3ee"/></marker><marker id="arrow-green" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#34d399"/></marker><marker id="arrow-purple" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#a78bfa"/></marker><marker id="arrow-amber" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fbbf24"/></marker><marker id="arrow-rose" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb7185"/></marker><marker id="arrow-orange" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb923c"/></marker><marker id="arrow-slate" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#94a3b8"/></marker><marker id="arrow-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#60a5fa"/></marker></defs><style>text { font-family: "JetBrains Mono", "Noto Sans SC", "PingFang SC", sans-serif; }</style><rect width="1120" height="910" fill="#0f172a"/><rect width="1120" height="910" fill="url(#grid)"/><rect x="40" y="310" width="625" height="390" rx="12" fill="#0f172a"/>
+<rect x="40" y="310" width="625" height="390" rx="12" fill="#94a3b8" fill-opacity="0.035" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+<rect x="705" y="310" width="375" height="390" rx="12" fill="#0f172a"/>
+<rect x="705" y="310" width="375" height="390" rx="12" fill="#94a3b8" fill-opacity="0.035" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+<path d="M 340,180 L 410,180" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 710,180 L 780,180" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 115 588 C 225 590 295 550 450 435" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 7" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="40" y="125" width="300" height="110" rx="10" fill="#0f172a"/>
+<rect x="40" y="125" width="300" height="110" rx="10" fill="#fb923c" fill-opacity="0.13" stroke="#fb923c" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="410" y="125" width="300" height="110" rx="10" fill="#0f172a"/>
+<rect x="410" y="125" width="300" height="110" rx="10" fill="#60a5fa" fill-opacity="0.13" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="780" y="125" width="300" height="110" rx="10" fill="#0f172a"/>
+<rect x="780" y="125" width="300" height="110" rx="10" fill="#34d399" fill-opacity="0.13" stroke="#34d399" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="40" y="750" width="1040" height="100" rx="10" fill="#0f172a"/>
+<rect x="40" y="750" width="1040" height="100" rx="10" fill="#fb7185" fill-opacity="0.13" stroke="#fb7185" stroke-width="1.5" stroke-dasharray=""/>
+<g transform="translate(125,580) rotate(0)"><rect x="-33.75" y="-54.0" width="164.7" height="108.0" rx="5" fill="#22d3ee" fill-opacity="0.08" stroke="#22d3ee" stroke-width="2"/><line x1="0" y1="-54.0" x2="0" y2="54.0" stroke="#22d3ee" stroke-dasharray="4 4"/><path d="M 10,0 L 87.75,0" stroke="#22d3ee" stroke-width="2" marker-end="url(#arrow-cyan)"/><circle r="4" fill="#22d3ee"/></g>
+<g transform="translate(220,566) rotate(-10)"><rect x="-33.75" y="-54.0" width="164.7" height="108.0" rx="5" fill="#60a5fa" fill-opacity="0.08" stroke="#60a5fa" stroke-width="2"/><line x1="0" y1="-54.0" x2="0" y2="54.0" stroke="#60a5fa" stroke-dasharray="4 4"/><path d="M 10,0 L 87.75,0" stroke="#60a5fa" stroke-width="2" marker-end="url(#arrow-blue)"/><circle r="4" fill="#60a5fa"/></g>
+<g transform="translate(315,523) rotate(-22)"><rect x="-33.75" y="-54.0" width="164.7" height="108.0" rx="5" fill="#a78bfa" fill-opacity="0.08" stroke="#a78bfa" stroke-width="2"/><line x1="0" y1="-54.0" x2="0" y2="54.0" stroke="#a78bfa" stroke-dasharray="4 4"/><path d="M 10,0 L 87.75,0" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-purple)"/><circle r="4" fill="#a78bfa"/></g>
+<g transform="translate(420,452) rotate(-30)"><rect x="-33.75" y="-54.0" width="164.7" height="108.0" rx="5" fill="#34d399" fill-opacity="0.08" stroke="#34d399" stroke-width="2"/><line x1="0" y1="-54.0" x2="0" y2="54.0" stroke="#34d399" stroke-dasharray="4 4"/><path d="M 10,0 L 87.75,0" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-green)"/><circle r="4" fill="#34d399"/></g>
+<g transform="translate(420,452) rotate(-30)"><rect x="-42.75" y="-63" width="182.7" height="126" rx="9" fill="none" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5 4"/></g>
+<circle cx="518" cy="345" r="6" fill="#fb7185"/>
+<circle cx="518" cy="345" r="18" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="4 3"/>
+<path d="M 555,365 L 527,350" fill="none" stroke="#fb7185" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="738" cy="382" r="5" fill="#fb7185"/>
+<circle cx="738" cy="442" r="5" fill="#fb7185"/>
+<circle cx="738" cy="502" r="5" fill="#34d399"/>
+<text x="40" y="48" font-size="26" fill="#f8fafc" text-anchor="start" font-weight="700">05  独立制动检查：检查整个车体未来扫过的区域</text>
+<text x="40" y="80" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">输入：当前障碍点、候选 (v, ω)、实测 (v, ω)、里程计年龄 · 零候选也保留当前动量</text>
+<text x="190.0" y="153" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">① 延迟段</text>
+<text x="190.0" y="177" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">保持实测速度</text>
+<text x="190.0" y="199" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">0.20 s 反应时间 + state_age</text>
+<text x="560.0" y="153" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">② 速度过渡段</text>
+<text x="560.0" y="177" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">实测速度 → 候选速度</text>
+<text x="560.0" y="199" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">按 0.5 m/s²、0.8 rad/s² 约束</text>
+<text x="930.0" y="153" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">③ 制动到静止</text>
+<text x="930.0" y="177" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">候选线 / 角速度按比例归零</text>
+<text x="930.0" y="199" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">时长 max(|v|/0.5, |ω|/0.8)</text>
+<text x="40" y="278" font-size="17" fill="#e2e8f0" text-anchor="start" font-weight="400">以 0.02 s 步长积分位姿，在每个预测位姿上计算障碍点到整车矩形的距离。</text>
+<text x="58" y="337" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">矩形轮廓扫掠 · 示意候选在转弯时靠近障碍</text>
+<text x="723" y="337" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">候选筛选 · 顺序试探</text>
+<text x="561" y="380" font-size="15" fill="#fb7185" text-anchor="middle" font-weight="400">障碍点</text>
+<text x="78" y="656" font-size="14" fill="#e2e8f0" text-anchor="start" font-weight="400">圆角外扩 = 4 cm 基础裕量 + 延迟不确定性 + 采样填充</text>
+<text x="759" y="387" font-size="19" fill="#fb7185" text-anchor="start" font-weight="600">1.0 × (v, ω)</text>
+<text x="759" y="411" font-size="14" fill="#94a3b8" text-anchor="start" font-weight="400">未通过（示例）</text>
+<text x="759" y="447" font-size="19" fill="#fb7185" text-anchor="start" font-weight="600">0.8 × (v, ω)</text>
+<text x="759" y="471" font-size="14" fill="#94a3b8" text-anchor="start" font-weight="400">未通过（示例）</text>
+<text x="759" y="507" font-size="19" fill="#34d399" text-anchor="start" font-weight="600">0.6 × (v, ω)</text>
+<text x="759" y="531" font-size="14" fill="#94a3b8" text-anchor="start" font-weight="400">首次通过即采用（示例）</text>
+<text x="738" y="586" font-size="16" fill="#94a3b8" text-anchor="start" font-weight="400">剩余尺度：0.4 → 0.2 → 0.0</text>
+<text x="738" y="624" font-size="17" fill="#fb7185" text-anchor="start" font-weight="400">全部不通过：输出零</text>
+<text x="738" y="652" font-size="14" fill="#fb7185" text-anchor="start" font-weight="400">reason = emergency_stop</text>
+<text x="560.0" y="778" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">点到矩形的径向距离，而非点到轮迹线</text>
+<text x="560.0" y="802" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">dx = max(−0.25 − x, x − 0.97, 0)     dy = max(|y| − 0.40, 0)</text>
+<text x="560.0" y="824" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">clearance = √(dx² + dy²)     若任一时刻 clearance ≤ 检查裕量，则拒绝候选</text>
+<text x="40" y="885" font-size="15" fill="#fbbf24" text-anchor="start" font-weight="400">缩放的是候选指令，实测速度不缩放；紧急输出零不等于物理车体瞬间停止。</text></svg>

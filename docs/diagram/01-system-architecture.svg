@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 860" role="img" aria-labelledby="title desc"><title id="title">01  系统架构：由人给意图，由协调器发布最终指令</title><desc id="desc">智能轮椅当前实现的架构或算法示意；文字、连接与参数依据方案文档。</desc><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/></pattern><marker id="arrow-cyan" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#22d3ee"/></marker><marker id="arrow-green" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#34d399"/></marker><marker id="arrow-purple" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#a78bfa"/></marker><marker id="arrow-amber" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fbbf24"/></marker><marker id="arrow-rose" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb7185"/></marker><marker id="arrow-orange" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#fb923c"/></marker><marker id="arrow-slate" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#94a3b8"/></marker><marker id="arrow-blue" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto" markerUnits="userSpaceOnUse"><path d="M 0 0 L 9 3.5 L 0 7 Z" fill="#60a5fa"/></marker></defs><style>text { font-family: "JetBrains Mono", "Noto Sans SC", "PingFang SC", sans-serif; }</style><rect width="1120" height="860" fill="#0f172a"/><rect width="1120" height="860" fill="url(#grid)"/><rect x="30" y="290" width="1060" height="450" rx="12" fill="#0f172a"/>
+<rect x="30" y="290" width="1060" height="450" rx="12" fill="#94a3b8" fill-opacity="0.035" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+<path d="M 180,220 L 180,405 L 380,405" fill="none" stroke="#22d3ee" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-cyan)"/>
+<path d="M 560,220 L 560,340" fill="none" stroke="#fb923c" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-orange)"/>
+<path d="M 380,178 L 300,178" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 820,178 L 740,178" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<path d="M 740,395 L 940,395 L 940,220" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<path d="M 380,448 L 180,448 L 180,615" fill="none" stroke="#a78bfa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 470,480 L 470,615" fill="none" stroke="#34d399" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-green)"/>
+<path d="M 650,615 L 650,480" fill="none" stroke="#60a5fa" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-blue)"/>
+<path d="M 740,448 L 795,448 L 795,665 L 820,665" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow-slate)"/>
+<rect x="60" y="135" width="240" height="85" rx="10" fill="#0f172a"/>
+<rect x="60" y="135" width="240" height="85" rx="10" fill="#22d3ee" fill-opacity="0.13" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="380" y="135" width="360" height="85" rx="10" fill="#0f172a"/>
+<rect x="380" y="135" width="360" height="85" rx="10" fill="#fb923c" fill-opacity="0.13" stroke="#fb923c" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="820" y="135" width="240" height="85" rx="10" fill="#0f172a"/>
+<rect x="820" y="135" width="240" height="85" rx="10" fill="#fbbf24" fill-opacity="0.13" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="380" y="340" width="360" height="140" rx="10" fill="#0f172a"/>
+<rect x="380" y="340" width="360" height="140" rx="10" fill="#34d399" fill-opacity="0.13" stroke="#34d399" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="60" y="615" width="240" height="100" rx="10" fill="#0f172a"/>
+<rect x="60" y="615" width="240" height="100" rx="10" fill="#a78bfa" fill-opacity="0.13" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="380" y="615" width="360" height="100" rx="10" fill="#0f172a"/>
+<rect x="380" y="615" width="360" height="100" rx="10" fill="#60a5fa" fill-opacity="0.13" stroke="#60a5fa" stroke-width="1.5" stroke-dasharray=""/>
+<rect x="820" y="615" width="240" height="100" rx="10" fill="#0f172a"/>
+<rect x="820" y="615" width="240" height="100" rx="10" fill="#94a3b8" fill-opacity="0.13" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray=""/>
+<text x="40" y="48" font-size="26" fill="#f8fafc" text-anchor="start" font-weight="700">01  系统架构：由人给意图，由协调器发布最终指令</text>
+<text x="40" y="80" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">ROS 2 Jazzy + Gazebo · 仅局部共享控制 · 箭头表示主要数据流，省略桥接节点内部细节</text>
+<text x="48" y="317" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">ROS 2 控制层</text>
+<text x="180.0" y="163" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">浏览器 / 键盘</text>
+<text x="180.0" y="187" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">摇杆、模式切换、后摄显示</text>
+<text x="560.0" y="163" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">Gazebo 传感与里程计</text>
+<text x="560.0" y="187" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">左右扫描 10 Hz · 后摄 15 Hz · /odom</text>
+<text x="940.0" y="163" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">Gazebo 差速底盘</text>
+<text x="940.0" y="187" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">执行 /cmd_vel · 反馈运动</text>
+<text x="560.0" y="368" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">UnifiedControlNode</text>
+<text x="560.0" y="392" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">输入校验与 TF · 意图仲裁</text>
+<text x="560.0" y="414" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">参考更新 5 Hz · 最终控制 20 Hz</text>
+<text x="560.0" y="436" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">手动透传 / 辅助平滑与制动</text>
+<text x="180.0" y="643" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">纯几何算法</text>
+<text x="180.0" y="667" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">墙线、开口、门洞路径</text>
+<text x="180.0" y="689" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">独立制动扫掠检查</text>
+<text x="560.0" y="643" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">Nav2 controller_server</text>
+<text x="560.0" y="667" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">MPPI 20 Hz · 60 × 0.05 s · 600 样本</text>
+<text x="560.0" y="689" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">滚动代价地图 8 × 8 m · 0.025 m</text>
+<text x="940.0" y="643" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">诊断与轨迹显示</text>
+<text x="940.0" y="667" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">status / reference</text>
+<text x="940.0" y="689" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">Gazebo 恒曲率预览</text>
+<text x="160" y="252" font-size="15" fill="#22d3ee" text-anchor="end" font-weight="400">/cmd_vel_raw</text>
+<text x="160" y="277" font-size="14" fill="#22d3ee" text-anchor="end" font-weight="400">/assist_enabled</text>
+<text x="580" y="260" font-size="14" fill="#fb923c" text-anchor="start" font-weight="400">/scan_* · /odom</text>
+<text x="340" y="160" font-size="13" fill="#94a3b8" text-anchor="middle" font-weight="400">图像</text>
+<text x="780" y="160" font-size="13" fill="#94a3b8" text-anchor="middle" font-weight="400">运动</text>
+<text x="790" y="375" font-size="16" fill="#34d399" text-anchor="start" font-weight="400">/cmd_vel</text>
+<text x="205" y="552" font-size="14" fill="#a78bfa" text-anchor="start" font-weight="400">调用几何与制动函数</text>
+<text x="450" y="527" font-size="14" fill="#34d399" text-anchor="end" font-weight="400">FollowPath</text>
+<text x="450" y="551" font-size="13" fill="#34d399" text-anchor="end" font-weight="400">/unified_scan_*</text>
+<text x="450" y="574" font-size="13" fill="#34d399" text-anchor="end" font-weight="400">/speed_limit</text>
+<text x="669" y="549" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">/cmd_vel_planned</text>
+<text x="810" y="552" font-size="14" fill="#94a3b8" text-anchor="start" font-weight="400">观测输出</text>
+<text x="40" y="786" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="400">辅助候选来源：普通前进用 MPPI；可行门洞用专用跟踪；倒车 / 退出 / 横墙使用受约束输入。</text>
+<text x="40" y="816" font-size="15" fill="#fb7185" text-anchor="start" font-weight="400">手动模式直接透传新鲜输入，不经过辅助限幅、平滑和制动检查；最终发布者仍是统一协调器。</text></svg>
