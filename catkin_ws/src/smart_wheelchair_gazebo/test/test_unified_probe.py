@@ -10,6 +10,15 @@ spec.loader.exec_module(probe)
 
 
 class UnifiedProbeTest(unittest.TestCase):
+    def test_wall_acceptance_requires_mode_and_speed_recovery(self):
+        self.assertTrue(hasattr(probe, 'check_wall_result'),
+                        'wall probe must expose its real acceptance check')
+        for max_speed in (0., .6):
+            with self.subTest(max_speed=max_speed), \
+                    self.assertRaisesRegex(AssertionError, 'wall speed did not recover'):
+                probe.check_wall_result({'modes': ['wall'], 'max_speed': max_speed})
+        probe.check_wall_result({'modes': ['wall'], 'max_speed': .600001})
+
     def test_release_settling_requires_new_fresh_command_and_odometry(self):
         self.assertTrue(hasattr(probe, 'settled_after_release'),
                         'cached zero samples must not prove post-release settling')

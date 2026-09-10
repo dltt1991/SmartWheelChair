@@ -27,6 +27,11 @@ def check_door_modes(modes):
     assert 'door_pass' in modes, 'door alignment never committed to pass'
 
 
+def check_wall_result(result):
+    assert 'wall' in result['modes'], 'wall following was not observed'
+    assert result['max_speed'] > .6, 'wall speed did not recover'
+
+
 def settled_after_release(data, released, now):
     return all(released < data.get(key + '_received', -math.inf) <= now
                and now - data[key + '_received'] <= .25
@@ -236,7 +241,7 @@ def main():
             assert 'front_stop' in result['modes'], 'front obstacle stop mode was not observed'
             assert abs(moving[-1].get('cmd_vel', [99])[0]) < .02, 'did not stop at front wall'
         elif args.case == 'wall':
-            assert 'wall' in result['modes'], 'wall following was not observed'
+            check_wall_result(result)
         elif args.case == 'override':
             assert any(r['t'] > 13 and r.get('cmd_vel', [0, 0])[1] < -.3
                        and r.get('status', {}).get('mode') == 'override' for r in moving), 'override not observed'
@@ -255,8 +260,6 @@ def main():
         elif args.case == 'opening_straight':
             assert 'opening_turn' not in result['modes'], 'opening captured a straight command'
             assert abs(result['yaw_change']) < .25, 'straight command turned into the opening'
-        else:
-            assert 'wall' in result['modes'] and result['max_speed'] > .6, 'wall speed did not recover'
     finally:
         try:
             command()
