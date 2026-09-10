@@ -44,7 +44,7 @@ source install/setup.bash
   cat /tmp/gazebo-camera-pose.log >&2 || true
 ) &
 
-args=(gui:=true "unified_control:=${UNIFIED_CONTROL:-true}")
+args=(gui:=true)
 if [[ -n "${WHEELCHAIR_WORLD:-}" ]]; then
   args+=("world:=$WHEELCHAIR_WORLD")
 fi

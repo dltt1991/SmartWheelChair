@@ -55,11 +55,6 @@ class WorldLayoutTest(unittest.TestCase):
         self.assertAlmostEqual(north_y_min - south_y_max, 2.58)
         self.assertAlmostEqual(east_x_min - west_x_max, 2.58)
 
-    def test_launch_uses_ten_centimeter_stop_distance(self):
-        launch_source = LAUNCH.read_text()
-
-        self.assertIn('"stop_distance_m": 0.10', launch_source)
-
     def test_door_fixture_has_exact_one_metre_collision_gap(self):
         root = ET.parse(WORLD.with_name('unified_door.sdf')).getroot()
         edges = []
@@ -77,10 +72,13 @@ class WorldLayoutTest(unittest.TestCase):
 
         self.assertEqual(ranges, [5.0, 5.0])
 
-    def test_unified_launch_retains_baseline_switch(self):
+    def test_launch_uses_only_unified_control_stack(self):
         source = LAUNCH.read_text()
-        self.assertIn('UnlessCondition(unified)', source)
-        self.assertIn('IfCondition(unified)', source)
+
+        self.assertNotIn('DeclareLaunchArgument("unified_control"', source)
+        self.assertNotIn('wall_follow_assist_node', source)
+        self.assertNotIn('safety_filter_node', source)
+        self.assertIn('executable="unified_control_node"', source)
         self.assertIn('("cmd_vel", "cmd_vel_planned")', source)
         self.assertIn('/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock', source)
 

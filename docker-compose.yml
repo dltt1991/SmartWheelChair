@@ -28,7 +28,6 @@ services:
     shm_size: "512m"
     environment:
       VNC_DISPLAY: ":1"
-      UNIFIED_CONTROL: ${UNIFIED_CONTROL:-true}
       WHEELCHAIR_WORLD: ${WHEELCHAIR_WORLD:-}
       VNC_GEOMETRY: 1600x1000x24
       LIBGL_ALWAYS_SOFTWARE: "1"

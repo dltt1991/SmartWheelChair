@@ -2,7 +2,7 @@
 <package format="3">
   <name>smart_wheelchair_safety</name>
   <version>0.1.0</version>
-  <description>Shared-control safety filter for the smart wheelchair simulator.</description>
+  <description>Unified shared controller for the smart wheelchair simulator.</description>
   <maintainer email="dev@example.com">SmartWheelChair</maintainer>
   <license>MIT</license>
 

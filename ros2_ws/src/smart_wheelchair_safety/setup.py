@@ -14,13 +14,10 @@ setup(
     zip_safe=True,
     maintainer="SmartWheelChair",
     maintainer_email="dev@example.com",
-    description="Shared-control safety filter for the smart wheelchair simulator.",
+    description="Unified shared controller for the smart wheelchair simulator.",
     license="MIT",
     entry_points={
         "console_scripts": [
-            "safety_filter_node = smart_wheelchair_safety.safety_filter_node:main",
-            "trajectory_preview_node = smart_wheelchair_safety.trajectory_preview_node:main",
-            "wall_follow_assist_node = smart_wheelchair_safety.wall_follow_assist_node:main",
             "web_joystick_node = smart_wheelchair_safety.web_joystick_node:main",
             "unified_control_node = smart_wheelchair_safety.unified_control_node:main",
         ],

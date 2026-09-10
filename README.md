@@ -8,7 +8,7 @@
 - 两个被动前万向轮。
 - 左右两颗 360 度旋转单线激光雷达，在仿真中发布经过车身过滤后的侧边/侧前 2D 扫描。
 - 后方中部 120 度广角摄像头。
-- ROS 安全过滤器，可根据激光点云对前进、转向等动作进行减速或停车。
+- 统一共享控制器，根据激光数据进行延墙、窄门辅助、舒适限速和独立制动检查。
 - 浏览器虚拟摇杆和后摄画面，倒车时叠加 2 米左右轮预测轨迹。
 
 当前版本刻意不实现真实 GD32/RK3568 通信协议、SLAM、自主导航和认证级安全控制。
@@ -188,23 +188,11 @@ ros2 topic echo /scan_left
 ros2 topic echo /scan_right
 ```
 
-旧版安全过滤器会使用不同方向的激光扇区限制运动。它先把雷达测距转换为“障碍物到轮椅外轮廓”的净距离，再进行限速判断。以下参数属于 `unified_control:=false` 的旧控制链，新版见下一节。
-
-关键参数：
-
-- `body_min_x_m = -0.58`
-- `body_max_x_m = 0.64`
-- `body_min_y_m = -0.40`
-- `body_max_y_m = 0.40`
-- `body_filter_margin_m = 0.02`
-- `stop_distance_m = 0.10`
-- `slow_distance_m = 0.90`
-
-其中 `stop_distance_m = 0.10` 表示轮椅外轮廓距离障碍物 10 厘米时停车，而不是雷达原点距离障碍物 10 厘米。距离小于 `0.02 m` 的车身相交回波会被当作自身回波过滤掉。
+统一控制器把雷达测距转换为车身坐标系障碍点，并以整车矩形轮廓、制动距离和额外安全裕量进行碰撞检查。距离小于车身过滤边界的自身回波会在进入控制逻辑前剔除。
 
 ## 统一共享控制 V1
 
-默认使用新链路：摇杆意图 → 墙线/门洞参考路径 → Nav2 MPPI → 速度平滑 → 独立制动检查 → `/cmd_vel`。MPPI 联合选择线速度和角速度，预测时域为 3 秒；碰撞检查使用整车矩形轮廓，不只检查三条轮迹线。
+控制链路为：摇杆意图 → 墙线/门洞参考路径 → Nav2 MPPI → 速度平滑 → 独立制动检查 → `/cmd_vel`。MPPI 联合选择线速度和角速度，预测时域为 3 秒；碰撞检查使用整车矩形轮廓，不只检查三条轮迹线。
 
 - 斜向靠墙与平行沿墙共用切向参考，稳定沿墙的车身边沿目标净距为 `12 cm`（`wall_clearance=0.12`），按 `15 cm` 内进行跟随验证，不是后轴中心到墙的距离。接近墙、门洞和转角阶段允许留出更多安全空间；反向转向输入可以退出沿墙接管。
 - 沿墙遇到宽度不小于 `1.8 m` 的同侧通道时，只有用户持续向开口侧转向才会锁存开口；控制器先保持原航向越过近端墙角，再生成进入通道的切向路径。摇杆保持直行不会被开口吸入。窄于该阈值的开口不走直接转弯逻辑。
@@ -214,19 +202,12 @@ ros2 topic echo /scan_right
 - Gazebo 两颗激光雷达当前量程均为 `5.0 m`；硬件雷达标称最远 `12 m`，待实车标定后再单独调整，不能直接套用仿真参数。
 - 几何统一到后轴中心：车身 `x=[-0.25, 0.97] m`、`y=[-0.40, 0.40] m`。硬检查附加 `4 cm` 裕量与受减速度约束的制动尾段；这不是实车安全保证。
 
-Gazebo 原有的两套三线轨迹仍分别显示原始摇杆指令和最终 `/cmd_vel` 的恒曲率预测；它们不是 MPPI 的时变规划路径。参考路径与控制状态可查看：
+Gazebo C++ 插件用两套三线轨迹分别显示原始摇杆指令和最终 `/cmd_vel` 的恒曲率预测；它们不是 MPPI 的时变规划路径。参考路径与控制状态可查看：
 
 ```bash
 ros2 topic echo /shared_control/status
 ros2 topic echo /shared_control/reference
 ros2 topic echo /cmd_vel_planned
-```
-
-切回旧控制链，或恢复新版：
-
-```bash
-UNIFIED_CONTROL=false docker compose up -d gui
-UNIFIED_CONTROL=true docker compose up -d gui
 ```
 
 独立一米门洞测试场景（启动位置偏角约 10 度、横向偏置 15 cm）：
@@ -239,7 +220,7 @@ WHEELCHAIR_WORLD=/workspaces/SmartWheelChair/ros2_ws/src/smart_wheelchair_gazebo
 
 ## 键盘遥控
 
-在另一个 Docker shell 中，可以通过键盘遥控并经过 safety filter：
+在另一个 Docker shell 中，可以通过键盘遥控并经过统一控制器：
 
 ```bash
 cd /workspaces/SmartWheelChair/ros2_ws
@@ -258,16 +239,16 @@ ros2 topic echo /odom
 
 ## 运行本地单元测试
 
-这些测试覆盖摇杆映射、速度限制器、轮椅模型和 Gazebo 世界布局。纯 Python 测试不需要 ROS：
+这些测试覆盖摇杆映射、统一控制几何、控制状态机、轮椅模型和 Gazebo 世界布局。纯 Python 测试不需要 ROS：
 
 ```bash
 PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest discover ros2_ws/src/smart_wheelchair_safety/test
 ```
 
-也可以运行当前完整测试集：
+也可以只运行不依赖 ROS 的基础测试：
 
 ```bash
-PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest ros2_ws/src/smart_wheelchair_safety/test/test_joystick.py ros2_ws/src/smart_wheelchair_safety/test/test_limiter.py ros2_ws/src/smart_wheelchair_gazebo/test/test_model_visuals.py ros2_ws/src/smart_wheelchair_gazebo/test/test_world_layout.py
+PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest ros2_ws/src/smart_wheelchair_safety/test/test_joystick.py ros2_ws/src/smart_wheelchair_safety/test/test_unified_geometry.py ros2_ws/src/smart_wheelchair_gazebo/test/test_model_visuals.py ros2_ws/src/smart_wheelchair_gazebo/test/test_world_layout.py
 ```
 
 ## 拆机信息对应关系
