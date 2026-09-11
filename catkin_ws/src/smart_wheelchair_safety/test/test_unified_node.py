@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
 import math
+import os
 import threading
 import time
 from types import SimpleNamespace
@@ -12,7 +13,10 @@ import numpy as np
 ROS_AVAILABLE = importlib.util.find_spec('rospy') is not None
 if ROS_AVAILABLE:
     import rospy
-    rospy.init_node('test_unified_control', anonymous=True, disable_signals=True)
+    # Spawn imports the test entry point; the geometry worker must not register
+    # the rostest-remapped ROS node name again and shut down its parent.
+    if __name__ != '__mp_main__':
+        rospy.init_node('test_unified_control', anonymous=True, disable_signals=True)
 
 
 def parameter(node, name):
@@ -41,6 +45,270 @@ class UnifiedNodeTest(unittest.TestCase):
 
     def tearDown(self):
         self.node.destroy_node()
+
+    def test_door_search_runs_outside_control_interpreter(self):
+        from smart_wheelchair_safety.unified_geometry import collision_aware_door_reference
+        worker_pid = self.node.door_plan_executor.submit(os.getpid).result(timeout=10.)
+        self.assertNotEqual(worker_pid, os.getpid())
+        door = self.front_opening()
+        result = self.node.door_plan_executor.submit(
+            collision_aware_door_reference, door, np.empty((0, 2))).result(timeout=10.)
+        np.testing.assert_allclose(result, collision_aware_door_reference(door, np.empty((0, 2))))
+
+    def test_broken_search_worker_does_not_kill_reference_callback(self):
+        from concurrent.futures import Future
+        from concurrent.futures.process import BrokenProcessPool
+        self.node.door_phase = 'door_align'
+        failed = Future()
+        failed.set_exception(BrokenProcessPool('worker exited'))
+        self.node.door_plan_request = (failed, self.node.pose, self.node.door_generation)
+        with patch.object(self.node.door_plan_executor, 'submit',
+                          side_effect=BrokenProcessPool('pool unavailable')):
+            for _ in range(2):
+                self.node._local_door_path(self.front_opening(), np.empty((0, 2)))
+                self.assertFalse(self.node.door_path_feasible)
+                self.assertIsNone(self.node.door_path)
+                self.assertIsNone(self.node.door_plan_request)
+
+    def test_recovery_uses_capped_joystick_even_when_planner_is_blocked(self):
+        for mode in ('wall', 'door_wait', 'door_align'):
+            with self.subTest(mode=mode):
+                self.node.mode = mode
+                self.node.door_path_feasible = True
+                self.node.plan_time = 0.
+                self.node.planned[:] = 0.
+                self.node.raw = np.array([.5, 0.])
+                self.node.output[:] = 0.
+                self.node.scans = {side: (time.monotonic(), np.array([[-.28, 0.]]))
+                                   for side in ('left', 'right')}
+                self.node.last_tick = rospy.Time.now().to_sec()-.05
+                self.node.control()
+                self.assertGreater(self.commands[-1].linear.x, 0.)
+                self.assertLessEqual(self.commands[-1].linear.x, .05)
+                self.assertEqual(self.commands[-1].angular.z, 0.)
+                self.assertEqual(self.node.reason, 'clearance_recovery')
+
+    def test_near_obstacle_recovery_does_not_start_distant_door_searches(self):
+        self.node.raw = np.array([.5, 0.])
+        self.node.scans = {side: (time.monotonic(), np.array([[-.28, 0.]]))
+                           for side in ('left', 'right')}
+        with patch.object(self.node, '_intended_door', return_value=(None, None)) as search:
+            self.node.update_reference()
+            search.assert_not_called()
+        self.assertEqual(self.node.mode, 'clearance_recovery')
+        self.assertFalse(self.node.accept_planned)
+
+    def test_recovery_still_rejects_inward_stale_and_neutral_commands(self):
+        self.node.scans = {side: (time.monotonic(), np.array([[1., 0.]]))
+                           for side in ('left', 'right')}
+        for raw, stale in (([.5, 0.], False), ([-.4, 0.], True), ([0., 0.], False)):
+            with self.subTest(raw=raw, stale=stale):
+                self.node.raw = np.array(raw)
+                self.node.odom_time = 0. if stale else time.monotonic()
+                self.node.control()
+                self.assertEqual(self.commands[-1].linear.x, 0.)
+                self.assertEqual(self.commands[-1].angular.z, 0.)
+
+    def test_recovery_is_stably_limited_and_exits_with_clearance(self):
+        self.node.raw = np.array([-.4, 0.])
+        self.node.scans = {side: (time.monotonic(), np.array([[1., 0.]]))
+                           for side in ('left', 'right')}
+        for _ in range(30):
+            self.node.raw_time = self.node.odom_time = time.monotonic()
+            self.node.odom_stamp = rospy.Time.now().to_sec()
+            self.node.last_tick = self.node.odom_stamp-.05
+            self.node.control()
+            self.node.measured = self.node.output.copy()
+            self.assertLessEqual(abs(self.commands[-1].linear.x), .05)
+            self.assertLess(self.commands[-1].linear.x, 0.)
+        self.node.scans = {side: (time.monotonic(), np.array([[1.06, 0.]]))
+                           for side in ('left', 'right')}
+        self.node.last_tick = rospy.Time.now().to_sec()-.05
+        self.node.control()
+        self.assertFalse(self.node.recovering)
+        self.assertLess(self.commands[-1].linear.x, -.05)
+
+    def test_stale_input_stops_without_losing_recovery_hysteresis(self):
+        self.node.recovering = True
+        self.node.raw = np.array([-.4, 0.])
+        self.node.odom_time = 0.
+        self.node.control()
+        self.assertTrue(self.node.recovering)
+        self.assertEqual(self.node.reason, 'stale_input')
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+        self.node.odom_time = time.monotonic()
+        self.node.odom_stamp = rospy.Time.now().to_sec()
+        self.node.scans = {side: (time.monotonic(), np.array([[1.02, 0.]]))
+                           for side in ('left', 'right')}
+        self.node.control()
+        self.assertTrue(self.node.recovering)
+
+    def test_stop_infeasible_margin_boundary_can_enter_recovery(self):
+        self.node.recovering = False
+        self.node.measured = np.array([.00013, .00024])
+        self.node.odom_stamp = rospy.Time.now().to_sec()-.02
+        self.assertTrue(self.node._near_recovery(np.array([[1.01003, 0.]])))
+        self.assertFalse(self.node._near_recovery(np.array([[1.1, 0.]])))
+
+    def test_recovery_start_does_not_repeat_infeasible_tiny_jerk_candidate(self):
+        self.node.raw = np.array([-.4, 0.])
+        self.node.measured = np.array([.002, 0.])
+        points = np.array([[1.01058, 0.]])
+        for _ in range(3):
+            now, stamp = time.monotonic(), rospy.Time.now().to_sec()
+            self.node.raw_time = self.node.odom_time = now
+            self.node.odom_stamp = stamp-.08
+            self.node.last_tick = stamp-.05
+            self.node.scans = {side: (now, points) for side in ('left', 'right')}
+            previous = self.node.output.copy()
+            self.node.control()
+            self.assertLess(self.node.output[0], -.00625)
+            self.assertTrue(np.all(np.abs(self.node.output-previous) <= np.array([.5, .8])*.051))
+            self.assertLessEqual(abs(self.node.output[0]), .05)
+
+    def test_recovery_start_candidates_still_reject_a_new_rear_obstacle(self):
+        self.node.raw = np.array([-.4, 0.])
+        self.node.measured = np.array([.002, 0.])
+        self.node.odom_stamp = rospy.Time.now().to_sec()-.08
+        self.node.last_tick = rospy.Time.now().to_sec()-.05
+        self.node.scans = {side: (time.monotonic(), np.array([[1.01058, 0.], [-.2901, 0.]]))
+                           for side in ('left', 'right')}
+        self.node.control()
+        np.testing.assert_array_equal(self.node.output, [0., 0.])
+
+    def test_forward_recovery_waits_for_a_moving_planner_before_handoff(self):
+        self.node.recovering = True
+        self.node.raw = np.array([.5, 0.])
+        self.node.planned[:] = 0.
+        self.node.mode = 'door_wait'
+        self.node.scans = {side: (time.monotonic(), np.array([[-.33, 0.]]))
+                           for side in ('left', 'right')}
+        self.node.last_tick = rospy.Time.now().to_sec()-.05
+        self.node.control()
+        self.assertTrue(self.node.recovering)
+        self.assertGreater(self.commands[-1].linear.x, 0.)
+        self.node.planned = np.array([.2, 0.])
+        self.node.plan_time = time.monotonic()
+        self.node.mode = 'manual'
+        self.node.control()
+        self.assertFalse(self.node.recovering)
+
+    def test_recovery_hands_clear_space_back_to_override_and_front_stop(self):
+        points = np.array([[-.33, 0.]])
+        for mode, override in (('front_stop', False), ('override', True)):
+            with self.subTest(mode=mode):
+                self.node.recovering = True
+                self.node.planned[:] = 0.
+                self.node.plan_time = 0.
+                self.node.mode, self.node.override = mode, override
+                self.assertFalse(self.node._near_recovery(points))
+
+    def test_curved_recovery_can_request_a_door_plan(self):
+        from concurrent.futures import Future
+        self.node.recovering = True
+        self.node.measured = self.node.output = np.array([.04, .08])
+        self.node.door_phase = 'door_align'
+        with patch.object(self.node.door_plan_executor, 'submit', return_value=Future()) as submit:
+            self.node._local_door_path(self.front_opening(heading=.5), np.array([[1., .43]]))
+            submit.assert_called_once()
+
+    def test_recovery_slows_while_a_door_search_is_pending(self):
+        from concurrent.futures import Future
+        self.node.recovering = True
+        self.node.raw = np.array([.5, .2])
+        self.node.planned[:] = 0.
+        self.node.mode = 'door_wait'
+        self.node.door_plan_request = (Future(), self.node.pose, self.node.door_generation)
+        self.node.scans = {side: (time.monotonic(), np.array([[-.33, 0.]]))
+                           for side in ('left', 'right')}
+        self.node.last_tick = rospy.Time.now().to_sec()-.1
+        self.node.control()
+        self.assertGreater(self.commands[-1].linear.x, 0.)
+        self.assertLessEqual(self.commands[-1].linear.x, .01+1e-12)
+        self.assertLessEqual(abs(self.commands[-1].angular.z), .02)
+
+    def test_door_pivot_stays_latched_across_small_position_drift(self):
+        for side in (-1., 1.):
+            with self.subTest(side=side):
+                self.node.mode = self.node.door_phase = 'door_align'
+                self.node.door_path_feasible = True
+                self.node.door_rotation_index = 0
+                self.node.door_path = np.array([[0., 0., 0.], [.36, 0., 0.],
+                                                [.36, 0., side*math.pi/2], [.36, side, side*math.pi/2]])
+                self.node.pose = (.291, 0., side*1.45)
+                first = self.node._safe_door_command(np.empty((0, 2)), self.node.odom_stamp)
+                self.assertEqual(first[0], 0.)
+                self.assertGreater(side*first[1], 0.)
+                self.node.pose = (.290, side*.015, side*1.49)
+                second = self.node._safe_door_command(np.empty((0, 2)), self.node.odom_stamp)
+                self.assertEqual(second[0], 0.)
+                self.assertGreater(side*second[1], 0.)
+                self.node.pose = (.290, side*.015, side*math.pi/2)
+                self.assertIsNone(self.node._pending_door_rotation())
+
+    def test_excessive_pivot_drift_stops_and_invalidates_the_path(self):
+        self.node.mode = self.node.door_phase = 'door_align'
+        self.node.door_path_feasible = True
+        self.node.door_path = np.array([[0., 0., 0.], [.36, 0., 0.], [.36, 0., math.pi/2]])
+        self.node.pose = (.291, 0., 1.)
+        self.node._safe_door_command(np.empty((0, 2)), self.node.odom_stamp)
+        self.node.pose = (.20, 0., 1.1)
+        np.testing.assert_array_equal(self.node._safe_door_command(np.empty((0, 2)), self.node.odom_stamp), [0., 0.])
+        self.assertFalse(self.node.door_path_feasible)
+
+    def test_invalidated_pivot_with_residual_output_stops_without_exception(self):
+        self.node.mode = self.node.door_phase = 'door_align'
+        self.node.door_path_feasible = True
+        self.node.door_path = np.array([[0., 0., 0.], [.36, 0., 0.], [.36, 0., math.pi/2]])
+        self.node.door_rotation_index = 1
+        self.node.pose = (.20, 0., 1.1)
+        self.node.output = np.array([.05, 0.])
+        self.node.last_tick = rospy.Time.now().to_sec()-.05
+        self.node.control()
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+        self.assertEqual(self.commands[-1].angular.z, 0.)
+        self.assertFalse(self.node.door_path_feasible)
+
+    def test_recovery_does_not_override_missing_scan_or_high_measured_speed(self):
+        self.node.raw = np.array([-.4, 0.])
+        self.node.scans = {side: (time.monotonic(), np.array([[1., 0.]]))
+                           for side in ('left', 'right')}
+        self.node.scans['left'] = (0., np.array([[1., 0.]]))
+        self.node.control()
+        self.assertEqual(self.node.reason, 'stale_input')
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+        self.node.scans['left'] = (time.monotonic(), np.array([[1., 0.]]))
+        self.node.measured = np.array([.2, 0.])
+        self.node.control()
+        self.assertFalse(self.node.recovering)
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+
+    def test_guard_keeps_rear_obstacles_outside_the_planning_view(self):
+        self.node.scans = {side: (time.monotonic(), np.array([[-.28, 0.], [2., 1.]]))
+                           for side in ('left', 'right')}
+        self.node.planning_scans = {side: np.array([[2., 1.]]) for side in ('left', 'right')}
+        groups, guard = self.node.points()
+        self.assertEqual(sum(len(g) for g in groups), 2)
+        self.assertEqual(len(guard), 4)
+
+    def test_full_rotation_scan_is_only_cropped_for_planning(self):
+        from geometry_msgs.msg import TransformStamped
+        from sensor_msgs.msg import LaserScan
+        t = TransformStamped()
+        t.transform.rotation.w = 1.
+        t.transform.translation.x = .79
+        t.transform.translation.y = .26
+        self.node.tf = SimpleNamespace(lookup_transform=lambda *args: t)
+        published = []
+        self.node.scan_pubs['left'] = SimpleNamespace(publish=published.append)
+        scan = LaserScan(angle_min=-math.pi, angle_max=math.pi,
+                         angle_increment=math.pi/360, range_min=.08, range_max=5., ranges=[2.]*721)
+        scan.header.stamp = rospy.Time.now()
+        self.node.on_scan(scan, 'left')
+        self.assertEqual(len(self.node.scans['left'][1]), 721)
+        self.assertEqual(len(self.node.planning_scans['left']), 401)
+        self.assertEqual(np.isfinite(published[-1].ranges).sum(), 401)
+        self.assertTrue(np.isinf(published[-1].ranges[0]))
 
     def wall_opening(self, side=1):
         from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings
@@ -1285,6 +1553,10 @@ class UnifiedNodeTest(unittest.TestCase):
         np.testing.assert_array_equal(self.node.door_obstacles, refreshed)
 
     def test_failed_door_path_is_retried_with_the_next_scan(self):
+        # Local mocks are intentionally not serialized into a worker process.
+        from concurrent.futures import ThreadPoolExecutor
+        self.node.door_plan_executor.shutdown()
+        self.node.door_plan_executor = ThreadPoolExecutor(max_workers=1)
         fallback = np.array([[0., 0., 0.], [1., .1, .1]])
         feasible = np.array([[0., 0., 0.], [.08, 0., 0.], [1., .1, .1]])
         self.node.door_phase = 'door_align'
@@ -1306,6 +1578,9 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertTrue(self.node.door_path_feasible)
 
     def test_door_path_search_does_not_block_control_callbacks(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.node.door_plan_executor.shutdown()
+        self.node.door_plan_executor = ThreadPoolExecutor(max_workers=1)
         started = threading.Event()
         release = threading.Event()
         feasible = np.array([[0., 0., 0.], [.08, 0., 0.], [1., .1, .1]])

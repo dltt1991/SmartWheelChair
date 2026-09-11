@@ -1,3 +1,4 @@
+import math
 import pathlib
 import unittest
 import xml.etree.ElementTree as ET
@@ -7,6 +8,10 @@ MODEL = pathlib.Path(__file__).parents[1] / "models" / "smart_wheelchair" / "mod
 
 
 class ModelVisualsTest(unittest.TestCase):
+    def test_gui_software_renderer_leaves_cpu_for_ros_callbacks(self):
+        launcher = pathlib.Path(__file__).parents[4] / 'docker/gazebo-gui-vnc.sh'
+        self.assertIn('export LP_NUM_THREADS="${LP_NUM_THREADS:-2}"', launcher.read_text())
+
     def setUp(self):
         self.root = ET.parse(MODEL).getroot()
 
@@ -51,14 +56,14 @@ class ModelVisualsTest(unittest.TestCase):
         self.assertTrue(all(sensor.findtext("update_rate") == "10" for sensor in sensors))
 
         left = self.root.find(".//sensor[@name='left_lidar']//horizontal")
-        self.assertEqual(left.findtext("samples"), "401")
-        self.assertAlmostEqual(float(left.findtext("min_angle")), -0.87266, places=4)
-        self.assertAlmostEqual(float(left.findtext("max_angle")), 2.61799, places=4)
+        self.assertEqual(left.findtext("samples"), "721")
+        self.assertAlmostEqual(float(left.findtext("min_angle")), -math.pi, places=4)
+        self.assertAlmostEqual(float(left.findtext("max_angle")), math.pi, places=4)
 
         right = self.root.find(".//sensor[@name='right_lidar']//horizontal")
-        self.assertEqual(right.findtext("samples"), "401")
-        self.assertAlmostEqual(float(right.findtext("min_angle")), -2.61799, places=4)
-        self.assertAlmostEqual(float(right.findtext("max_angle")), 0.87266, places=4)
+        self.assertEqual(right.findtext("samples"), "721")
+        self.assertAlmostEqual(float(right.findtext("min_angle")), -math.pi, places=4)
+        self.assertAlmostEqual(float(right.findtext("max_angle")), math.pi, places=4)
 
         names = {visual.attrib["name"] for visual in self.root.findall(".//visual")}
         expected = {

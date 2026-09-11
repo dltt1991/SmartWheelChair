@@ -3,6 +3,8 @@ set -e
 
 export DISPLAY="${VNC_DISPLAY:-:1}"
 export LIBGL_ALWAYS_SOFTWARE=1
+# llvmpipe otherwise consumes every Docker CPU and starves ROS callbacks.
+export LP_NUM_THREADS="${LP_NUM_THREADS:-2}"
 export MESA_GL_VERSION_OVERRIDE="${MESA_GL_VERSION_OVERRIDE:-3.3}"
 export QT_X11_NO_MITSHM=1
 

@@ -3,6 +3,7 @@ import math
 import json
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 import numpy as np
 
 from smart_wheelchair_safety.unified_geometry import (
@@ -16,6 +17,148 @@ from smart_wheelchair_safety.unified_geometry import (
 
 
 class UnifiedGeometryTest(unittest.TestCase):
+    def test_pruning_rejects_invalid_envelope_parameters(self):
+        for name in ('margin', 'reaction', 'deceleration', 'state_age'):
+            for value in (math.nan, math.inf, -.1):
+                with self.subTest(name=name, value=value):
+                    self.assertFalse(braking_clear([[3., 0.]], [.03, 0.], [0., 0.], **{name: value}))
+        self.assertFalse(braking_clear([[3., 0.]], [.03, 0.], [0., 0.], deceleration=0.))
+
+    def test_normal_creep_does_not_roll_out_unreachable_distant_points(self):
+        import smart_wheelchair_safety.unified_geometry as geometry
+        points = np.column_stack((np.full(1400, 3.), np.linspace(-2., 2., 1400)))
+        with patch.object(geometry, '_braking_envelope', wraps=geometry._braking_envelope) as envelope:
+            self.assertTrue(braking_clear(points, [.05, .01], [.03, 0.]))
+        envelope.assert_not_called()
+
+    def test_recovery_rejects_nonfinite_motion_before_pruning(self):
+        for value in (math.nan, math.inf, -math.inf):
+            self.assertFalse(braking_clear([[3., 0.]], [value, 0.], [0., 0.], recovery=True))
+            self.assertFalse(braking_clear([[3., 0.]], [0., 0.], [0., value], recovery=True))
+
+    def test_recovery_does_not_roll_out_unreachable_distant_scan_points(self):
+        import smart_wheelchair_safety.unified_geometry as geometry
+        points = np.vstack(([[1., 0.]], np.column_stack((np.full(1400, 3.), np.linspace(-2., 2., 1400)))))
+        with patch.object(geometry, '_braking_envelope', wraps=geometry._braking_envelope) as envelope:
+            self.assertTrue(braking_clear(points, [-.03, 0.], [0., 0.], recovery=True))
+        self.assertTrue(all(len(call.args[0]) == 1 for call in envelope.call_args_list))
+
+    def test_recovery_pruning_matches_complete_rollouts(self):
+        import smart_wheelchair_safety.unified_geometry as geometry
+        random = np.random.default_rng(731)
+        accepted = 0
+        for index in range(160):
+            command = random.uniform([- .05, -.1], [.05, .1])
+            measured = np.zeros(2) if index % 2 else random.uniform([-.055, -.11], [.055, .11])
+            points = random.uniform([-4., -4.], [4., 4.], (300, 2))
+            points = points[geometry.footprint_clearance(points) > .01]
+            kwargs = dict(recovery=True, reaction=random.uniform(.05, .5),
+                          deceleration=random.uniform(.2, 1.), state_age=random.uniform(0., .1))
+            actual = braking_clear(points, command, measured, **kwargs)
+            with patch.object(geometry, '_reachable_points', side_effect=lambda p, *args: p):
+                expected = braking_clear(points, command, measured, **kwargs)
+            self.assertEqual(actual, expected, index)
+            accepted += expected
+        self.assertGreater(accepted, 10)
+
+    def test_normal_pruning_matches_complete_rollouts(self):
+        import smart_wheelchair_safety.unified_geometry as geometry
+        random = np.random.default_rng(903)
+        accepted = 0
+        for index in range(160):
+            scale = .1 if index % 2 else 1.
+            command = scale*random.uniform([-.4, -.65], [.8, .65])
+            measured = scale*random.uniform([-.4, -.65], [.8, .65])
+            points = random.uniform([-4., -4.], [4., 4.], (300, 2))
+            points = points[geometry.footprint_clearance(points) > .01]
+            kwargs = dict(reaction=random.uniform(.05, .5), deceleration=random.uniform(.2, 1.),
+                          state_age=random.uniform(0., .3))
+            actual = braking_clear(points, command, measured, **kwargs)
+            with patch.object(geometry, '_reachable_points', side_effect=lambda p, *args: p):
+                expected = braking_clear(points, command, measured, **kwargs)
+            self.assertEqual(actual, expected, index)
+            accepted += expected
+        self.assertGreater(accepted, 10)
+
+    def test_recovery_oblique_wall_matrix_checks_both_body_ends(self):
+        for degrees in (-75, -60, -45, -30, -15, 0, 15, 30, 45, 60, 75, 120, 150, 180, 210, 240):
+            angle = math.radians(degrees)
+            normal = np.array([math.cos(angle), math.sin(angle)])
+            tangent = np.array([-normal[1], normal[0]])
+            corner = np.array([.97 if normal[0] >= 0. else -.25,
+                               .4 if normal[1] >= 0. else -.4])
+            points = corner + .02*normal + np.linspace(-2., 2., 801)[:, None]*tangent
+            away = -.03*math.copysign(1., normal[0])
+            with self.subTest(degrees=degrees):
+                self.assertTrue(braking_clear(points, [away, 0.], [0., 0.], recovery=True))
+                self.assertFalse(braking_clear(points, [-away, 0.], [0., 0.], recovery=True))
+
+    def test_recovery_does_not_exempt_points_in_age_uncertainty_padding(self):
+        self.assertFalse(braking_clear([[0., .4401]], [.05, 0.], [.05, 0.],
+                                       state_age=.1, recovery=True))
+
+    def test_recovery_can_leave_stop_infeasible_uncertainty_boundary(self):
+        points, measured = [[1.01003, 0.]], [.00013, .00024]
+        self.assertFalse(braking_clear(points, [0., 0.], measured, state_age=.02))
+        self.assertTrue(braking_clear(points, [-.02, 0.], measured,
+                                      state_age=.02, recovery=True))
+        self.assertFalse(braking_clear(points, [.02, 0.], measured,
+                                       state_age=.02, recovery=True))
+
+    def test_uncertainty_boundary_recovery_cannot_threaten_other_points(self):
+        self.assertFalse(braking_clear([[1.01003, 0.], [-.2901, 0.]], [-.02, 0.],
+                                       [.00013, .00024], state_age=.02, recovery=True))
+
+    def test_uncertainty_boundary_requires_resolving_not_merely_reducing_deficit(self):
+        self.assertFalse(braking_clear([[1.01003, 0.]], [-.000001, 0.],
+                                       [.00013, .00024], state_age=.02, recovery=True))
+
+    def test_recovery_rejects_stale_state_and_cannot_rotate_between_two_jambs(self):
+        self.assertFalse(braking_clear([[1., 0.]], [-.03, 0.], [0., 0.],
+                                       state_age=.101, recovery=True))
+        points = [[.9, .42], [.9, -.42], [-.2, .42], [-.2, -.42]]
+        for turn in (-.1, .1):
+            self.assertFalse(braking_clear(points, [0., turn], [0., 0.], recovery=True))
+
+    def test_near_wall_recovery_separates_but_never_pushes_inward(self):
+        for point, away in (((1., 0.), -.05), ((-.28, 0.), .05)):
+            with self.subTest(point=point):
+                self.assertFalse(braking_clear([point], [away, 0.], [0., 0.]))
+                self.assertTrue(braking_clear([point], [away, 0.], [0., 0.], recovery=True))
+                self.assertFalse(braking_clear([point], [-away, 0.], [0., 0.], recovery=True))
+
+    def test_recovery_does_not_lock_when_stop_drift_crosses_margin_boundary(self):
+        points = [[1.00999, 0.], [1.01001, .2]]
+        measured = [.00013, .00024]
+        self.assertTrue(braking_clear(points, [-.02, 0.], measured, state_age=.02, recovery=True))
+        self.assertFalse(braking_clear(points, [.02, 0.], measured, state_age=.02, recovery=True))
+        self.assertFalse(braking_clear(points, [-.02, 0.], measured, state_age=.02))
+
+    def test_stop_drift_recovery_cannot_approach_a_new_rear_obstacle(self):
+        points = [[1.00999, 0.], [1.01001, .2], [-.2901, 0.]]
+        self.assertFalse(braking_clear(points, [-.02, 0.], [.00013, .00024],
+                                       state_age=.02, recovery=True))
+
+    def test_recovery_never_increases_existing_footprint_penetration(self):
+        self.assertTrue(braking_clear([[.96, 0.]], [-.05, 0.], [0., 0.], recovery=True))
+        self.assertFalse(braking_clear([[.96, 0.]], [.05, 0.], [0., 0.], recovery=True))
+
+    def test_recovery_retains_speed_and_other_obstacle_guards(self):
+        self.assertFalse(braking_clear([[1., 0.]], [-.1, 0.], [0., 0.], recovery=True))
+        self.assertFalse(braking_clear([[1., 0.]], [-.05, 0.], [.3, 0.], recovery=True))
+        self.assertFalse(braking_clear([[1., 0.], [-.291, 0.]], [-.05, 0.], [0., 0.], recovery=True))
+        self.assertFalse(braking_clear([[0., .42], [-.24, .41]], [0., .1], [0., 0.], recovery=True))
+
+    def test_captured_near_wall_lock_can_retreat_at_creep_speed(self):
+        capture = json.loads((Path(__file__).with_name('fixtures') /
+                              'near_wall_lock_capture.json').read_text())
+        self.assertFalse(braking_clear(capture['points'], [-.05, 0.], capture['measured'],
+                                       state_age=capture['state_age']))
+        self.assertTrue(braking_clear(capture['points'], [-.02, 0.], capture['measured'],
+                                      state_age=capture['state_age'], recovery=True))
+        self.assertFalse(braking_clear(capture['points'], [.05, 0.], capture['measured'],
+                                       state_age=capture['state_age'], recovery=True))
+
     def test_oblique_door_can_stage_with_collision_checked_stationary_turns(self):
         for degrees in (-45, -30, 30, 45):
             yaw = math.radians(degrees)

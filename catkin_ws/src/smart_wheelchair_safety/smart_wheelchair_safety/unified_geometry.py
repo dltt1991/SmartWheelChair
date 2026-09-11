@@ -557,7 +557,30 @@ def door_reference(door):
     return door_alignment_reference(door, 'align')
 
 
-def braking_clear(points, command, measured, margin=.04, reaction=.20, deceleration=.5, state_age=0.):
+def footprint_clearance(points):
+    """Signed distance to the axle-relative conservative rectangle."""
+    points = np.asarray(points, dtype=float)
+    dx = np.maximum(-.25-points[..., 0], points[..., 0]-.97)
+    dy = np.abs(points[..., 1])-.40
+    return np.hypot(np.maximum(dx, 0.), np.maximum(dy, 0.)) + np.minimum(np.maximum(dx, dy), 0.)
+
+
+def _reachable_points(points, command, measured, margin, reaction, deceleration, state_age, dt):
+    """Discard only points unreachable by the complete braking rollouts."""
+    speeds = np.maximum(np.abs(command), np.abs(measured))
+    transition = max((abs(command[0])+abs(measured[0]))/deceleration,
+                     (abs(command[1])+abs(measured[1]))/.8)
+    stop = max(abs(command[0])/deceleration, abs(command[1])/.8)
+    # Total translation plus corner rotation bounds signed-distance change.
+    # 1.05 encloses the rectangle; seven steps cover every rounded phase
+    # and half-step sampling padding. Activity=1 bounds uncertainty from above.
+    horizon = reaction+state_age+transition+stop+7*dt
+    uncertainty = (deceleration+1.05*.8)*state_age*(reaction+transition+stop+.5*state_age)
+    reach = margin+uncertainty+(speeds[0]+1.05*speeds[1])*horizon
+    return points[footprint_clearance(points) <= reach+1e-9]
+
+
+def braking_clear(points, command, measured, margin=.04, reaction=.20, deceleration=.5, state_age=0., recovery=False):
     """Check current motion, command transition and proportional braking.
 
     The axle-relative footprint is x=[-.25,.97], y=[-.40,.40]. Sampling
@@ -569,8 +592,66 @@ def braking_clear(points, command, measured, margin=.04, reaction=.20, decelerat
         return True
     command = np.asarray(command, dtype=float)
     measured = np.asarray(measured, dtype=float)
+    if (not np.isfinite(command).all() or not np.isfinite(measured).all()
+            or not np.isfinite([margin, reaction, deceleration, state_age]).all()
+            or min(margin, reaction, state_age) < 0. or deceleration <= 0.):
+        return False
+    if recovery:
+        if (np.any(np.abs(command) > np.array([.05, .1])+1e-9)
+                or np.any(np.abs(measured) > [.055, .11]) or not 0. <= state_age <= .1):
+            return False
+    points = _reachable_points(points, command, measured, margin, reaction, deceleration, state_age,
+                               .002 if recovery else .02)
+    if not len(points):
+        return True
+    signed, padding, effective_margin = _braking_envelope(
+        points, command, measured, margin, reaction, deceleration, state_age, recovery)
+    clearance = np.maximum(signed, 0.)
+    collision = clearance <= padding
+    near_margin = (clearance[0] > effective_margin) & (clearance[0] <= padding)
+    separating = near_margin & np.all(clearance[1:] >= clearance[0]-1e-9, axis=0)
+    collision[:, separating] = clearance[:, separating] <= effective_margin
+    if recovery:
+        stopped, stop_padding, stop_margin = _braking_envelope(
+            points, np.zeros(2), measured, margin, reaction, deceleration, state_age, True)
+        # A point just outside the margin can already violate it during the
+        # unavoidable measured-motion stop. Treat that nominal stop violation
+        # like an initial violation, not like arbitrary uncertainty padding.
+        near = stopped.min(axis=0) <= margin
+        # Tiny measured drift can leave nominal stop clearance above the margin
+        # while the complete stop certificate is already infeasible. Permit
+        # only a strictly separating nominal recovery that resolves that deficit
+        # at its endpoint. This does NOT restore a robust uncertainty guarantee
+        # along the shared initial delay; never exempt a stop-safe new threat.
+        stop_separating = ((stopped[0] > stop_margin) & (stopped[0] <= stop_padding)
+                           & np.all(stopped[1:] >= stopped[0]-1e-9, axis=0))
+        stop_limit = np.where(stop_separating, stop_margin, stop_padding)
+        uncertified = ~near & np.any(stopped <= stop_limit, axis=0)
+        if np.any(uncertified):
+            if (np.any(signed[:, uncertified].min(axis=0) < margin)
+                    or np.any(signed[-1, uncertified] <= padding)
+                    or np.any(signed[-1, uncertified] <= stopped[-1, uncertified]+1e-9)):
+                return False
+        near |= uncertified
+        if np.any(near):
+            # Compare inevitable measured-motion drift with braking to zero,
+            # not an arbitrary penetration allowance renewed every cycle.
+            stopped = stopped[:, near]
+            ideal, _, _ = _braking_envelope(
+                points[near], command, np.zeros(2), margin, reaction, deceleration, 0., True)
+            safe = (np.all(signed[:, near].min(axis=0) >= stopped.min(axis=0)-1e-9)
+                    and np.all(signed[-1, near] >= stopped[-1]-1e-9)
+                    and np.all(ideal >= ideal[0]-1e-9))
+            if not safe:
+                return False
+            collision[:, near] = False
+    return not bool(np.any(collision))
+
+
+def _braking_envelope(points, command, measured, margin, reaction, deceleration, state_age, independent=False):
+    """Signed clearances along the same envelope used by both guard policies."""
     stop_time = max(abs(command[0]) / deceleration, abs(command[1]) / .8)
-    dt = .02
+    dt = .002 if independent else .02
     delay = np.tile(measured, (max(1, math.ceil((reaction+state_age) / dt)), 1))
     transition_time = max(abs(command[0]-measured[0]) / deceleration,
                           abs(command[1]-measured[1]) / .8)
@@ -583,6 +664,14 @@ def braking_clear(points, command, measured, margin=.04, reaction=.20, decelerat
     margin += .5 * uncertainty_rate * state_age**2
     transition = np.linspace(measured, command, max(2, math.ceil(transition_time / dt) + 1))
     brake = np.linspace(command, [0., 0.], max(2, math.ceil(stop_time / dt) + 1))
+    if independent:
+        # At creep speed each axis settles independently: a microscopic yaw
+        # estimate must not persist for the entire linear acceleration ramp.
+        rates = np.array([deceleration, .8])
+        t = np.arange(len(transition))[:, None]*dt
+        transition = measured + np.sign(command-measured)*np.minimum(np.abs(command-measured), t*rates)
+        t = np.arange(len(brake))[:, None]*dt
+        brake = np.sign(command)*np.maximum(0., np.abs(command)-t*rates)
     velocities = np.vstack((delay, transition, brake))
     poses = [(0., 0., 0.)]
     x = y = yaw = 0.
@@ -597,11 +686,4 @@ def braking_clear(points, command, measured, margin=.04, reaction=.20, decelerat
     dy = points[None, :, 1] - poses[:, None, 1]
     c, s = np.cos(poses[:, None, 2]), np.sin(poses[:, None, 2])
     local_x, local_y = c * dx + s * dy, -s * dx + c * dy
-    outside_x = np.maximum(np.maximum(-.25-local_x, local_x-.97), 0.)
-    outside_y = np.maximum(np.abs(local_y)-.40, 0.)
-    clearance = np.hypot(outside_x, outside_y)
-    collision = clearance <= padding
-    near_margin = (clearance[0] > margin) & (clearance[0] <= padding)
-    separating = near_margin & np.all(clearance[1:] >= clearance[0]-1e-9, axis=0)
-    collision[:, separating] = clearance[:, separating] <= margin
-    return not bool(np.any(collision))
+    return footprint_clearance(np.stack((local_x, local_y), axis=-1)), padding, margin
