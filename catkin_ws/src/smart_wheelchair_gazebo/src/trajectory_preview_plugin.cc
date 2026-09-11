@@ -14,6 +14,7 @@
 #include <gazebo/physics/Model.hh>
 #include <gazebo/physics/World.hh>
 #include <gazebo/transport/transport.hh>
+#include <geometry_msgs/PolygonStamped.h>
 #include <geometry_msgs/Twist.h>
 #include <ignition/math/Color.hh>
 #include <ignition/math/Pose3.hh>
@@ -33,6 +34,14 @@ struct CommandPreview
   Clock::time_point lastCommand{};
   std::set<std::string> visuals;
 };
+
+struct DoorDisplay
+{
+  std::vector<ignition::math::Vector3d> endpoints;
+  Clock::time_point lastReception{};
+  ros::Time messageStamp;
+  std::set<std::string> visuals;
+};
 }  // namespace
 
 class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
@@ -44,8 +53,10 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
     this->callbackQueue.disable();
     this->rawSubscriber.shutdown();
     this->filteredSubscriber.shutdown();
+    this->doorSubscriber.shutdown();
     this->HideVisuals(this->rawCommand.visuals);
     this->HideVisuals(this->filteredCommand.visuals);
+    this->HideVisuals(this->doors.visuals);
   }
 
   void Load(gazebo::physics::ModelPtr model, sdf::ElementPtr sdf) override
@@ -55,6 +66,7 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
       gzerr << "Trajectory preview requires gazebo_ros_api_plugin.\n";
       return;
     }
+    this->model = model;
     this->parentName = model->GetScopedName();
     const auto read = [&sdf](const std::string &name, double &value)
     {
@@ -91,6 +103,8 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
     this->rosNode->setCallbackQueue(&this->callbackQueue);
     this->rawSubscriber = this->rosNode->subscribe(rawTopic, 1, &TrajectoryPreviewPlugin::OnRaw, this);
     this->filteredSubscriber = this->rosNode->subscribe(filteredTopic, 1, &TrajectoryPreviewPlugin::OnFiltered, this);
+    this->doorSubscriber = this->rosNode->subscribe(
+        "/shared_control/door_detections", 1, &TrajectoryPreviewPlugin::OnDoors, this);
     this->updateConnection = gazebo::event::Events::ConnectWorldUpdateBegin(
         std::bind(&TrajectoryPreviewPlugin::Update, this));
   }
@@ -104,6 +118,26 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
   void OnFiltered(const geometry_msgs::Twist::ConstPtr &message)
   {
     this->SetCommand(this->filteredCommand, *message);
+  }
+
+  void OnDoors(const geometry_msgs::PolygonStamped::ConstPtr &message)
+  {
+    const auto &points = message->polygon.points;
+    const double stampAge = (ros::Time::now() - message->header.stamp).toSec();
+    if (message->header.frame_id != "odom" || points.size() % 2 != 0 ||
+        !std::isfinite(stampAge) || stampAge > this->doorTimeout)
+      return;
+    for (const auto &point : points)
+      if (!std::isfinite(point.x) || !std::isfinite(point.y))
+        return;
+
+    this->doors.endpoints.clear();
+    const size_t pointCount = std::min(points.size(), this->maxDoorSegments * 2);
+    this->doors.endpoints.reserve(pointCount);
+    for (size_t i = 0; i < pointCount; ++i)
+      this->doors.endpoints.emplace_back(points[i].x, points[i].y, this->doorZ);
+    this->doors.lastReception = Clock::now();
+    this->doors.messageStamp = message->header.stamp;
   }
 
   void SetCommand(CommandPreview &state, const geometry_msgs::Twist &message)
@@ -124,6 +158,58 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
     this->lastRender = now;
     this->Render(this->rawCommand, "smart_wheelchair_trajectory_raw", this->rawMarkerDiameter, 0.26);
     this->Render(this->filteredCommand, "smart_wheelchair_trajectory_filtered", this->filteredMarkerDiameter, 0.34);
+    this->RenderDoors();
+  }
+
+  void RenderDoors()
+  {
+    const double receptionAge = std::chrono::duration<double>(Clock::now() - this->doors.lastReception).count();
+    const double stampAge = (ros::Time::now() - this->doors.messageStamp).toSec();
+    const bool active = receptionAge <= this->doorTimeout && std::isfinite(stampAge) &&
+                        stampAge <= this->doorTimeout;
+    std::set<std::string> nextVisuals;
+    if (active)
+    {
+      const auto modelPose = this->model->WorldPose();
+      for (size_t i = 0; i + 1 < this->doors.endpoints.size(); i += 2)
+      {
+        const auto worldDelta = this->doors.endpoints[i + 1] - this->doors.endpoints[i];
+        if (worldDelta.Length() < 1e-9)
+          continue;
+        const std::string name = "smart_wheelchair_door_detection_" + std::to_string(i / 2);
+        const auto worldMidpoint = (this->doors.endpoints[i] + this->doors.endpoints[i + 1]) / 2.0;
+        const auto localMidpoint = modelPose.Rot().RotateVectorReverse(worldMidpoint - modelPose.Pos());
+        const auto localDelta = modelPose.Rot().RotateVectorReverse(worldDelta);
+        ignition::math::Quaterniond rotation;
+        rotation.From2Axes({0, 0, 1}, localDelta);
+
+        gazebo::msgs::Visual visual;
+        visual.set_name(name);
+        visual.set_parent_name(this->parentName);
+        visual.set_is_static(false);
+        visual.set_visible(true);
+        visual.set_cast_shadows(false);
+        auto guiOnly = visual.add_plugin();
+        guiOnly->set_name("gui_only");
+        guiOnly->set_filename("libSmartWheelChairGuiOnlyVisual.so");
+        auto geometry = visual.mutable_geometry();
+        geometry->set_type(gazebo::msgs::Geometry::CYLINDER);
+        geometry->mutable_cylinder()->set_radius(this->doorDiameter / 2.0);
+        geometry->mutable_cylinder()->set_length(worldDelta.Length());
+        gazebo::msgs::Set(visual.mutable_pose(), ignition::math::Pose3d(localMidpoint, rotation));
+        const ignition::math::Color green(0, 1, 0, 1);
+        gazebo::msgs::Set(visual.mutable_material()->mutable_ambient(), green);
+        gazebo::msgs::Set(visual.mutable_material()->mutable_diffuse(), green);
+        gazebo::msgs::Set(visual.mutable_material()->mutable_emissive(), green);
+        this->visualPublisher->Publish(visual);
+        nextVisuals.insert(name);
+      }
+    }
+    auto hiddenVisuals = this->doors.visuals;
+    for (const auto &name : nextVisuals)
+      hiddenVisuals.erase(name);
+    this->HideVisuals(hiddenVisuals);
+    this->doors.visuals.insert(nextVisuals.begin(), nextVisuals.end());
   }
 
   std::vector<ignition::math::Vector3d> Path(double linear, double angular, double yOffset) const
@@ -221,12 +307,14 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
 
   ros::CallbackQueue callbackQueue;
   std::unique_ptr<ros::NodeHandle> rosNode;
-  ros::Subscriber rawSubscriber, filteredSubscriber;
+  ros::Subscriber rawSubscriber, filteredSubscriber, doorSubscriber;
   gazebo::transport::NodePtr transport;
   gazebo::transport::PublisherPtr visualPublisher;
   gazebo::event::ConnectionPtr updateConnection;
   std::string parentName;
+  gazebo::physics::ModelPtr model;
   CommandPreview rawCommand, filteredCommand;
+  DoorDisplay doors;
   Clock::time_point lastRender{};
   double predictionSeconds{3.0};
   double stepSeconds{0.3};
@@ -236,6 +324,10 @@ class TrajectoryPreviewPlugin : public gazebo::ModelPlugin
   double z{0.18};
   double rawMarkerDiameter{0.03};
   double filteredMarkerDiameter{0.09};
+  const double doorTimeout{0.6};
+  const double doorDiameter{0.03};
+  const double doorZ{0.12};
+  const size_t maxDoorSegments{32};
 };
 
 GZ_REGISTER_MODEL_PLUGIN(TrajectoryPreviewPlugin)

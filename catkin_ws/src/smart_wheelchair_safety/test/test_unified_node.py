@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 import importlib.util
+import json
 import math
 import os
 import threading
 import time
 from types import SimpleNamespace
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 import numpy as np
@@ -283,32 +285,87 @@ class UnifiedNodeTest(unittest.TestCase):
         self.assertFalse(self.node.recovering)
         self.assertEqual(self.commands[-1].linear.x, 0.)
 
-    def test_guard_keeps_rear_obstacles_outside_the_planning_view(self):
+    def test_guard_keeps_remembered_door_points_in_addition_to_current_view(self):
+        from smart_wheelchair_safety.unified_geometry import transform_points
         self.node.scans = {side: (time.monotonic(), np.array([[-.28, 0.], [2., 1.]]))
                            for side in ('left', 'right')}
-        self.node.planning_scans = {side: np.array([[2., 1.]]) for side in ('left', 'right')}
+        self.node.planning_scans = {side: value[1] for side, value in self.node.scans.items()}
+        self.node.door_obstacles = transform_points([[1., .6]], self.node.pose)
         groups, guard = self.node.points()
-        self.assertEqual(sum(len(g) for g in groups), 2)
-        self.assertEqual(len(guard), 4)
+        self.assertEqual(sum(len(g) for g in groups), 4)
+        self.assertEqual(len(guard), 5)
 
-    def test_full_rotation_scan_is_only_cropped_for_planning(self):
+    def test_scan_scope_and_self_filter_are_identical_for_planner_and_guard(self):
         from geometry_msgs.msg import TransformStamped
         from sensor_msgs.msg import LaserScan
         t = TransformStamped()
         t.transform.rotation.w = 1.
         t.transform.translation.x = .79
-        t.transform.translation.y = .26
         self.node.tf = SimpleNamespace(lookup_transform=lambda *args: t)
-        published = []
-        self.node.scan_pubs['left'] = SimpleNamespace(publish=published.append)
-        scan = LaserScan(angle_min=-math.pi, angle_max=math.pi,
-                         angle_increment=math.pi/360, range_min=.08, range_max=5., ranges=[2.]*721)
-        scan.header.stamp = rospy.Time.now()
-        self.node.on_scan(scan, 'left')
-        self.assertEqual(len(self.node.scans['left'][1]), 721)
-        self.assertEqual(len(self.node.planning_scans['left']), 401)
-        self.assertEqual(np.isfinite(published[-1].ranges).sum(), 401)
-        self.assertTrue(np.isinf(published[-1].ranges[0]))
+        for side, lower, upper in [('left', -30, 170), ('right', -170, 30)]:
+            for self_hit in (False, True):
+                with self.subTest(side=side, self_hit=self_hit):
+                    t.transform.translation.y = .36 if side == 'left' else -.36
+                    published = []
+                    self.node.scan_pubs[side] = SimpleNamespace(publish=published.append)
+                    scan = LaserScan(angle_min=-math.pi, angle_max=math.pi,
+                                     angle_increment=math.pi/360, range_min=.08,
+                                     range_max=5., ranges=[2.]*721)
+                    if self_hit:
+                        scan.ranges[360] = .1
+                    scan.header.stamp = rospy.Time.now()
+                    self.node.on_scan(scan, side)
+                    actual = np.isfinite(published[-1].ranges)
+                    expected = np.zeros(721, dtype=bool)
+                    expected[(lower+180)*2:(upper+180)*2+1] = True
+                    if self_hit:
+                        expected[360] = False
+                    np.testing.assert_array_equal(actual, expected)
+                    self.assertEqual(len(self.node.scans[side][1]), 401-int(self_hit))
+                    np.testing.assert_array_equal(self.node.scans[side][1],
+                                                  self.node.planning_scans[side])
+                    self.assertEqual(scan.ranges[0], 2., 'raw scan must not be mutated')
+
+    def test_relocated_lidar_tf_matches_follower_and_model(self):
+        import xml.etree.ElementTree as ET
+        from smart_wheelchair_safety.unified_control_node import UnifiedControlNode
+        from smart_wheelchair_safety.local_path_follower_node import LIDAR_X_M, LIDAR_Y_M
+        self.node.destroy_node()
+        with patch('smart_wheelchair_safety.unified_control_node.StaticTransformBroadcaster') as broadcaster, patch.object(rospy, 'Timer'):
+            self.node = UnifiedControlNode()
+        transforms = broadcaster.return_value.sendTransform.call_args.args[0]
+        model = ET.parse(Path(__file__).parents[2] / 'smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf').getroot()
+        for side, expected_y in [('left', .36), ('right', -.36)]:
+            t = next(t for t in transforms if t.child_frame_id == 'unified_lidar_'+side)
+            sensor_pose = list(map(float, model.findtext(f".//sensor[@name='{side}_lidar']/pose").split()))
+            self.assertEqual(t.header.frame_id, 'rear_axle')
+            self.assertAlmostEqual(t.transform.translation.x, sensor_pose[0]+.33)
+            self.assertAlmostEqual(t.transform.translation.x, LIDAR_X_M)
+            self.assertAlmostEqual(t.transform.translation.y, expected_y)
+            self.assertAlmostEqual(t.transform.translation.y, sensor_pose[1])
+            self.assertAlmostEqual(t.transform.translation.y, LIDAR_Y_M[side])
+
+    def test_scan_health_uses_selected_view_not_ignored_rear(self):
+        from geometry_msgs.msg import TransformStamped
+        from sensor_msgs.msg import LaserScan
+        t = TransformStamped()
+        t.transform.rotation.w = 1.
+        self.node.tf = SimpleNamespace(lookup_transform=lambda *args: t)
+        for side, lower, upper in [('left', -30, 170), ('right', -170, 30)]:
+            self.node.scans.pop(side, None)
+            scan = LaserScan(angle_min=-math.pi, angle_increment=math.pi/360,
+                             range_min=.08, range_max=5., ranges=[float('nan')]*721)
+            start, end = (lower+180)*2, (upper+180)*2+1
+            scan.ranges[start:end] = [float('inf')]*(end-start)
+            scan.header.stamp = rospy.Time.now()
+            self.node.on_scan(scan, side)
+            self.assertIn(side, self.node.scans)
+            accepted_time = self.node.scans[side][0]
+            scan.ranges[start:start+50] = [float('nan')]*50
+            scan.header.stamp = rospy.Time.now()
+            self.node.on_scan(scan, side)
+            self.assertEqual(self.node.scans[side][0], accepted_time,
+                             'invalid active sector must not refresh sensor health')
 
     def wall_opening(self, side=1):
         from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings
@@ -356,8 +413,108 @@ class UnifiedNodeTest(unittest.TestCase):
         self.observe_front_door(**kwargs)
         self.observe_front_door(**kwargs)
 
+    def test_confirmed_door_refines_inward_jamb_without_chasing_wall_drift(self):
+        self.confirm_door(center=(2., .06), width=1.34)
+        self.confirm_door(center=(2., 0.), width=1.22)
+        self.assertEqual(len(self.node.confirmed_openings), 1)
+        self.assertAlmostEqual(self.node.confirmed_openings[0].width, 1.22)
+        np.testing.assert_allclose(self.node.confirmed_openings[0].center, (2., 0.))
+        # Occlusion cannot widen a previously supported opening again.
+        self.confirm_door(center=(2., .06), width=1.34)
+        self.assertAlmostEqual(self.node.confirmed_openings[0].width, 1.22)
+
+    def test_captured_nw_pose_selects_feasible_door_instead_of_wall(self):
+        from smart_wheelchair_safety.unified_geometry import extract_opening_lines, find_openings, transform_points
+        capture = json.loads((Path(__file__).with_name('fixtures') /
+                              'nw_door_wait_capture.json').read_text())
+        self.node.pose = capture['pose']
+        self.node.raw = np.array([.666, 0.])
+        self.node.scans = {side: (time.monotonic(), transform_points(capture['points'], self.node.pose))
+                           for side in ('left', 'right')}
+        openings = find_openings([line for group in capture['groups']
+                                  for line in extract_opening_lines(group)])
+        self.node._observe_openings(openings)
+        self.node._observe_openings(openings)
+        self.node.raw_time = self.node.odom_time = time.monotonic()
+        self.node.odom_stamp = rospy.Time.now().to_sec()
+        self.node.update_reference()
+        self.finish_door_plan()
+        self.assertEqual(self.node.mode, 'door_align')
+        self.assertTrue(self.node.door_path_feasible)
+        self.assertEqual(len(self.node.confirmed_openings), 1)
+
+    def test_inward_jamb_refinement_invalidates_active_and_inflight_alignment(self):
+        from concurrent.futures import Future
+        self.confirm_door(center=(2., .06), width=1.34)
+        self.node.door = self.node.confirmed_openings[0]
+        self.node.door_phase = 'door_align'
+        self.node.door_path = np.array([[0., 0., 0.], [2., .06, 0.]])
+        self.node.door_path_feasible = True
+        self.node.accept_planned = True
+        generation = self.node.door_generation
+        old = Future()
+        self.node.door_plan_request = (old, self.node.pose, generation)
+        self.confirm_door(center=(2., 0.), width=1.22)
+        self.assertIsNone(self.node.door_path)
+        self.assertFalse(self.node.door_path_feasible)
+        self.assertFalse(self.node.accept_planned)
+        self.assertGreater(self.node.door_generation, generation)
+        old.set_result(np.array([[0., 0., 0.], [2., .06, 0.]]))
+        self.node._local_door_path(self.node.door, np.empty((0, 2)))
+        self.assertIsNone(self.node.door_path)
+        self.assertFalse(self.node.door_path_feasible)
+        self.assertNotEqual(self.node.door_plan_request[2], generation)
+
+    def test_door_visual_publishes_confirmed_world_jambs_while_neutral(self):
+        messages = []
+        self.node.door_detection_pub = SimpleNamespace(publish=messages.append)
+        self.node.pose = (3., 4., math.pi/2)
+        self.node.raw[:] = 0.
+        self.observe_front_door(center=(2., 0.), width=1.1)
+        self.node.update_reference()
+        self.assertEqual(len(messages[-1].polygon.points), 0)
+        self.observe_front_door(center=(2., 0.), width=1.1)
+        self.node.update_reference()
+        message = messages[-1]
+        self.assertEqual(message.header.frame_id, 'odom')
+        np.testing.assert_allclose([(p.x, p.y) for p in message.polygon.points],
+                                   [(3.55, 6.), (2.45, 6.)], atol=1e-7)
+        self.node._observe_openings([])
+        self.node.update_reference()
+        self.assertEqual(len(messages[-1].polygon.points), 0)
+
+    def test_neutral_joystick_heartbeats_do_not_erase_visual_confirmation(self):
+        messages = []
+        self.node.door_detection_pub = SimpleNamespace(publish=messages.append)
+        self.send_raw(0., 0.)
+        self.observe_front_door(width=1.1)
+        self.send_raw(0., 0.)
+        self.observe_front_door(width=1.1)
+        self.node.update_reference()
+        self.assertEqual(len(messages[-1].polygon.points), 2)
+        self.send_raw(0., 0.)
+        self.node.update_reference()
+        self.assertEqual(len(messages[-1].polygon.points), 2)
+        self.assertIsNone(self.node.door)
+        self.assertEqual(self.node.confirmed_openings, [])
+
+    def test_door_visual_clears_on_stale_scan_and_observation(self):
+        messages = []
+        self.node.door_detection_pub = SimpleNamespace(publish=messages.append)
+        self.confirm_door(width=1.1)
+        self.node.update_reference()
+        self.assertEqual(len(messages[-1].polygon.points), 2)
+        self.node.scans['left'] = (0., self.node.scans['left'][1])
+        self.node.update_reference()
+        self.assertEqual(len(messages[-1].polygon.points), 0)
+        self.node.scans['left'] = (time.monotonic(), self.node.scans['left'][1])
+        self.node.door_detection_time = 0.
+        self.node.update_reference()
+        self.assertEqual(len(messages[-1].polygon.points), 0)
+
     def finish_door_plan(self):
-        self.node.door_plan_request[0].result(timeout=2.)
+        if self.node.door_plan_request is not None:
+            self.node.door_plan_request[0].result(timeout=2.)
         self.node.raw_time = self.node.odom_time = time.monotonic()
         self.node.odom_stamp = rospy.Time.now().to_sec()
         self.node.update_reference()
@@ -373,6 +530,25 @@ class UnifiedNodeTest(unittest.TestCase):
         self.node.planned = np.array([.6, 0.])
         self.node.control()
         self.assertEqual(self.commands[-1].linear.x, 0.)
+
+    def test_aligned_next_door_gets_checked_path_while_moving(self):
+        self.node.door_phase = 'door_align'
+        self.node.measured = np.array([.3, 0.])
+        self.node.output = np.array([.3, 0.])
+        door = self.front_opening(center=(2., 0.), heading=0.)
+        with patch.object(self.node.door_plan_executor, 'submit') as submit:
+            self.node._local_door_path(door, np.empty((0, 2)))
+        submit.assert_not_called()
+        self.assertTrue(self.node.door_path_feasible)
+        self.assertIsNotNone(self.node.door_path)
+
+    def test_front_wall_can_take_over_after_door_clearance(self):
+        wall = np.column_stack((np.full(81, 2.), np.linspace(-3., 3., 81)))
+        self.node.scans = {side: (time.monotonic(), wall) for side in ('left', 'right')}
+        self.node.mode = 'door_clear'
+        self.node.update_reference()
+        self.assertEqual(self.node.mode, 'wall')
+        self.assertFalse(self.node.front_blocked)
 
     def test_checked_door_pivot_rotates_without_forward_creep(self):
         self.node.mode = 'door_align'

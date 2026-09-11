@@ -78,7 +78,7 @@ def main():
     from nav_msgs.msg import Odometry
     from sensor_msgs.msg import LaserScan
     from std_msgs.msg import String
-    from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings, transform_points
+    from smart_wheelchair_safety.unified_geometry import LIDAR_X_M, LIDAR_Y_M, extract_lines, find_openings, transform_points
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('case', choices=['wall', 'wall_gap', 'override', 'front', 'vertical',
@@ -201,8 +201,8 @@ def main():
                 ranges = np.array(msg.ranges)
                 angles = msg.angle_min + np.arange(len(ranges))*msg.angle_increment
                 valid = np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)
-                x = ranges[valid]*np.cos(angles[valid])+.79
-                y = ranges[valid]*np.sin(angles[valid]) + (.26 if side == 'left' else -.26)
+                x = ranges[valid]*np.cos(angles[valid])+LIDAR_X_M
+                y = ranges[valid]*np.sin(angles[valid]) + LIDAR_Y_M[side]
                 dx = np.maximum(np.maximum(-.25-x, x-.97), 0.)
                 dy = np.maximum(np.abs(y)-.4, 0.)
                 clearances.extend(np.hypot(dx, dy).tolist())

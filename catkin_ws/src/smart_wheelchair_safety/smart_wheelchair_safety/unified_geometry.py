@@ -6,6 +6,13 @@ import math
 import numpy as np
 
 
+# Planar sensor extrinsics relative to rear_axle; SDF mounts are x=.46,
+# y=+/-.36, z=.56 relative to base_link (rear_axle is x=-.33).
+LIDAR_X_M = .79
+LIDAR_Y_M = {'left': .36, 'right': -.36}
+LIDAR_VIEW_DEG = {'left': (-30., 170.), 'right': (-170., 30.)}
+
+
 @dataclass(frozen=True)
 class Segment:
     start: tuple
@@ -122,9 +129,12 @@ def find_openings(lines, min_width=.92, max_width=3.20, max_distance=4.5):
                 if abs(first_plane-third_plane) > .06:
                     continue
                 third_interval = sorted(third_points @ tangent)
-                overlap = (min(third_interval[1], gap_end-.05)
-                           - max(third_interval[0], gap_start+.05))
-                if overlap > .08:
+                # A short jamb fragment adjoining an edge still occupies the
+                # aperture. Trimming both ends before testing used to hide up
+                # to 13 cm of observed wall and manufacture a wider doorway.
+                overlap = (min(third_interval[1], gap_end)
+                           - max(third_interval[0], gap_start))
+                if overlap > .05:
                     occupied = True
                     break
             if occupied:
@@ -137,6 +147,16 @@ def find_openings(lines, min_width=.92, max_width=3.20, max_distance=4.5):
             crossing = math.copysign(1., (first_plane+second_plane)/2.) * left_normal
             openings.append(Opening(tuple(center), math.atan2(crossing[1], crossing[0]),
                                     float(gap), (first, second)))
+
+    # Two lidars can fit the same jambs. Collapse only near-identical geometry,
+    # not the much broader temporal association used by opening_matches.
+    unique = []
+    for opening in sorted(openings, key=lambda item: (item.width, item.center, item.heading)):
+        if not any(np.linalg.norm(np.asarray(opening.center)-other.center) <= .03
+                   and abs(angle_difference(opening.heading, other.heading)) <= .03
+                   and abs(opening.width-other.width) <= .03 for other in unique):
+            unique.append(opening)
+    openings = unique
 
     # A side passage at a T/cross intersection can be bounded by the end of the
     # followed wall and a perpendicular far wall, rather than a coplanar pair.
@@ -399,24 +419,80 @@ def collision_aware_door_reference(door, obstacles, margin=.045):
     route = [(0., 0., 0.)]
     checked = []
 
+    def smooth_segment(start, start_heading, end, end_heading, steps=60):
+        start, end = np.asarray(start, dtype=float), np.asarray(end, dtype=float)
+        length = max(.35, float(np.linalg.norm(end-start)))
+        t = np.linspace(0., 1., steps)[:, None]
+        p0 = np.array([math.cos(start_heading), math.sin(start_heading)])*length
+        p1 = np.array([math.cos(end_heading), math.sin(end_heading)])*length
+        xy = ((2*t**3-3*t**2+1)*start + (t**3-2*t**2+t)*p0
+              + (-2*t**3+3*t**2)*end + (t**3-t**2)*p1)
+        d = np.gradient(xy, axis=0)
+        return np.column_stack((xy, np.unwrap(np.arctan2(d[:, 1], d[:, 0]))))
+
     def rotate_at(position, initial, final):
         delta = angle_difference(final, initial)
         for theta in np.linspace(initial, initial+delta, max(2, math.ceil(abs(delta)/.02)+1)):
             checked.append((*position, theta))
         route.append((*position, initial+delta))
 
-    rotate_at((0., 0.), 0., bearing)
-    for t in np.linspace(0., 1., max(2, math.ceil(np.linalg.norm(staging)/.025)+1))[1:]:
-        route.append((*(t*staging), bearing))
-        checked.append(route[-1])
-    rotate_at(staging, bearing, door.heading)
+    def stationary_staging_route():
+        """Build the collision-checked fallback used in tight staging areas."""
+        fallback = [(0., 0., 0.)]
+        fallback_checked = []
+
+        def rotate(position, initial, final):
+            delta = angle_difference(final, initial)
+            for theta in np.linspace(initial, initial+delta,
+                                    max(2, math.ceil(abs(delta)/.02)+1)):
+                fallback_checked.append((*position, theta))
+            fallback.append((*position, initial+delta))
+
+        rotate((0., 0.), 0., bearing)
+        for fraction in np.linspace(
+                0., 1., max(2, math.ceil(np.linalg.norm(staging)/.025)+1))[1:]:
+            fallback.append((*(fraction*staging), bearing))
+            fallback_checked.append(fallback[-1])
+        rotate(staging, bearing, door.heading)
+        for fraction in np.linspace(
+                0., 1., max(2, math.ceil(np.linalg.norm(exit_point-staging)/.025)+1))[1:]:
+            fallback.append((*(staging + fraction*(exit_point-staging)),
+                             door.heading))
+            fallback_checked.append(fallback[-1])
+        return np.asarray(fallback), fallback_checked
+
+    # Large approach angles use a moving cubic transition instead of two
+    # stationary pivots. This preserves a continuous, human-like heading.
+    if abs(angle_difference(bearing, 0.)) > .30:
+        transition = smooth_segment((0., 0.), 0., staging, bearing, 90)
+        route = [tuple(row) for row in transition]
+        checked.extend(route)
+        route_start = transition[-1, 2]
+    else:
+        rotate_at((0., 0.), 0., bearing)
+        for t in np.linspace(0., 1., max(2, math.ceil(np.linalg.norm(staging)/.025)+1))[1:]:
+            route.append((*(t*staging), bearing))
+            checked.append(route[-1])
+        route_start = bearing
     exit_point = center+1.2*normal
-    for t in np.linspace(0., 1., max(2, math.ceil(np.linalg.norm(exit_point-staging)/.025)+1))[1:]:
-        route.append((*(staging+t*(exit_point-staging)), door.heading))
-        checked.append(route[-1])
+    if abs(angle_difference(route_start, door.heading)) > .18:
+        transition = smooth_segment(staging, route_start, exit_point, door.heading, 70)
+        route.extend(tuple(row) for row in transition[1:])
+        checked.extend(tuple(row) for row in transition[1:])
+    else:
+        for t in np.linspace(0., 1., max(2, math.ceil(np.linalg.norm(exit_point-staging)/.025)+1))[1:]:
+            route.append((*(staging+t*(exit_point-staging)), door.heading))
+            checked.append(route[-1])
     if all(clearance((x, y, theta, 0.), all_obstacles) > max(margin, .06)
            for x, y, theta in checked):
         return np.asarray(route)
+
+    # A continuous transition can be too wide for a narrow staging pocket.
+    # Keep the previous collision-checked pivot route as a safe fallback.
+    fallback_route, fallback_checked = stationary_staging_route()
+    if all(clearance((x, y, theta, 0.), all_obstacles) > max(margin, .06)
+           for x, y, theta in fallback_checked):
+        return fallback_route
 
     start = (0., 0., 0., 0.)
     start_key = key(start)
@@ -522,6 +598,8 @@ def wall_reference(lines, v, w, body_clearance=.12, preferred_side=0):
     candidates = [line for line in lines if abs(line.heading) < 1.30
                   and .45 < abs(line.distance) < 1.80]
     intended_side = math.copysign(1., w) if abs(w) >= .12 else preferred_side
+    if not intended_side:
+        candidates = [line for line in candidates if abs(line.distance) < .95]
     if intended_side:
         candidates = [line for line in candidates
                       if math.copysign(1., line.distance) == intended_side]
@@ -551,6 +629,53 @@ def wall_reference(lines, v, w, body_clearance=.12, preferred_side=0):
     normal = np.array([-tangent[1], tangent[0]])
     offset = wall.distance - math.copysign(.40+body_clearance, wall.distance)
     return approach_path(3. * tangent + offset * normal, wall.heading), 'wall', math.copysign(1., wall.distance)
+
+
+def reference_is_clear(path, points, margin=.06):
+    """Check interpolated rear-axle footprints, including rotation between poses."""
+    points = np.asarray(points, dtype=float).reshape(-1, 2)
+    if not np.isfinite(path).all() or not np.isfinite(points).all():
+        return False
+    for first, second in zip(path, path[1:]):
+        turn = angle_difference(second[2], first[2])
+        travel = np.linalg.norm(second[:2]-first[:2]) + 1.05*abs(turn)
+        for fraction in np.linspace(0., 1., max(2, math.ceil(travel/.02)+1)):
+            pose = (*((1-fraction)*first[:2]+fraction*second[:2]), first[2]+fraction*turn)
+            local = transform_points(points, pose, inverse=True)
+            if len(local) and np.min(footprint_clearance(local)) <= margin+.01:
+                return False
+    return True
+
+
+def front_wall_reference(lines, points, v, w, preferred_side=0):
+    """Approach a front wall's tangent only when the full body can turn clear."""
+    walls = [line for line in lines if abs(line.heading) > 1.35
+             and .97 < -line.distance/math.sin(line.heading) < 3.
+             and min(line.start[1], line.end[1]) < -.4
+             and max(line.start[1], line.end[1]) > .4]
+    if not walls:
+        return None
+    wall = min(walls, key=lambda line: -line.distance/math.sin(line.heading))
+    toward = np.array([math.sin(wall.heading), -math.cos(wall.heading)])
+    if toward[0] < 0:
+        toward = -toward
+    gap = abs(wall.distance)
+    # Explicit steering wins. Otherwise keep the followed wall on its side;
+    # without either cue, try left and then right, checking both against scans.
+    direction = math.copysign(1., w) if abs(w) >= .12 else -preferred_side
+    for side in ([direction] if direction else [1., -1.]):
+        tangent = side*np.array([-toward[1], toward[0]])
+        heading = math.atan2(tangent[1], tangent[0])
+        for clearance in (.60, .75, .90):
+            target = (gap-clearance)*toward + 1.8*tangent
+            if target[0] <= .25:
+                continue
+            path = approach_path(target, heading, steps=81)
+            path[0, 2] = 0.
+            path[-1, 2] = heading
+            if reference_is_clear(path, points):
+                return path, 'wall', -side
+    return None
 
 
 def door_reference(door):

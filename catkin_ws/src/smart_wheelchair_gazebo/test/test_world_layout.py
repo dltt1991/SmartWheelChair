@@ -99,7 +99,8 @@ class WorldLayoutTest(unittest.TestCase):
             camera = root.find("world/gui/camera[@name='top_down']")
             self.assertIsNotNone(camera)
             self.assertEqual(list(map(float, camera.findtext('pose').split())),
-                             [-6.7, 0., 9., 0., 1.5708, 0.])
+                             [0., 0., 22., 0., 1.57079632679, 1.57079632679]
+                             if path == WORLD else [-6.7, 0., 9., 0., 1.5708, 0.])
             self.assertEqual(camera.findtext('view_controller'), 'orbit')
         self.assertFalse(GUI_CONFIG.exists())
 

@@ -12,8 +12,7 @@ from std_msgs.msg import Float32
 from smart_wheelchair_safety.local_path_follower import select_velocity
 
 
-LIDAR_X_M = 0.79
-LIDAR_Y_M = {"left": 0.26, "right": -0.26}
+from smart_wheelchair_safety.unified_geometry import LIDAR_X_M, LIDAR_Y_M
 
 
 def _yaw(quaternion):

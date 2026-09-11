@@ -69,12 +69,6 @@ class ModelVisualsTest(unittest.TestCase):
         expected = {
             "left_lidar_body_visual",
             "right_lidar_body_visual",
-            "left_lidar_ray_minus50_visual",
-            "left_lidar_ray_50_visual",
-            "left_lidar_ray_150_visual",
-            "right_lidar_ray_minus150_visual",
-            "right_lidar_ray_minus50_visual",
-            "right_lidar_ray_50_visual",
         }
         self.assertTrue(expected.issubset(names))
 
@@ -123,17 +117,16 @@ class ModelVisualsTest(unittest.TestCase):
         self.assertEqual(p3d.findtext('localTwist'), 'true')
         self.assertEqual(p3d.findtext('updateRate'), '50')
 
-    def test_lidar_ray_visuals_are_above_scan_plane(self):
-        lidar_height = self._sensor_pose("left_lidar")[2]
-        ray_poses = [
-            self._visual_pose(visual.attrib["name"])
-            for visual in self.root.findall(".//visual")
-            if "_lidar_ray_" in visual.attrib["name"]
-        ]
+    def test_decorative_green_lidar_rays_are_removed(self):
+        self.assertFalse(any('_lidar_ray_' in v.attrib['name']
+                             for v in self.root.findall('.//visual')))
 
-        self.assertTrue(ray_poses)
-        for pose in ray_poses:
-            self.assertGreaterEqual(pose[2], lidar_height + 0.08)
+    def test_wheelchair_visuals_are_translucent(self):
+        visuals = self.root.findall('model/link/visual')
+        self.assertTrue(visuals)
+        for visual in visuals:
+            self.assertAlmostEqual(float(visual.findtext('transparency', '0')), .35,
+                                   msg=visual.attrib['name'])
 
     def test_rear_camera_is_centered_wide_angle(self):
         sensor = self.root.find(".//sensor[@name='rear_camera']")

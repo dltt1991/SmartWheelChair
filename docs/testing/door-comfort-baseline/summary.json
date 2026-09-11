@@ -1,0 +1,68 @@
+[
+  {
+    "case": "nw_horizontal-in-+0",
+    "result": "passed",
+    "elapsed": 5.837,
+    "modes": [
+      "waiting",
+      "manual",
+      "door_wait",
+      "door_pass",
+      "door_clear",
+      "manual"
+    ],
+    "final_pose": [
+      -4.500247398161872,
+      1.9784347780467886,
+      1.5657834430403905
+    ],
+    "progress": 0.6284347780467885,
+    "final_cmd": [
+      0.0,
+      0.0
+    ],
+    "final_measured": [
+      0.002803420822489581,
+      -0.008560964867609848
+    ],
+    "longest_stop": 0.6749170420007431,
+    "crossed_aperture": true,
+    "comfort": {
+      "smoothness": 94.46,
+      "human_likeness": 90.0
+    }
+  },
+  {
+    "case": "nw_horizontal-in-+15",
+    "result": "passed",
+    "elapsed": 18.07,
+    "modes": [
+      "waiting",
+      "door_wait",
+      "door_align",
+      "door_pass",
+      "door_clear",
+      "manual"
+    ],
+    "final_pose": [
+      -4.506975088253422,
+      2.024679541536072,
+      1.5413430809770783
+    ],
+    "progress": 0.6746795415360718,
+    "final_cmd": [
+      0.0,
+      0.0
+    ],
+    "final_measured": [
+      0.005723234132906566,
+      -0.015236984012590675
+    ],
+    "longest_stop": 0.5053675419985666,
+    "crossed_aperture": true,
+    "comfort": {
+      "smoothness": 89.99,
+      "human_likeness": 89.98
+    }
+  }
+]

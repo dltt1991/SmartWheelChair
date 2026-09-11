@@ -9,18 +9,19 @@ import threading
 import time
 import numpy as np
 import rospy
-from geometry_msgs.msg import PoseStamped, TransformStamped, Twist, TwistStamped
+from geometry_msgs.msg import Point32, PolygonStamped, PoseStamped, TransformStamped, Twist, TwistStamped
 from nav_msgs.msg import Odometry, Path
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool, Float32, String
 from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, TransformListener, TransformException
 
 from smart_wheelchair_safety.unified_geometry import (
+    LIDAR_X_M, LIDAR_Y_M, LIDAR_VIEW_DEG,
     Opening, active_aperture_targeted, angle_difference, approach_path, arc_path, braking_clear,
     collision_aware_door_reference, door_alignment_reference, door_entry_clearance,
     extract_lines, extract_opening_lines, footprint_clearance,
     find_openings, intended_front_door, intended_side_opening, opening_matches, transform_points,
-    wall_reference,
+    wall_reference, front_wall_reference, reference_is_clear,
 )
 
 
@@ -83,6 +84,9 @@ class UnifiedControlNode:
         self.door_obstacle_time = 0.
         self.opening_candidates = []
         self.confirmed_openings = []
+        self.door_detections = []
+        self.door_detection_candidates = []
+        self.door_detection_time = 0.
         self.opening_observation_time = 0.
         self.opening_turn = None
         self.opening_turn_side = 0
@@ -106,11 +110,11 @@ class UnifiedControlNode:
         self.transforms = TransformBroadcaster()
         self.static = StaticTransformBroadcaster()
         frames = []
-        for side, y in [('left', .26), ('right', -.26)]:
+        for side, y in LIDAR_Y_M.items():
             t = TransformStamped()
             t.header.frame_id = 'rear_axle'
             t.child_frame_id = f'unified_lidar_{side}'
-            t.transform.translation.x = .79
+            t.transform.translation.x = LIDAR_X_M
             t.transform.translation.y = y
             t.transform.rotation.w = 1.
             frames.append(t)
@@ -118,10 +122,11 @@ class UnifiedControlNode:
         self.pub = rospy.Publisher('cmd_vel', Twist, queue_size=10)
         self.status = rospy.Publisher('shared_control/status', String, queue_size=10)
         self.reference = rospy.Publisher('shared_control/reference', Path, queue_size=10)
+        self.door_detection_pub = rospy.Publisher('shared_control/door_detections', PolygonStamped, queue_size=1)
         self.limit_pub = rospy.Publisher('speed_limit', Float32, queue_size=10)
         self.scan_pubs = {side: rospy.Publisher(f'unified_scan_{side}', LaserScan, queue_size=10)
                           for side in ('left', 'right')}
-        self.publishers = [self.pub, self.status, self.reference, self.limit_pub,
+        self.publishers = [self.pub, self.status, self.reference, self.limit_pub, self.door_detection_pub,
                            *self.scan_pubs.values()]
         self.subscribers = [
             rospy.Subscriber(topic, message, self._serialized(callback), queue_size=10)
@@ -273,20 +278,13 @@ class UnifiedControlNode:
             return
         ranges = np.array(msg.ranges)
         healthy = np.isposinf(ranges) | (np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max))
-        if len(ranges) < 3 or np.mean(healthy) < .9:
-            return
         outgoing = copy.deepcopy(msg)
         outgoing.header.frame_id = f'unified_lidar_{side}'
         angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
-        lower, upper = (math.radians(-50), math.radians(150)) if side == 'left' else (math.radians(-150), math.radians(50))
-        planning_view = (angles >= lower-1e-5) & (angles <= upper+1e-5)
-        # Preserve the existing planner's side/front view; the final guard
-        # consumes every valid ray, including the formerly truncated rear.
-        outgoing.ranges = np.where(planning_view, ranges, np.inf).tolist()
-        with self.callback_lock:
-            if self.stopped:
-                return
-            self.scan_pubs[side].publish(outgoing)
+        lower, upper = map(math.radians, LIDAR_VIEW_DEG[side])
+        view = (angles >= lower-1e-5) & (angles <= upper+1e-5)
+        if np.count_nonzero(view) < 3 or np.mean(healthy[view]) < .9:
+            return
         # TF may need a fresh odometry callback to supply this transform.
         # Never hold the state-machine lock while waiting for it.
         try:
@@ -294,25 +292,30 @@ class UnifiedControlNode:
                                          msg.header.stamp, rospy.Duration(.15))
         except TransformException:
             return
-        valid = np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= min(msg.range_max, 4.5))
+        # User-selected 200 degree view is shared by perception, planning and
+        # the final guard. Unobserved rear sectors are NOT certified clear.
+        valid = view & np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= min(msg.range_max, 4.5))
         local = np.column_stack((ranges[valid]*np.cos(angles[valid]), ranges[valid]*np.sin(angles[valid])))
         q = t.transform.rotation
         pose = (t.transform.translation.x, t.transform.translation.y, 2*math.atan2(q.z, q.w))
         world = transform_points(local, pose)
         # Remove known self returns at acquisition, never newly approached
         # obstacles using the current footprint after the chair has moved.
-        axle_local = local + [.79, .26 if side == 'left' else -.26]
+        axle_local = local + [LIDAR_X_M, LIDAR_Y_M[side]]
         outside = ((axle_local[:, 0] < -.25) | (axle_local[:, 0] > .97)
                    | (np.abs(axle_local[:, 1]) > .4))
-        planning_world = world[outside & planning_view[valid]]
         world = world[outside]
+        accepted = np.zeros(len(ranges), dtype=bool)
+        accepted[np.flatnonzero(valid)[outside]] = True
+        outgoing.ranges = np.where(accepted, ranges, np.inf).tolist()
         with self.callback_lock:
             scan_age = rospy.Time.now().to_sec() - msg.header.stamp.to_sec()
             if (self.stopped or not -.05 <= scan_age <= self.parameter('scan_timeout')
                     or received < self.scans.get(side, (0., None))[0]):
                 return
             self.scans[side] = (received, world)
-            self.planning_scans[side] = planning_world
+            self.planning_scans[side] = world
+            self.scan_pubs[side].publish(outgoing)
             now = time.monotonic()
             if self.pose is not None and len(self.scans) == 2 and now-self.opening_observation_time >= .08:
                 groups, _ = self.points()
@@ -335,8 +338,19 @@ class UnifiedControlNode:
                 and np.linalg.norm(self.door_path[0, :2]-self.pose[:2]) > .04):
             self.door_path = None
             self.door_path_feasible = False
+            return door_alignment_reference(door, 'align')
         if self.door_path is None:
             phase = 'align' if self.door_phase == 'door_align' else 'pass'
+            if (phase == 'align' and abs(door.heading) < .15
+                    and self.door_plan_request is None
+                    and self.output[0] > .02 and self.measured[0] > .02
+                    and door_entry_clearance(door) > .01):
+                direct = door_alignment_reference(door, 'align')
+                if reference_is_clear(direct, obstacles, margin=.045):
+                    xy = transform_points(direct[:, :2], self.pose)
+                    self.door_path = np.column_stack((xy, direct[:, 2]+self.pose[2]))
+                    self.door_path_feasible = True
+                    return direct
             if phase == 'pass':
                 local = door_alignment_reference(door, phase)
                 self.door_path_feasible = True
@@ -491,12 +505,63 @@ class UnifiedControlNode:
                               if opening_matches(tracked, opening)), None)
                 if match is None:
                     confirmed.append(opening)
+                else:
+                    tracked = confirmed[match]
+                    normal = np.array([math.cos(tracked.heading), math.sin(tracked.heading)])
+                    tangent = np.array([-normal[1], normal[0]])
+                    delta = np.asarray(opening.center)-tracked.center
+                    # Accept newly supported inward jamb edges, never widen a
+                    # remembered gap because its nearest edge is now occluded.
+                    # Preserve the fixed anchor for same-width/chained fits.
+                    if (tracked.width-opening.width >= .04
+                            and abs(angle_difference(tracked.heading, opening.heading)) <= .03
+                            and abs(delta @ normal) <= .03
+                            and abs(delta @ tangent) <= (tracked.width-opening.width)/2+.025):
+                        confirmed[match] = opening
+                        if (self.door is not None and self.door_phase == 'door_align'
+                                and opening_matches(self.door, tracked)):
+                            # Neither a cached path nor an old worker result
+                            # may continue targeting the superseded jamb edges.
+                            self.door = opening
+                            self.door_generation += 1
+                            self.door_path = None
+                            self.door_rotation_index = 0
+                            self.door_path_feasible = False
+                            self.mode = 'door_wait'
+                            self.cancel()
         for candidate, hits, stamp in self.opening_candidates:
             if (now-stamp <= .6 and not any(opening_matches(candidate, opening)
                                             for opening in observed)):
                 updated.append((candidate, hits, stamp))
         self.opening_candidates = updated
         self.confirmed_openings = confirmed
+        # Navigation observations are cleared by neutral/reverse input. Keep
+        # the two-scan display confirmation independent of those user actions.
+        narrow = [opening for opening in observed if .92 <= opening.width <= 1.5][:32]
+        self.door_detections = [opening for opening in narrow
+                                if now-self.door_detection_time <= .6
+                                and any(opening_matches(opening, previous)
+                                        for previous in self.door_detection_candidates)]
+        self.door_detection_candidates = narrow
+        self.door_detection_time = now
+
+    def _publish_door_detections(self):
+        message = PolygonStamped()
+        message.header.frame_id = 'odom'
+        message.header.stamp = rospy.Time.now()
+        now = time.monotonic()
+        # Visualization has no dependency on joystick motion. Memory used for
+        # traversing an occluded doorway is deliberately not rendered as a fresh detection.
+        if (now-self.door_detection_time < self.parameter('scan_timeout')
+                and len(self.scans) == 2
+                and all(now-stamp < self.parameter('scan_timeout') for stamp, _ in self.scans.values())
+                and now-self.odom_time < self.parameter('odom_timeout')):
+            for opening in self.door_detections:
+                tangent = np.array([-math.sin(opening.heading), math.cos(opening.heading)])
+                for sign in (-1., 1.):
+                    edge = np.asarray(opening.center)+sign*opening.width/2*tangent
+                    message.polygon.points.append(Point32(x=edge[0], y=edge[1], z=.12))
+        self.door_detection_pub.publish(message)
 
     def _clear_opening_turn(self):
         self.opening_turn = None
@@ -623,7 +688,12 @@ class UnifiedControlNode:
             local = transform_points(world, self.pose, inverse=True)
             guard_groups.append(local)
             groups.append(transform_points(self.planning_scans.get(side, world), self.pose, inverse=True))
-        guard_groups.append(transform_points(self.door_obstacles, self.pose, inverse=True))
+        # Door jamb memory is only a guard while an active door handoff is in
+        # progress. Retaining it after the door is cleared can falsely put the
+        # chair into clearance recovery at a later doorway.
+        if (self.door is not None and self.door_obstacle_time
+                and time.monotonic()-self.door_obstacle_time <= DOOR_OBSTACLE_MEMORY_TIMEOUT):
+            guard_groups.append(transform_points(self.door_obstacles, self.pose, inverse=True))
         return groups, np.vstack(guard_groups)
 
     def fresh(self):
@@ -670,6 +740,7 @@ class UnifiedControlNode:
         return not (moving_plan or door_ready)
 
     def update_reference(self):
+        self._publish_door_detections()
         self.wall_preview_heading = None
         if not self.assist_enabled:
             self.mode = 'manual_direct'
@@ -722,6 +793,15 @@ class UnifiedControlNode:
         lines = [line for group in groups for line in extract_lines(group)]
         opening_path = self._opening_turn_path()
         local_door = self._local_tracked_door()
+        if (local_door is not None and self.door_phase == 'door_align'
+                and abs(self.raw[1]) < .12
+                and abs(local_door.center[1]) > .65
+                and door_entry_clearance(local_door) < -DOOR_ENTRY_NOISE_TOLERANCE):
+            # A remembered door can remain in the two-scan cache after the
+            # chair has moved past it or beside it. With straight joystick
+            # intent, do not wait forever for an infeasible angled entry.
+            self._clear_door()
+            local_door = None
         if local_door is None:
             world_door, local_door = self._intended_door()
             if world_door is not None:
@@ -767,24 +847,47 @@ class UnifiedControlNode:
             local_path = arc_path(max(self.raw[0], .1), self.raw[1])
             self.mode = 'manual'
         elif frontal_wall or self.front_blocked:
-            self.front_blocked = True
-            self.wall_side = 0
-            self.wall_preference = 0
-            self.mode = 'front_stop'
-            self.cancel()
-            return
+            turn = front_wall_reference(lines, obstacle_points, *self.raw,
+                                        preferred_side=self.wall_preference)
+            if turn is None:
+                self.front_blocked = True
+                self.wall_side = 0
+                self.wall_preference = 0
+                self.mode = 'front_stop'
+                self.cancel()
+                return
+            local_path, self.mode, self.wall_side = turn
+            self.front_blocked = False
+            self.wall_preference = self.wall_side
+            preview = int(np.argmin(np.abs(np.linalg.norm(local_path[:, :2], axis=1)-.8)))
+            self.wall_preview_heading = angle_difference(local_path[preview, 2]+self.pose[2], 0.)
         else:
             local_path, self.mode, self.wall_side = wall_reference(
                 lines, *self.raw,
                 body_clearance=self.parameter('wall_clearance'),
                 preferred_side=self.wall_preference)
+            # A narrow doorway interrupts the followed wall. Keep the tangent
+            # motion across its opening; treating the near jamb as a continuous
+            # wall makes the safety planner brake at the threshold.
+            local_openings = [self._local_opening(opening) for opening in self.confirmed_openings]
+            if self.mode == 'wall' and self.wall_side:
+                through_door = any(
+                    .92 <= opening.width <= 1.5
+                    and opening.center[0] > .35
+                    and opening.center[0] < 2.5
+                    and abs(math.sin(opening.heading)) > .85
+                    and self.wall_side * opening.center[1] > .25
+                    for opening in local_openings)
+                if through_door and abs(self.raw[1]) < .12:
+                    local_path = arc_path(max(self.raw[0], .1), self.raw[1])
+                    self.mode = 'manual'
+                    self.wall_side = 0
             if self.mode == 'wall':
                 self.wall_preference = self.wall_side
                 distance = np.linalg.norm(local_path[:, :2], axis=1)
                 preview = int(np.argmin(np.abs(distance-.8)))
                 self.wall_preview_heading = angle_difference(
                     local_path[preview, 2]+self.pose[2], 0.)
-            local_openings = [self._local_opening(opening) for opening in self.confirmed_openings]
             selected = intended_side_opening(local_openings, self.wall_side, *self.raw)
             if self.mode == 'wall' and selected is not None:
                 side = self.wall_side
@@ -887,11 +990,23 @@ class UnifiedControlNode:
                     self.reason = 'planner_fallback'
             elif now-self.plan_time < .25 and np.isfinite(self.planned).all():
                 desired = self.planned.copy()
+                if (self.mode == 'wall' and self.raw[0] > .02
+                        and desired[0] < .02):
+                    # The lattice follower can briefly select its zero sample
+                    # when a wall segment is refreshed. Preserve a guarded
+                    # human-like creep unless a real frontal obstacle is near.
+                    front = points[(points[:, 0] > 0.) & (np.abs(points[:, 1]) <= .44)]
+                    nearest = float(front[:, 0].min()) if len(front) else math.inf
+                    if nearest > 1.15:
+                        desired[0] = min(self.raw[0], .08)
                 if self.mode.startswith('door_'):
-                    if (desired[0] <= .02 and self.mode == 'door_align'
-                            and self.door is not None
+                    if (desired[0] <= .02 and self.door is not None
+                            and self.raw[0] > .02
                             and door_entry_clearance(self._local_opening(self.door))
                             > -DOOR_ENTRY_NOISE_TOLERANCE):
+                        # Preserve forward intent through a temporarily sparse
+                        # planner update; the independent guard still decides
+                        # whether this creep is geometrically safe.
                         desired[0] = min(self.raw[0], DOOR_CREEP_SPEED)
                     if desired[0] <= .02:
                         desired[1] = 0.

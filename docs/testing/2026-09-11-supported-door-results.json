@@ -1,0 +1,830 @@
+{
+  "environment": "Ubuntu 20.04 / ROS Noetic / Gazebo 11",
+  "batch": "v13 single simulation, frozen sources",
+  "sources_sha256": {
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py": "b09611090e4ea64edd9a9bf51461e46c28651707869a72890a223184a389223a",
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py": "2216f568de7cf024389493513b20acdef85464b31bb9afc9e16b486380f6047a",
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py": "54da01982891cbc015c52c61a8ffaf53ff0c6f9449fee096709c7cae6eb7a3f7",
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower_node.py": "2cf21059e3e6a965ff9960f50e049e57ea30d0494fbeff7e59f7dabcf8d6eb10",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_door_matrix.py": "5e87364939c99de43988836c8ece938e8aea08a1c4ffad395269688bc545d000",
+    "catkin_ws/src/smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf": "5a60aaf11768c78464a5b5b39040a738669378959e38621261725215d34b485d",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_junction_matrix.py": "64b9693037071acd170ffc55199581256860105266f8a9015f898cd83b100b2b",
+    "scripts/probe_unified_control.py": "3fc31b074b3d6e4ee0b11e46c12191e34372e52f8f4017039d237c95c8b711a7",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_recovery_matrix.py": "a8c865b52864bc8d9e414155250434c601df30be4a1e3ebf6f21544bc83355fd",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/test_m6_accessibility.py": "34f736b7bc75b24a3aa5560c4b743688778a6568eb7ed9ab561f2b54eb83ce4a",
+    "catkin_ws/src/smart_wheelchair_gazebo/worlds/m6_room.world": "f5a0839549fe91cb3481096b0b85873bcdf7c70c0e7c4a97554dd8733db0a385",
+    "catkin_ws/src/smart_wheelchair_gazebo/src/trajectory_preview_plugin.cc": "630981c6d9b5ff9bdcfab2b160c8a6216410564170cce77b279eb91a8b97fb43"
+  },
+  "catkin": {
+    "tests": 383,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "door_total": {
+    "passed": 120,
+    "total": 120
+  },
+  "batches": {
+    "doors": {
+      "passed": 84,
+      "total": 84,
+      "artifact": ".superpowers/behavior/door-supported-v13-doors/summary.json",
+      "configuration": {
+        "expected": 84,
+        "angles": [
+          0,
+          -15,
+          15,
+          -30,
+          30,
+          -45,
+          45
+        ],
+        "directions": [
+          "in",
+          "out"
+        ],
+        "doors": [
+          "nw_horizontal",
+          "ne_horizontal",
+          "sw_horizontal",
+          "se_horizontal",
+          "nw_vertical",
+          "se_vertical"
+        ],
+        "timeout": 35.0,
+        "lateral_offset": 0.0,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      },
+      "cases": [
+        {
+          "case": "nw_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in--30",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in-+30",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in--45",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in-+45",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-out-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-out--15",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-out-+15",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-out--30",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-out-+30",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-out--45",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-out-+45",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in--30",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+30",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in--45",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+45",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-out-+0",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-out--15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-out-+15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-out--30",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-out-+30",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-out--45",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-out-+45",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in--30",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+30",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in--45",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+45",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-out-+0",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-out--15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-out-+15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-out--30",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-out-+30",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-out--45",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-out-+45",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in--30",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+30",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in--45",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+45",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-out-+0",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-out--15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-out-+15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-out--30",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-out-+30",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-out--45",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-out-+45",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in--15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in--30",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+30",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in--45",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+45",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-out-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-out--15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-out-+15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-out--30",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-out-+30",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-out--45",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-out-+45",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+0",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in--15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in--30",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+30",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in--45",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+45",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-out-+0",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-out--15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-out-+15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-out--30",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-out-+30",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-out--45",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-out-+45",
+          "passed": true
+        }
+      ]
+    },
+    "offset-left": {
+      "passed": 18,
+      "total": 18,
+      "artifact": ".superpowers/behavior/door-supported-v13-offset-left/summary.json",
+      "configuration": {
+        "expected": 18,
+        "angles": [
+          -15.0,
+          0.0,
+          15.0
+        ],
+        "directions": [
+          "in"
+        ],
+        "doors": [
+          "nw_horizontal",
+          "ne_horizontal",
+          "sw_horizontal",
+          "se_horizontal",
+          "nw_vertical",
+          "se_vertical"
+        ],
+        "timeout": 35.0,
+        "lateral_offset": 0.25,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      },
+      "cases": [
+        {
+          "case": "nw_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in--15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in--15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+0",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+15",
+          "passed": true
+        }
+      ]
+    },
+    "offset-right": {
+      "passed": 18,
+      "total": 18,
+      "artifact": ".superpowers/behavior/door-supported-v13-offset-right/summary.json",
+      "configuration": {
+        "expected": 18,
+        "angles": [
+          -15.0,
+          0.0,
+          15.0
+        ],
+        "directions": [
+          "in"
+        ],
+        "doors": [
+          "nw_horizontal",
+          "ne_horizontal",
+          "sw_horizontal",
+          "se_horizontal",
+          "nw_vertical",
+          "se_vertical"
+        ],
+        "timeout": 35.0,
+        "lateral_offset": -0.25,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      },
+      "cases": [
+        {
+          "case": "nw_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in--15",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+0",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-in-+15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in--15",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-in-+15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in--15",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+0",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-in-+15",
+          "passed": true
+        }
+      ]
+    },
+    "junction": {
+      "passed": 20,
+      "total": 20,
+      "artifact": ".superpowers/behavior/door-supported-v13-junction/summary.json",
+      "configuration": {},
+      "cases": [
+        {
+          "case": "opening_turn-left-0",
+          "passed": true
+        },
+        {
+          "case": "opening_turn-right-0",
+          "passed": true
+        },
+        {
+          "case": "opening_turn-left-90",
+          "passed": true
+        },
+        {
+          "case": "opening_turn-right-90",
+          "passed": true
+        },
+        {
+          "case": "opening_turn-left-180",
+          "passed": true
+        },
+        {
+          "case": "opening_turn-right-180",
+          "passed": true
+        },
+        {
+          "case": "opening_turn-left-270",
+          "passed": true
+        },
+        {
+          "case": "opening_turn-right-270",
+          "passed": true
+        },
+        {
+          "case": "opening_straight-left-0",
+          "passed": true
+        },
+        {
+          "case": "opening_straight-left-90",
+          "passed": true
+        },
+        {
+          "case": "opening_straight-left-180",
+          "passed": true
+        },
+        {
+          "case": "opening_straight-left-270",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-left-0",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-right-0",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-left-90",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-right-90",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-left-180",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-right-180",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-left-270",
+          "passed": true
+        },
+        {
+          "case": "opening_gap-right-270",
+          "passed": true
+        }
+      ]
+    },
+    "recovery": {
+      "passed": 24,
+      "total": 24,
+      "artifact": ".superpowers/behavior/door-supported-v13-recovery/summary.json",
+      "configuration": {
+        "angles": [
+          0.0,
+          180.0
+        ],
+        "seconds": 6.0,
+        "expected": 24,
+        "doors": null,
+        "footprint": [
+          -0.25,
+          0.97,
+          -0.4,
+          0.4
+        ],
+        "sweep_step": 0.002
+      },
+      "cases": [
+        {
+          "case": "nw_horizontal-j-1-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-j-1-+180",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-j1-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_horizontal-j1-+180",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-j-1-+0",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-j-1-+180",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-j1-+0",
+          "passed": true
+        },
+        {
+          "case": "ne_horizontal-j1-+180",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-j-1-+0",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-j-1-+180",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-j1-+0",
+          "passed": true
+        },
+        {
+          "case": "sw_horizontal-j1-+180",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-j-1-+0",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-j-1-+180",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-j1-+0",
+          "passed": true
+        },
+        {
+          "case": "se_horizontal-j1-+180",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-j-1-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-j-1-+180",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-j1-+0",
+          "passed": true
+        },
+        {
+          "case": "nw_vertical-j1-+180",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-j-1-+0",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-j-1-+180",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-j1-+0",
+          "passed": true
+        },
+        {
+          "case": "se_vertical-j1-+180",
+          "passed": true
+        }
+      ]
+    }
+  },
+  "native_render": {
+    "passed": true,
+    "unchanged_scans_per_side": 76,
+    "valid_camera_frames": 113,
+    "log": ".superpowers/behavior/door-supported-v13-render-final.log"
+  },
+  "restored_gui": {
+    "passed": true,
+    "neutral_visible": 20,
+    "last_messages": 20,
+    "artifact": ".superpowers/behavior/door-supported-v13-restored-gui.json",
+    "screenshot": ".superpowers/behavior/door-supported-v13-gui.png"
+  },
+  "limitations": [
+    "Static planar simulation, not real-robot certification",
+    "Earlier v12 dual-north 39/42 under concurrent simulator load; failures retained separately",
+    "Moving-parent anchoring not dynamically asserted; nonzero parent transform verified"
+  ]
+}

@@ -18,66 +18,77 @@
         <geometry><box><size>0.95 0.62 0.18</size></box></geometry>
       </collision>
       <visual name="base_visual">
+        <transparency>0.35</transparency>
         <pose>0 0 0.42 0 0 0</pose>
         <geometry><box><size>0.95 0.62 0.18</size></box></geometry>
         <material><ambient>0.06 0.07 0.08 1</ambient><diffuse>0.06 0.07 0.08 1</diffuse></material>
       </visual>
 
       <visual name="seat_visual">
+        <transparency>0.35</transparency>
         <pose>-0.12 0 0.68 0 0 0</pose>
         <geometry><box><size>0.60 0.58 0.09</size></box></geometry>
         <material><ambient>0.015 0.017 0.02 1</ambient><diffuse>0.015 0.017 0.02 1</diffuse></material>
       </visual>
 
       <visual name="backrest_visual">
+        <transparency>0.35</transparency>
         <pose>-0.43 0 1.00 0 -0.18 0</pose>
         <geometry><box><size>0.09 0.58 0.70</size></box></geometry>
         <material><ambient>0.015 0.017 0.02 1</ambient><diffuse>0.015 0.017 0.02 1</diffuse></material>
       </visual>
 
       <visual name="left_armrest_visual">
+        <transparency>0.35</transparency>
         <pose>-0.10 0.36 0.83 0 0 0</pose>
         <geometry><box><size>0.62 0.06 0.08</size></box></geometry>
         <material><ambient>0.08 0.09 0.10 1</ambient><diffuse>0.08 0.09 0.10 1</diffuse></material>
       </visual>
 
       <visual name="right_armrest_visual">
+        <transparency>0.35</transparency>
         <pose>-0.10 -0.36 0.83 0 0 0</pose>
         <geometry><box><size>0.62 0.06 0.08</size></box></geometry>
         <material><ambient>0.08 0.09 0.10 1</ambient><diffuse>0.08 0.09 0.10 1</diffuse></material>
       </visual>
 
       <visual name="left_arm_support_front_visual">
+        <transparency>0.35</transparency>
         <pose>0.16 0.36 0.67 0 0 0</pose>
         <geometry><box><size>0.045 0.045 0.28</size></box></geometry>
         <material><ambient>0.16 0.18 0.19 1</ambient><diffuse>0.16 0.18 0.19 1</diffuse></material>
       </visual>
 
       <visual name="right_arm_support_front_visual">
+        <transparency>0.35</transparency>
         <pose>0.16 -0.36 0.67 0 0 0</pose>
         <geometry><box><size>0.045 0.045 0.28</size></box></geometry>
         <material><ambient>0.16 0.18 0.19 1</ambient><diffuse>0.16 0.18 0.19 1</diffuse></material>
       </visual>
 
       <visual name="footplate_visual">
+        <transparency>0.35</transparency>
         <pose>0.48 0 0.30 0 0 0</pose>
         <geometry><box><size>0.32 0.48 0.045</size></box></geometry>
         <material><ambient>0.12 0.13 0.14 1</ambient><diffuse>0.12 0.13 0.14 1</diffuse></material>
       </visual>
 
       <visual name="left_frame_rail_visual">
+        <transparency>0.35</transparency>
         <pose>0.02 0.31 0.52 0 0 0</pose>
         <geometry><box><size>0.86 0.035 0.06</size></box></geometry>
         <material><ambient>0.13 0.15 0.16 1</ambient><diffuse>0.13 0.15 0.16 1</diffuse></material>
       </visual>
 
       <visual name="right_frame_rail_visual">
+        <transparency>0.35</transparency>
         <pose>0.02 -0.31 0.52 0 0 0</pose>
         <geometry><box><size>0.86 0.035 0.06</size></box></geometry>
         <material><ambient>0.13 0.15 0.16 1</ambient><diffuse>0.13 0.15 0.16 1</diffuse></material>
       </visual>
 
       <visual name="battery_visual">
+        <transparency>0.35</transparency>
         <pose>-0.15 0 0.27 0 0 0</pose>
         <geometry><box><size>0.42 0.44 0.12</size></box></geometry>
         <material><ambient>0.08 0.09 0.10 1</ambient><diffuse>0.08 0.09 0.10 1</diffuse></material>
@@ -85,85 +96,27 @@
 
 
       <visual name="left_lidar_body_visual">
+        <transparency>0.35</transparency>
         <plugin name="faint_left_lidar" filename="libSmartWheelChairFaintLidarVisual.so">
           <sensor>left_lidar</sensor>
         </plugin>
-        <pose>0.46 0.26 0.56 0 0 0</pose>
+        <pose>0.46 0.36 0.56 0 0 0</pose>
         <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
         <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>
       </visual>
 
       <visual name="right_lidar_body_visual">
+        <transparency>0.35</transparency>
         <plugin name="faint_right_lidar" filename="libSmartWheelChairFaintLidarVisual.so">
           <sensor>right_lidar</sensor>
         </plugin>
-        <pose>0.46 -0.26 0.56 0 0 0</pose>
+        <pose>0.46 -0.36 0.56 0 0 0</pose>
         <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
         <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>
       </visual>
 
-      <visual name="left_lidar_ray_minus50_visual">
-        <pose>0.910 -0.276 0.660 0 0 -0.8727</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="left_lidar_ray_0_visual">
-        <pose>1.160 0.260 0.660 0 0 0.0000</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="left_lidar_ray_50_visual">
-        <pose>0.910 0.796 0.660 0 0 0.8727</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 1.0 0.55 0.50</ambient><diffuse>0.0 1.0 0.55 0.50</diffuse></material>
-      </visual>
-
-      <visual name="left_lidar_ray_100_visual">
-        <pose>0.338 0.949 0.660 0 0 1.7453</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="left_lidar_ray_150_visual">
-        <pose>-0.146 0.610 0.660 0 0 2.6180</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="right_lidar_ray_minus150_visual">
-        <pose>-0.146 -0.610 0.660 0 0 -2.6180</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="right_lidar_ray_minus100_visual">
-        <pose>0.338 -0.949 0.660 0 0 -1.7453</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="right_lidar_ray_minus50_visual">
-        <pose>0.910 -0.796 0.660 0 0 -0.8727</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 1.0 0.55 0.50</ambient><diffuse>0.0 1.0 0.55 0.50</diffuse></material>
-      </visual>
-
-      <visual name="right_lidar_ray_0_visual">
-        <pose>1.160 -0.260 0.660 0 0 0.0000</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
-      <visual name="right_lidar_ray_50_visual">
-        <pose>0.910 0.276 0.660 0 0 0.8727</pose>
-        <geometry><box><size>1.40 0.018 0.012</size></box></geometry>
-        <material><ambient>0.0 0.9 0.48 0.38</ambient><diffuse>0.0 0.9 0.48 0.38</diffuse></material>
-      </visual>
-
       <sensor name="left_lidar" type="ray">
-        <pose>0.46 0.26 0.56 0 0 0</pose>
+        <pose>0.46 0.36 0.56 0 0 0</pose>
         <update_rate>10</update_rate>
         <ray>
           <scan>
@@ -190,7 +143,7 @@
       </sensor>
 
       <sensor name="right_lidar" type="ray">
-        <pose>0.46 -0.26 0.56 0 0 0</pose>
+        <pose>0.46 -0.36 0.56 0 0 0</pose>
         <update_rate>10</update_rate>
         <ray>
           <scan>
@@ -246,32 +199,40 @@
       <pose>-0.33 0.36 0.18 0 0 0</pose>
       <inertial><mass>2.0</mass><inertia><ixx>0.02</ixx><iyy>0.02</iyy><izz>0.02</izz></inertia></inertial>
       <collision name="collision"><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.07</length></cylinder></geometry></collision>
-      <visual name="visual"><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.07</length></cylinder></geometry><material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.03 0.03 0.03 1</diffuse></material></visual>
-      <visual name="left_rear_hub_visual"><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.09</radius><length>0.08</length></cylinder></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
+      <visual name="visual">
+        <transparency>0.35</transparency><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.07</length></cylinder></geometry><material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.03 0.03 0.03 1</diffuse></material></visual>
+      <visual name="left_rear_hub_visual">
+        <transparency>0.35</transparency><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.09</radius><length>0.08</length></cylinder></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
     </link>
 
     <link name="right_rear_wheel">
       <pose>-0.33 -0.36 0.18 0 0 0</pose>
       <inertial><mass>2.0</mass><inertia><ixx>0.02</ixx><iyy>0.02</iyy><izz>0.02</izz></inertia></inertial>
       <collision name="collision"><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.07</length></cylinder></geometry></collision>
-      <visual name="visual"><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.07</length></cylinder></geometry><material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.03 0.03 0.03 1</diffuse></material></visual>
-      <visual name="right_rear_hub_visual"><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.09</radius><length>0.08</length></cylinder></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
+      <visual name="visual">
+        <transparency>0.35</transparency><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.18</radius><length>0.07</length></cylinder></geometry><material><ambient>0.03 0.03 0.03 1</ambient><diffuse>0.03 0.03 0.03 1</diffuse></material></visual>
+      <visual name="right_rear_hub_visual">
+        <transparency>0.35</transparency><pose>0 0 0 1.5708 0 0</pose><geometry><cylinder><radius>0.09</radius><length>0.08</length></cylinder></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
     </link>
 
     <link name="left_front_caster">
       <pose>0.38 0.25 0.08 0 0 0</pose>
       <inertial><mass>0.6</mass><inertia><ixx>0.002</ixx><iyy>0.002</iyy><izz>0.002</izz></inertia></inertial>
       <collision name="collision"><geometry><sphere><radius>0.08</radius></sphere></geometry></collision>
-      <visual name="visual"><geometry><sphere><radius>0.08</radius></sphere></geometry><material><ambient>0.05 0.05 0.055 1</ambient><diffuse>0.05 0.05 0.055 1</diffuse></material></visual>
-      <visual name="left_caster_fork_visual"><pose>0 0 0.11 0 0 0</pose><geometry><box><size>0.05 0.12 0.12</size></box></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
+      <visual name="visual">
+        <transparency>0.35</transparency><geometry><sphere><radius>0.08</radius></sphere></geometry><material><ambient>0.05 0.05 0.055 1</ambient><diffuse>0.05 0.05 0.055 1</diffuse></material></visual>
+      <visual name="left_caster_fork_visual">
+        <transparency>0.35</transparency><pose>0 0 0.11 0 0 0</pose><geometry><box><size>0.05 0.12 0.12</size></box></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
     </link>
 
     <link name="right_front_caster">
       <pose>0.38 -0.25 0.08 0 0 0</pose>
       <inertial><mass>0.6</mass><inertia><ixx>0.002</ixx><iyy>0.002</iyy><izz>0.002</izz></inertia></inertial>
       <collision name="collision"><geometry><sphere><radius>0.08</radius></sphere></geometry></collision>
-      <visual name="visual"><geometry><sphere><radius>0.08</radius></sphere></geometry><material><ambient>0.05 0.05 0.055 1</ambient><diffuse>0.05 0.05 0.055 1</diffuse></material></visual>
-      <visual name="right_caster_fork_visual"><pose>0 0 0.11 0 0 0</pose><geometry><box><size>0.05 0.12 0.12</size></box></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
+      <visual name="visual">
+        <transparency>0.35</transparency><geometry><sphere><radius>0.08</radius></sphere></geometry><material><ambient>0.05 0.05 0.055 1</ambient><diffuse>0.05 0.05 0.055 1</diffuse></material></visual>
+      <visual name="right_caster_fork_visual">
+        <transparency>0.35</transparency><pose>0 0 0.11 0 0 0</pose><geometry><box><size>0.05 0.12 0.12</size></box></geometry><material><ambient>0.55 0.58 0.60 1</ambient><diffuse>0.55 0.58 0.60 1</diffuse></material></visual>
     </link>
 
     <link name="rear_axle">

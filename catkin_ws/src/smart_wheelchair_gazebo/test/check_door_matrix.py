@@ -19,7 +19,7 @@ import numpy as np
 from test_m6_accessibility import DOORS, M6AccessibilityTest
 
 
-def start_pose(door, direction, angle):
+def start_pose(door, direction, angle, lateral_offset=0.):
     _, x, y, axis, _ = door
     heading = (math.copysign(math.pi/2, y) if axis == 0
                else (0. if x > 0 else math.pi))
@@ -28,7 +28,8 @@ def start_pose(door, direction, angle):
     tangent = np.array([-normal[1], normal[0]])
     # Aim the initial joystick straight ahead through the aperture centre.
     # 1.35 m fits the cross corridor as well as the room side of each door.
-    axle = np.array([x, y])-1.35*normal-1.35*math.tan(math.radians(angle))*tangent
+    axle = (np.array([x, y])-1.35*normal
+            +(lateral_offset-1.35*math.tan(math.radians(angle)))*tangent)
     yaw = heading+math.radians(angle)
     return axle, yaw, normal
 
@@ -51,6 +52,31 @@ def overlaps(pose, boxes, margin=0.):
 def rear_extent(heading_error):
     cosine = math.cos(heading_error)
     return max(.25*cosine, -.97*cosine)+.4*abs(math.sin(heading_error))
+
+
+def comfort_scores(records):
+    """Return reproducible 0..100 smoothness and human-likeness scores.
+
+    Smoothness penalizes jerk and command reversals. Human-likeness rewards
+    continuous forward motion, bounded steering changes, and a single gradual
+    speed profile through the aperture.
+    """
+    if len(records) < 3:
+        return {'smoothness': 0., 'human_likeness': 0.}
+    t = np.asarray([row['t'] for row in records], dtype=float)
+    v = np.asarray([row.get('measured', [0., 0.])[0] for row in records], dtype=float)
+    w = np.asarray([row.get('measured', [0., 0.])[1] for row in records], dtype=float)
+    dt = np.maximum(np.diff(t), 1e-3)
+    jerk = np.diff(np.diff(v) / dt) / dt[1:]
+    yaw_accel = np.diff(np.diff(w) / dt) / dt[1:]
+    reversals = np.count_nonzero(np.diff(np.signbit(v)) & (v[1:] > .02))
+    pauses = np.count_nonzero((v[:-1] < .025) & (v[1:] >= .025))
+    # 90 points means jerk <= 2 m/s^3, yaw acceleration <= 1 rad/s^3,
+    # no reverse command, and at most one planned pause at the pivot.
+    smoothness = float(np.clip(100. - 4.*np.mean(np.abs(jerk)) - 1.5*np.mean(np.abs(yaw_accel)), 0., 100.))
+    human = float(np.clip(100. - 8.*reversals - 6.*max(0, pauses-1)
+                         - 1.*np.mean(np.abs(np.diff(w))), 0., 100.))
+    return {'smoothness': round(smoothness, 2), 'human_likeness': round(human, 2)}
 
 
 def inspect_sweep(poses, boxes, door, normal):
@@ -94,10 +120,14 @@ def main():
     parser.add_argument('--angles', nargs='+', type=float, default=[0, -15, 15, -30, 30, -45, 45])
     parser.add_argument('--directions', nargs='+', choices=['in', 'out'], default=['in', 'out'])
     parser.add_argument('--timeout', type=float, default=35.)
+    parser.add_argument('--lateral-offset', type=float, default=0.,
+                        help='Offset initial forward ray from doorway center, in metres')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if set(args.doors)-{d[0] for d in DOORS}:
         parser.error('unknown door')
+    if not math.isfinite(args.lateral_offset):
+        parser.error('lateral offset must be finite')
     args.output.mkdir(parents=True, exist_ok=True)
     source_root = Path(__file__).parents[2]
     source_paths = [source_root/'smart_wheelchair_safety'/'smart_wheelchair_safety'/name
@@ -108,7 +138,8 @@ def main():
     (args.output/'manifest.json').write_text(json.dumps(dict(
         expected=len(args.doors)*len(args.directions)*len(args.angles),
         angles=args.angles, directions=args.directions, doors=args.doors,
-        timeout=args.timeout, pose_margin=.02, sweep_step=.005, sources=hashes), indent=2))
+        timeout=args.timeout, lateral_offset=args.lateral_offset,
+        pose_margin=.02, sweep_step=.005, sources=hashes), indent=2))
     geometry = M6AccessibilityTest()
     geometry.setUp()
     rospy.init_node('door_matrix', disable_signals=True)
@@ -154,7 +185,7 @@ def main():
                            for p in source_paths):
                         raise RuntimeError('source changed during matrix; run is incomplete')
                     case = '{}-{}-{:+g}'.format(door[0], direction, angle)
-                    axle, yaw, normal = start_pose(door, direction, angle)
+                    axle, yaw, normal = start_pose(door, direction, angle, args.lateral_offset)
                     assert not overlaps((*axle, yaw), geometry.boxes, .04), 'invalid start '+case
                     command()
                     rosnode.kill_nodes(['/unified_control_node', '/local_path_follower_node'])
@@ -249,7 +280,8 @@ def main():
                     summary = dict(case=case, result=result, elapsed=round(time.monotonic()-started, 3),
                                    modes=modes, final_pose=data['pose'], progress=progress,
                                    final_cmd=data['cmd'], final_measured=data['measured'],
-                                   longest_stop=longest_stop, crossed_aperture=crossed_aperture)
+                                   longest_stop=longest_stop, crossed_aperture=crossed_aperture,
+                                   comfort=comfort_scores(records))
                     summaries.append(summary)
                     (args.output/(case+'.json')).write_text(json.dumps(dict(summary=summary, records=records,
                         poses=poses, references=refs, final_scans={k:data.get(k) for k in ('left','right')})))

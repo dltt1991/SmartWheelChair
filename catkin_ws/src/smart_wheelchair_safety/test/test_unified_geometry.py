@@ -17,6 +17,46 @@ from smart_wheelchair_safety.unified_geometry import (
 
 
 class UnifiedGeometryTest(unittest.TestCase):
+    def test_front_wall_turns_both_ways_and_rejects_blocked_sweep(self):
+        from smart_wheelchair_safety.unified_geometry import front_wall_reference, reference_is_clear
+        wall = np.column_stack((np.full(101, 2.), np.linspace(-4., 4., 101)))
+        for side in (-1., 1.):
+            result = front_wall_reference(extract_lines(wall), wall, .5, side*.3)
+            self.assertIsNotNone(result)
+            path, mode, wall_side = result
+            self.assertEqual(mode, 'wall')
+            self.assertEqual(wall_side, -side)
+            self.assertGreater(side*path[-1, 1], 1.)
+            self.assertTrue(reference_is_clear(path, wall))
+            blocked = np.vstack((wall, path[len(path)//2, :2]))
+            self.assertFalse(reference_is_clear(path, blocked))
+        boxed = np.vstack((wall, [[.8, 0.]]))
+        self.assertIsNone(front_wall_reference(extract_lines(wall), boxed, .5, 0.))
+
+    def test_captured_nw_door_has_one_supported_feasible_aperture(self):
+        capture = json.loads((Path(__file__).with_name('fixtures') /
+                              'nw_door_wait_capture.json').read_text())
+        lines = [line for group in capture['groups'] for line in extract_opening_lines(group)]
+        for ordered in (lines, lines[::-1]):
+            doors = find_openings(ordered, max_width=1.5)
+            self.assertEqual(len(doors), 1)
+            self.assertLess(doors[0].width, 1.23)
+            path = collision_aware_door_reference(doors[0], capture['points'])
+            self.assertIsNotNone(path)
+            for pose in path:
+                from smart_wheelchair_safety.unified_geometry import footprint_clearance
+                self.assertGreater(np.min(footprint_clearance(
+                    transform_points(capture['points'], pose, inverse=True))), .04)
+
+    def test_short_contiguous_jamb_piece_cannot_enlarge_aperture(self):
+        lines = [Segment((2., y0), (2., y1), math.pi/2, -2.)
+                 for y0, y1 in ((-2., -.55), (.55, .674), (.674, 2.), (.674, 2.))]
+        for ordered in (lines, lines[::-1]):
+            doors = find_openings(ordered, max_width=1.5)
+            self.assertEqual(len(doors), 1)
+            self.assertAlmostEqual(doors[0].width, 1.1)
+            np.testing.assert_allclose(doors[0].center, [2., 0.], atol=1e-7)
+
     def test_pruning_rejects_invalid_envelope_parameters(self):
         for name in ('margin', 'reaction', 'deceleration', 'state_age'):
             for value in (math.nan, math.inf, -.1):

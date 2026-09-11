@@ -14,6 +14,15 @@ class DoorMatrixTest(unittest.TestCase):
     door = ('test', 0., 0., 1, 1.)
     normal = np.array([1., 0.])
 
+    def test_lateral_offset_changes_position_not_heading_or_target_door(self):
+        for door in matrix.DOORS:
+            for direction in ('in', 'out'):
+                axle, yaw, normal = matrix.start_pose(door, direction, 15.)
+                shifted, shifted_yaw, shifted_normal = matrix.start_pose(door, direction, 15., .25)
+                np.testing.assert_allclose(shifted-axle, .25*np.array([-normal[1], normal[0]]), atol=1e-12)
+                np.testing.assert_allclose(shifted_normal, normal)
+                self.assertEqual(shifted_yaw, yaw)
+
     def test_all_84_map_starts_have_four_centimetres_of_body_clearance(self):
         scene = matrix.M6AccessibilityTest()
         scene.setUp()

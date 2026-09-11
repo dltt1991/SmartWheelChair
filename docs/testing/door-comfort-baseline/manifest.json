@@ -1,0 +1,25 @@
+{
+  "expected": 2,
+  "angles": [
+    0.0,
+    15.0
+  ],
+  "directions": [
+    "in"
+  ],
+  "doors": [
+    "nw_horizontal"
+  ],
+  "timeout": 35.0,
+  "lateral_offset": 0.0,
+  "pose_margin": 0.02,
+  "sweep_step": 0.005,
+  "sources": {
+    "smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py": "3095ecb286ddcbb3e244c1a6c331e74963af287429b3907a69397c96456687e0",
+    "smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py": "a286721814c6cfe45c3e196b548a5ff816288fbab5fa76563d4e19bb5b87f7b1",
+    "smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py": "54da01982891cbc015c52c61a8ffaf53ff0c6f9449fee096709c7cae6eb7a3f7",
+    "smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower_node.py": "815440f8b0a9c4a7659c442388438214654bd0137e19a4df713377a5d570db96",
+    "smart_wheelchair_gazebo/test/check_door_matrix.py": "5ee8af0f71b08837fe90b141819984f0918a6e900276c34ea180672bc49f5b52",
+    "smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf": "d76b2e6fd411a8e2f7dde69b053464051bf4a9ec65fbbbd3b7acf113c09ccdf3"
+  }
+}
