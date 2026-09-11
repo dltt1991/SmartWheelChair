@@ -30,7 +30,7 @@ class RuntimeWiringTest(unittest.TestCase):
                          'parallel rostests must not overwrite the same rosunit XML')
         self.assertEqual(set(names), {'joystick', 'unified_geometry',
                                      'local_path_follower', 'local_path_follower_node',
-                                     'web_joystick', 'unified_control'})
+                                     'web_joystick', 'unified_control', 'wall_end'})
 
     def test_runtime_checks_are_registered_with_catkin(self):
         cmake = (ROOT / 'catkin_ws/src/smart_wheelchair_gazebo/CMakeLists.txt').read_text()

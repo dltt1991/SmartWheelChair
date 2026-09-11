@@ -53,10 +53,29 @@ def select_velocity(path, obstacles, speed_limit, previous_velocity=None):
     candidates = [(v, w)
                   for v in np.linspace(0., min(float(speed_limit), .8), 9)
                   for w in np.linspace(-.65, .65, 15)]
-    safe = [candidate for candidate in candidates
-            if _trajectory_clear(_rollout(*candidate), obstacles)]
-    if not safe:
+    trajectories = np.asarray([_rollout(*candidate) for candidate in candidates])
+    # Every checked footprint lies inside this disk: at most one second of
+    # translation plus the farthest inflated body corner. Keep a roundoff buffer.
+    reach = min(float(speed_limit), .8) + math.hypot(1.01, .44) + 1e-12
+    obstacles = obstacles[np.linalg.norm(obstacles, axis=1) <= reach]
+    safe = np.arange(len(candidates))
+    for step in range(trajectories.shape[1]):
+        if not len(obstacles) or not len(safe):
+            break
+        poses = trajectories[safe, step]
+        # Match the scalar collision helper's trigonometry at footprint edges.
+        cosine = np.array([math.cos(yaw) for yaw in poses[:, 2]])[:, None]
+        sine = np.array([math.sin(yaw) for yaw in poses[:, 2]])[:, None]
+        dx = obstacles[None, :, 0] - poses[:, None, 0]
+        dy = obstacles[None, :, 1] - poses[:, None, 1]
+        local_x = cosine*dx + sine*dy
+        local_y = -sine*dx + cosine*dy
+        blocked = np.any((local_x >= -.29) & (local_x <= 1.01)
+                         & (np.abs(local_y) <= .44), axis=1)
+        safe = safe[~blocked]
+    if not len(safe):
         return np.zeros(2)
-    return np.asarray(min(safe, key=lambda command:
-                          _path_score(_rollout(*command), path)
-                          + .05 * np.linalg.norm(np.asarray(command) - previous)))
+    best = min(safe, key=lambda index:
+               _path_score(trajectories[index], path)
+               + .05*np.linalg.norm(np.asarray(candidates[index])-previous))
+    return np.asarray(candidates[best])

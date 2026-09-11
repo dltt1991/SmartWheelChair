@@ -10,6 +10,34 @@ spec.loader.exec_module(probe)
 
 
 class UnifiedProbeTest(unittest.TestCase):
+    def test_opening_gap_requires_turn_progress_and_no_prolonged_stop(self):
+        self.assertTrue(hasattr(probe, 'check_opening_gap_result'))
+        passing = {'junction_exit_time': 4., 'junction_yaw_change': 1.3,
+                   'junction_forward_progress': .4, 'junction_longest_stop': .5}
+        probe.check_opening_gap_result(passing, 1.)
+        probe.check_opening_gap_result(dict(passing, junction_yaw_change=-1.3), -1.)
+        for key, value in [('junction_exit_time', None), ('junction_yaw_change', .2),
+                           ('junction_forward_progress', .1), ('junction_longest_stop', 3.1)]:
+            with self.subTest(key=key), self.assertRaises(AssertionError):
+                probe.check_opening_gap_result(dict(passing, **{key: value}), 1.)
+
+    def test_junction_stop_metric_excludes_later_leg_but_keeps_stalls_before_exit(self):
+        self.assertTrue(hasattr(probe, 'opening_gap_metrics'))
+        records = [dict(t=t, odom=pose, odom_velocity=velocity) for t, pose, velocity in [
+            (2., [0., 0., 0.], [.1, .1]), (3., [.3, .2, .5], [.3, .5]),
+            (5., [.6, .7, 1.3], [.3, .5]), (10., [.6, 4., 1.5], [0., 0.]),
+            (20., [.6, 4., 1.5], [0., 0.])]]
+        result = probe.opening_gap_metrics(records, 1., (0., 0., 0.))
+        self.assertEqual(result['junction_exit_time'], 5.)
+        self.assertEqual(result['junction_longest_stop'], 0.)
+        self.assertEqual(result['longest_stop'], 10.)
+        probe.check_opening_gap_result(result, 1.)
+        stalled = [dict(t=2., odom=[0., 0., 0.], odom_velocity=[0., 0.]),
+                   dict(t=6., odom=[0., 0., 0.], odom_velocity=[0., 0.]),
+                   dict(records[2], t=7.)] + records[3:]
+        with self.assertRaisesRegex(AssertionError, 'prolonged stop'):
+            probe.check_opening_gap_result(probe.opening_gap_metrics(stalled, 1., (0., 0., 0.)), 1.)
+
     def test_wall_acceptance_requires_mode_and_speed_recovery(self):
         self.assertTrue(hasattr(probe, 'check_wall_result'),
                         'wall probe must expose its real acceptance check')

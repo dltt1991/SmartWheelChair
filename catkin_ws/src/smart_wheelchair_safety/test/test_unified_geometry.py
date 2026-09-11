@@ -16,6 +16,25 @@ from smart_wheelchair_safety.unified_geometry import (
 
 
 class UnifiedGeometryTest(unittest.TestCase):
+    def test_oblique_door_can_stage_with_collision_checked_stationary_turns(self):
+        for degrees in (-45, -30, 30, 45):
+            yaw = math.radians(degrees)
+            axle = (-1.35, -1.35*math.tan(yaw), yaw)
+            points = np.array([(x, y) for x in (-.06, .06)
+                               for y in np.r_[np.linspace(-4., -.5, 180), np.linspace(.5, 4., 180)]])
+            # Opposite side of the real 2.58 m cross corridor.
+            points = np.vstack((points, np.column_stack((np.full(300, -2.64), np.linspace(-4., 4., 300)))))
+            local = transform_points(points, axle, inverse=True)
+            center = transform_points([(0., 0.)], axle, inverse=True)[0]
+            with self.subTest(degrees=degrees):
+                path = collision_aware_door_reference(Door(tuple(center), -yaw, 1.), local)
+                self.assertIsNotNone(path, 'a clear staging turn must not be reported as no path')
+                for x, y, heading in path:
+                    obstacle = transform_points(local, (x, y, heading), inverse=True)
+                    dx = np.maximum(np.maximum(-.25-obstacle[:, 0], obstacle[:, 0]-.97), 0.)
+                    dy = np.maximum(np.abs(obstacle[:, 1])-.4, 0.)
+                    self.assertGreater(np.hypot(dx, dy).min(), .04)
+
     def test_captured_wall_guard_preserves_state_age_uncertainty(self):
         capture = json.loads((Path(__file__).with_name('fixtures') /
                               'wall_guard_capture.json').read_text())

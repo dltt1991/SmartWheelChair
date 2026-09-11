@@ -59,6 +59,7 @@ class UnifiedControlNode:
         self.acceleration = np.zeros(2)
         self.pose = None
         self.raw_time = self.odom_time = self.plan_time = 0.
+        self.sensor_stale_since = None
         self.active_reference_stamp = None
         self.last_reference_stamp = rospy.Time()
         self.odom_stamp = None
@@ -66,6 +67,7 @@ class UnifiedControlNode:
         self.door = None
         self.door_phase = None
         self.door_path = None
+        self.door_rotation_index = 0
         self.door_path_feasible = False
         self.door_plan_executor = ThreadPoolExecutor(max_workers=1,
                                                      thread_name_prefix='door_path')
@@ -316,6 +318,11 @@ class UnifiedControlNode:
         return Opening(tuple(center), heading, opening.width, ())
 
     def _local_door_path(self, door, obstacles):
+        if (self.door_path is not None and self.door_rotation_index == 0
+                and np.linalg.norm(self.door_path[1, :2]-self.door_path[0, :2]) < 1e-6
+                and np.linalg.norm(self.door_path[0, :2]-self.pose[:2]) > .04):
+            self.door_path = None
+            self.door_path_feasible = False
         if self.door_path is None:
             phase = 'align' if self.door_phase == 'door_align' else 'pass'
             if phase == 'pass':
@@ -333,9 +340,14 @@ class UnifiedControlNode:
                             try:
                                 local = future.result()
                                 plan_pose = requested_pose
+                                if (np.linalg.norm(np.asarray(self.pose[:2])-requested_pose[:2]) > .03
+                                        or abs(angle_difference(self.pose[2], requested_pose[2])) > .03):
+                                    local = None
                             except Exception as error:
                                 rospy.logerr('door path search failed: %s', error)
-                if local is None and self.door_plan_request is None:
+                if (local is None and self.door_plan_request is None
+                        and np.max(np.abs(self.measured)) < .025
+                        and np.max(np.abs(self.output)) < .025):
                     plan_pose = tuple(self.pose)
                     future = self.door_plan_executor.submit(
                         collision_aware_door_reference, door,
@@ -354,9 +366,17 @@ class UnifiedControlNode:
         local = transform_points(self.door_path[:, :2], self.pose, inverse=True)
         segments = np.linalg.norm(np.diff(self.door_path[:, :2], axis=0), axis=1)
         delta = np.diff(local, axis=0)
-        fraction = np.clip(-np.sum(local[:-1]*delta, axis=1)/(segments*segments), 0., 1.)
+        fraction = np.clip(-np.sum(local[:-1]*delta, axis=1)/np.maximum(segments*segments, 1e-12), 0., 1.)
         projections = local[:-1] + fraction[:, None]*delta
-        nearest = int(np.argmin(np.linalg.norm(projections, axis=1)))
+        distances = np.linalg.norm(projections, axis=1)
+        distances[segments < 1e-6] = math.inf
+        distances[:self.door_rotation_index] = math.inf
+        pending = self._pending_door_rotation()
+        if pending is not None:
+            distances[pending[0]:] = math.inf
+        if not np.isfinite(distances).any():
+            return 0.
+        nearest = int(np.argmin(distances))
         turns = np.arctan2(np.sin(np.diff(self.door_path[:, 2])),
                            np.cos(np.diff(self.door_path[:, 2])))
         reference_heading = self.door_path[nearest, 2] + fraction[nearest]*turns[nearest]
@@ -365,6 +385,21 @@ class UnifiedControlNode:
                      + 2.*heading_error + 4.*projections[nearest, 1])
         angular = linear*curvature
         return float(np.clip(angular, -.65, .65))
+
+    def _pending_door_rotation(self):
+        if self.door_path is None:
+            return None
+        for index in range(self.door_rotation_index, len(self.door_path)-1):
+            first, second = self.door_path[index:index+2]
+            if np.linalg.norm(second[:2]-first[:2]) > 1e-6:
+                continue
+            distance = float(np.linalg.norm(first[:2]-self.pose[:2]))
+            error = angle_difference(second[2], self.pose[2])
+            if distance < .07 and abs(error) < .04 and abs(self.measured[1]) < .08:
+                self.door_rotation_index = index+1
+                continue
+            return index, distance, error
+        return None
 
     def _door_angular(self, linear):
         path_angular = self._door_preview_angular(linear)
@@ -379,6 +414,17 @@ class UnifiedControlNode:
     def _safe_door_command(self, points, stamp):
         cruise = .35 if self.mode == 'door_align' else .55
         high = min(self.raw[0], cruise)
+        pending = self._pending_door_rotation()
+        if pending is not None:
+            index, distance, error = pending
+            if index == 0 and distance > .04:
+                return np.zeros(2)
+            if distance < .07:
+                angular = float(np.clip(1.5*error, -.4, .4)) if abs(self.measured[0]) < .025 else 0.
+                return np.array([0., angular])
+            # Arrive stopped at the checked pivot; do not carry translation
+            # into a stationary rotation's swept-footprint guarantee.
+            high = min(high, max(.025, math.sqrt(.04+max(0., distance-.05))-.2))
         best = np.zeros(2)
         state_age = max(0., stamp-self.odom_stamp)
         for _ in range(7):
@@ -437,6 +483,7 @@ class UnifiedControlNode:
         self.door = None
         self.door_phase = None
         self.door_path = None
+        self.door_rotation_index = 0
         self.door_path_feasible = False
         self.door_away_since = 0.
 
@@ -580,12 +627,25 @@ class UnifiedControlNode:
             else:
                 nearby = np.linalg.norm(self.door_obstacles-np.array(self.pose[:2]), axis=1) < 4.5
                 self.door_obstacles = self.door_obstacles[nearby]
-        if not self.fresh() or self.raw[0] <= .02:
+        now = time.monotonic()
+        if (self.raw[0] <= .02 or not np.isfinite(self.raw).all()
+                or now-self.raw_time >= self.parameter('command_timeout')):
+            self.sensor_stale_since = None
             self._clear_opening_turn()
             self._clear_door()
             self.cancel()
             self.mode = 'manual'
             return
+        if not self.fresh():
+            if self.sensor_stale_since is None:
+                self.sensor_stale_since = now
+            if now-self.sensor_stale_since >= 1.:
+                self._clear_opening_turn()
+                self._clear_door()
+            self.cancel()
+            self.mode = 'waiting'
+            return
+        self.sensor_stale_since = None
         if self.override:
             self.cancel()
             self.mode = 'override'
@@ -623,9 +683,9 @@ class UnifiedControlNode:
             door_path = self._local_door_path(local_door, obstacle_points)
             if not self.door_path_feasible:
                 local_path = arc_path(max(self.raw[0], .1), self.raw[1])
-                self.mode = 'manual'
+                self.mode = 'door_wait'
             else:
-                if not self.mode.startswith('door_'):
+                if self.mode not in ('door_align', 'door_pass', 'door_clear'):
                     self.cancel()
                 local_path = door_path
                 if self.door_phase == 'door_align':
@@ -724,11 +784,13 @@ class UnifiedControlNode:
         elif np.linalg.norm(self.raw) < .01:
             self.reason = 'user_stop'
         elif (self.raw[0] > .02 and not self.override and self.mode != 'front_stop'
-              and planner_stale and not door_fallback):
+              and self.mode != 'door_wait' and planner_stale and not door_fallback):
             self.reason = 'planner_timeout'
         else:
             _, points = self.points()
-            if self.raw[0] <= .02 or self.override or self.mode == 'front_stop':
+            if self.mode == 'door_wait':
+                desired = np.zeros(2)
+            elif self.raw[0] <= .02 or self.override or self.mode == 'front_stop':
                 desired = self.raw.copy()
                 if self.mode == 'front_stop' and self.raw[0] > .02 and not self.override:
                     desired[1] = 0.
@@ -795,8 +857,10 @@ class UnifiedControlNode:
             command = self.output + self.acceleration*dt
             command = np.minimum(np.maximum(command, np.minimum(self.output, desired)), np.maximum(self.output, desired))
             if door_fallback:
-                command[1] = self._door_angular(command[0]) if command[0] > .002 else 0.
-                self.acceleration[1] = 0.
+                pending = self._pending_door_rotation()
+                if pending is None or pending[1] >= .07:
+                    command[1] = self._door_angular(command[0]) if command[0] > .002 else 0.
+                    self.acceleration[1] = 0.
             for scale in (1., .8, .6, .4, .2, 0.):
                 candidate = command * scale
                 if braking_clear(points, candidate, self.measured,

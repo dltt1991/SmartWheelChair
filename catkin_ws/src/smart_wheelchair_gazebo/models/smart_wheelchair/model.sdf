@@ -85,12 +85,18 @@
 
 
       <visual name="left_lidar_body_visual">
+        <plugin name="faint_left_lidar" filename="libSmartWheelChairFaintLidarVisual.so">
+          <sensor>left_lidar</sensor>
+        </plugin>
         <pose>0.46 0.26 0.56 0 0 0</pose>
         <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
         <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>
       </visual>
 
       <visual name="right_lidar_body_visual">
+        <plugin name="faint_right_lidar" filename="libSmartWheelChairFaintLidarVisual.so">
+          <sensor>right_lidar</sensor>
+        </plugin>
         <pose>0.46 -0.26 0.56 0 0 0</pose>
         <geometry><box><size>0.10 0.08 0.055</size></box></geometry>
         <material><ambient>0.02 0.30 0.18 1</ambient><diffuse>0.02 0.30 0.18 1</diffuse></material>

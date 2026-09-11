@@ -32,6 +32,36 @@ def check_wall_result(result):
     assert result['max_speed'] > .6, 'wall speed did not recover'
 
 
+def check_opening_gap_result(result, intended_sign):
+    assert result['junction_exit_time'] is not None, 'junction exit was not reached'
+    assert intended_sign*result['junction_yaw_change'] >= math.radians(70), 'joystick turn was not executed in the gap'
+    assert result['junction_forward_progress'] > .25, 'junction forward progress too small'
+    assert result['junction_longest_stop'] <= 3., 'prolonged stop after clearing the near wall'
+
+
+def opening_gap_metrics(records, intended_sign, initial_pose):
+    """Separate the junction turn from later travel toward unrelated walls."""
+    progress, longest_stop, stopped_since = 0., 0., None
+    result = {'junction_exit_time': None}
+    c, s = math.cos(initial_pose[2]), math.sin(initial_pose[2])
+    for row in records:
+        x, y, yaw = row['odom']
+        progress = max(progress, (x-initial_pose[0])*c+(y-initial_pose[1])*s)
+        yaw = math.atan2(math.sin(yaw-initial_pose[2]), math.cos(yaw-initial_pose[2]))
+        if max(abs(value) for value in row.get('odom_velocity', [0., 0.])) < .03:
+            stopped_since = row['t'] if stopped_since is None else stopped_since
+            longest_stop = max(longest_stop, row['t']-stopped_since)
+        else:
+            stopped_since = None
+        if result['junction_exit_time'] is None:
+            result.update(junction_yaw_change=yaw, junction_forward_progress=progress,
+                          junction_longest_stop=longest_stop)
+            if intended_sign*yaw >= math.radians(70) and progress > .25:
+                result['junction_exit_time'] = row['t']
+    result.update(forward_progress=progress, longest_stop=longest_stop)
+    return result
+
+
 def settled_after_release(data, released, now):
     return all(released < data.get(key + '_received', -math.inf) <= now
                and now - data[key + '_received'] <= .25
@@ -52,9 +82,13 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('case', choices=['wall', 'wall_gap', 'override', 'front', 'vertical',
-                                         'room_door', 'opening_turn', 'opening_straight', 'door'])
+                                         'room_door', 'opening_turn', 'opening_straight', 'opening_gap', 'door'])
     parser.add_argument('--seconds', type=float, default=30.)
+    parser.add_argument('--forward-y', type=float, default=.5,
+                        help='Forward joystick fraction in (0, 1]')
     parser.add_argument('--wall-side', choices=['left', 'right'], default='left')
+    parser.add_argument('--approach-yaw-deg', type=float, default=0.,
+                        help='Rotate opening-case start position and heading around the junction')
     parser.add_argument('--lateral-m', type=float, default=.15,
                         help='Door fixture body-centre lateral offset in metres')
     parser.add_argument('--yaw-deg', type=float, default=10.,
@@ -63,6 +97,8 @@ def main():
                         help='Steer toward the door for four seconds during takeover')
     parser.add_argument('--output', default='/tmp/unified-probe.json')
     args = parser.parse_args()
+    if not 0. < args.forward_y <= 1.:
+        parser.error('--forward-y must be in (0, 1]')
     rospy.init_node('unified_sim_probe')
     data, scans, records = {}, {}, []
     motion_started = False
@@ -114,13 +150,18 @@ def main():
             x, y = -2.5, args.lateral_m
         else:
             yaw = math.pi/2 if args.case in ('front', 'vertical', 'room_door', 'wall_gap') else math.pi/6
-            if args.case in ('opening_turn', 'opening_straight', 'door'):
+            if args.case.startswith('opening_'):
                 yaw = 0.
             starts = {'vertical': (0., -4.3), 'front': (-2.5, 0.), 'room_door': (-4.5, 0.),
                       'wall_gap': (-.77, -4.3) if args.wall_side == 'left' else (.77, 1.7),
                       'opening_turn': (-3.5, .77 if args.wall_side == 'left' else -.77),
-                      'opening_straight': (-3.5, .77 if args.wall_side == 'left' else -.77)}
+                      'opening_straight': (-3.5, .77 if args.wall_side == 'left' else -.77),
+                      'opening_gap': (-.2, .77 if args.wall_side == 'left' else -.77)}
             x, y = starts.get(args.case, (-4., 0.))
+            if args.case.startswith('opening_'):
+                yaw = math.radians(args.approach_yaw_deg)
+                x, y = x*math.cos(yaw)-y*math.sin(yaw), x*math.sin(yaw)+y*math.cos(yaw)
+        opening_axle_start = (x-.33*math.cos(yaw), y-.33*math.sin(yaw), yaw)
         req = {'model_state': {'model_name': 'smart_wheelchair', 'reference_frame': 'world',
                               'pose': {'position': {'x': x, 'y': y, 'z': .04},
                                        'orientation': {'z': math.sin(yaw/2), 'w': math.cos(yaw/2)}}}}
@@ -139,12 +180,13 @@ def main():
                 turn = -.3 if args.case in ('wall', 'override') else 0.
                 if args.case == 'override' and elapsed > 13:
                     turn = .3
-                if args.case == 'opening_turn' and elapsed > 4:
+                if ((args.case == 'opening_turn' and elapsed > 4)
+                        or (args.case == 'opening_gap' and elapsed > 2)):
                     # HTTP x is screen direction; joystick_to_velocity negates it.
                     turn = -.45 if args.wall_side == 'left' else .45
                 if args.case == 'door' and args.active_align and 2. < elapsed < 6.:
                     turn = math.copysign(.22, args.lateral_m)
-                command(turn if elapsed > 2 else 0., .5 if elapsed > 2 else 0.)
+                command(turn if elapsed > 2 else 0., args.forward_y if elapsed > 2 else 0.)
                 last_send = now
             time.sleep(.005)  # rospy dispatches subscriptions on its own threads.
             if now-last_log < .1 or len(scans) < 2 or 'odom' not in data:
@@ -177,7 +219,7 @@ def main():
                             if 0. <= gap < .5:
                                 wall_clearances.append(gap)
             row = dict(t=round(elapsed, 3), **data, clearance=min(clearances, default=99.))
-            if args.case in ('opening_turn', 'opening_straight', 'door'):
+            if args.case.startswith('opening_') or args.case == 'door':
                 row['openings'] = [{'center': list(opening.center), 'heading': opening.heading,
                                     'width': opening.width}
                                    for opening in find_openings(scan_lines)]
@@ -187,6 +229,10 @@ def main():
                 relative = transform_points([data['odom'][:2]], initial_odom, inverse=True)[0]
                 axle_start = (-2.5-.33*math.cos(yaw), args.lateral_m-.33*math.sin(yaw), yaw)
                 row['world_axle'] = transform_points([relative], axle_start)[0].tolist()
+                row['world_yaw'] = data['odom'][2]-initial_odom[2]+yaw
+            elif args.case.startswith('opening_'):
+                relative = transform_points([data['odom'][:2]], initial_odom, inverse=True)[0]
+                row['world_axle'] = transform_points([relative], opening_axle_start)[0].tolist()
                 row['world_yaw'] = data['odom'][2]-initial_odom[2]+yaw
             records.append(row)
         command()
@@ -205,7 +251,7 @@ def main():
         for entry in mode_history:
             if not sequence or sequence[-1] != entry['mode']:
                 sequence.append(entry['mode'])
-        result = {'case': args.case, 'samples': len(moving),
+        result = {'case': args.case, 'forward_y': args.forward_y, 'samples': len(moving),
                   'min_sampled_clearance': min((r['clearance'] for r in moving), default=0.),
                   'max_speed': max((r.get('cmd_vel', [0])[0] for r in moving), default=0.),
                   'modes': sorted({r['mode'] for r in mode_history}
@@ -221,9 +267,11 @@ def main():
                     and r.get('status', {}).get('mode') == 'wall' and r.get('cmd_vel', [0])[0] > .1]
             result['steady_gap_samples'] = len(gaps)
             result['steady_gap_min_max'] = [min(gaps), max(gaps)] if gaps else None
-        if args.case in ('opening_turn', 'opening_straight') and moving:
+        if args.case.startswith('opening_') and moving:
             result['yaw_change'] = math.atan2(math.sin(moving[-1]['odom'][2]-initial_odom[2]),
                                               math.cos(moving[-1]['odom'][2]-initial_odom[2]))
+        if args.case == 'opening_gap' and moving:
+            result.update(opening_gap_metrics(moving, 1. if args.wall_side == 'left' else -1., initial_odom))
         Path(args.output).write_text(json.dumps({'summary': result, 'records': records,
                                                'mode_history': mode_history}, indent=2)+'\n')
         print(json.dumps(result, indent=2))
@@ -260,6 +308,8 @@ def main():
         elif args.case == 'opening_straight':
             assert 'opening_turn' not in result['modes'], 'opening captured a straight command'
             assert abs(result['yaw_change']) < .25, 'straight command turned into the opening'
+        elif args.case == 'opening_gap':
+            check_opening_gap_result(result, 1. if args.wall_side == 'left' else -1.)
     finally:
         try:
             command()

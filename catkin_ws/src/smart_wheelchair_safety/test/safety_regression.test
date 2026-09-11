@@ -9,4 +9,6 @@
     <include file="$(find smart_wheelchair_safety)/test/web_and_follower.test" />
   </group>
   <include file="$(find smart_wheelchair_safety)/test/unified_control.test" />
+  <test pkg="smart_wheelchair_safety" type="test_wall_end.py"
+        test-name="wall_end" time-limit="60" />
 </launch>

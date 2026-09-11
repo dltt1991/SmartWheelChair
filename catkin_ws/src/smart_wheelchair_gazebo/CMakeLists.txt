@@ -4,7 +4,7 @@ project(smart_wheelchair_gazebo)
 find_package(catkin REQUIRED COMPONENTS gazebo_ros geometry_msgs roscpp)
 find_package(gazebo REQUIRED)
 
-catkin_package(LIBRARIES SmartWheelChairTrajectoryPreview SmartWheelChairGuiOnlyVisual
+catkin_package(LIBRARIES SmartWheelChairTrajectoryPreview SmartWheelChairGuiOnlyVisual SmartWheelChairFaintLidarVisual
   CATKIN_DEPENDS gazebo_ros geometry_msgs roscpp)
 
 include_directories(${catkin_INCLUDE_DIRS} ${GAZEBO_INCLUDE_DIRS})
@@ -16,6 +16,9 @@ target_link_libraries(SmartWheelChairTrajectoryPreview
 add_library(SmartWheelChairGuiOnlyVisual SHARED src/gui_only_visual_plugin.cc)
 target_compile_features(SmartWheelChairGuiOnlyVisual PRIVATE cxx_std_14)
 target_link_libraries(SmartWheelChairGuiOnlyVisual ${GAZEBO_LIBRARIES})
+add_library(SmartWheelChairFaintLidarVisual SHARED src/faint_lidar_visual_plugin.cc)
+target_compile_features(SmartWheelChairFaintLidarVisual PRIVATE cxx_std_14)
+target_link_libraries(SmartWheelChairFaintLidarVisual ${GAZEBO_LIBRARIES})
 
 if(CATKIN_ENABLE_TESTING)
   catkin_add_nosetests(test)
@@ -24,7 +27,7 @@ if(CATKIN_ENABLE_TESTING)
   target_link_libraries(trajectory_preview_render_check ${catkin_LIBRARIES} ${GAZEBO_LIBRARIES})
 endif()
 
-install(TARGETS SmartWheelChairTrajectoryPreview SmartWheelChairGuiOnlyVisual
+install(TARGETS SmartWheelChairTrajectoryPreview SmartWheelChairGuiOnlyVisual SmartWheelChairFaintLidarVisual
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION})
 
 install(DIRECTORY launch worlds models config

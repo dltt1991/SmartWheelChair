@@ -6,6 +6,8 @@
 #include <vector>
 #include <gazebo/gazebo_client.hh>
 #include <gazebo/rendering/rendering.hh>
+#include <gazebo/rendering/DynamicLines.hh>
+#include <gazebo/rendering/ogre_gazebo.h>
 #include <geometry_msgs/Twist.h>
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
@@ -79,6 +81,7 @@ int main(int argc, char **argv)
     const auto step = [&]() {
       ros::spinOnce();
       scene->PreRender();
+      gazebo::event::Events::preRender();
       ros::WallDuration(.01).sleep();
     };
     const auto deadline = ros::WallTime::now() + ros::WallDuration(30);
@@ -95,6 +98,40 @@ int main(int argc, char **argv)
       const auto laserName = std::string("smart_wheelchair::base_link::") + side + "_lidar_GUIONLY_laser_vis";
       auto laser = scene->GetVisual(laserName);
       Require(laser && laser->GetVisible(), "lidar GUI visualization missing: " + laserName);
+      const auto ready = ros::WallTime::now() + ros::WallDuration(5);
+      while (laser->GetSceneNode()->numAttachedObjects() < 4 && ros::WallTime::now() < ready) step();
+      step();  // Let the visual plugin style freshly allocated LaserVisual lines.
+      unsigned int faintObjects = 0;
+      auto laserNode = laser->GetSceneNode();
+      for (unsigned int i = 0; i < laserNode->numAttachedObjects(); ++i)
+      {
+        auto line = dynamic_cast<gazebo::rendering::DynamicLines *>(laserNode->getAttachedObject(i));
+        if (!line) continue;
+        const auto material = line->getMaterial();
+        Require(material->getName().find("SmartWheelChair/FaintLidar/") == 0,
+                "native lidar still uses opaque default material");
+        const auto pass = material->getTechnique(0)->getPass(0);
+        Require(std::abs(pass->getDiffuse().a - .035f) < 1e-6 && !pass->getDepthWriteEnabled(),
+                "native lidar opacity/depth writing incorrect");
+        Require(pass->getSourceBlendFactor() == Ogre::SBF_SOURCE_ALPHA &&
+                pass->getDestBlendFactor() == Ogre::SBF_ONE_MINUS_SOURCE_ALPHA,
+                "native lidar does not alpha blend");
+        for (unsigned int u = 0; u < pass->getNumTextureUnitStates(); ++u)
+        {
+          const auto &alpha = pass->getTextureUnitState(u)->getAlphaBlendMode();
+          Require(alpha.source1 == Ogre::LBS_MANUAL && std::abs(alpha.alphaArg1 - .035f) < 1e-6,
+                  "texture unit overrides faint alpha");
+        }
+        Require(line->getVisibilityFlags() == GZ_VISIBILITY_GUI,
+                "native lidar visible to camera sensors");
+        ++faintObjects;
+      }
+      Require(faintObjects == 4, "missing native lidar strips/fan/ray lines");
+      const auto original = Ogre::MaterialManager::getSingleton().getByName("Gazebo/BlueLaser");
+      Require(std::abs(original->getTechnique(0)->getPass(0)->getTextureUnitState(0)
+                          ->getAlphaBlendMode().alphaArg1 - .4f) < 1e-6,
+              "global laser material was modified");
+      std::cout << side << " native lidar: 4 GUI-only render objects, alpha=0.035, original unchanged" << std::endl;
     }
     baseline = scans;
     compareScans = true;

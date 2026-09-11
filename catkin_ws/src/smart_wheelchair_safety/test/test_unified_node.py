@@ -100,6 +100,67 @@ class UnifiedNodeTest(unittest.TestCase):
         msg.linear.x, msg.angular.z = linear, angular
         self.node.on_raw(msg)
 
+    def test_waiting_for_door_search_stops_before_losing_staging_space(self):
+        self.node.mode = 'door_wait'
+        self.node.planned = np.array([.6, 0.])
+        self.node.control()
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+
+    def test_checked_door_pivot_rotates_without_forward_creep(self):
+        self.node.mode = 'door_align'
+        self.node.door_path_feasible = True
+        self.node.door_path = np.array([[0., 0., 0.], [0., 0., .5],
+                                       [1., .5, .5], [1., .5, 0.], [3., .5, 0.]])
+        self.node.door_rotation_index = 0
+        self.node.scans = {side: (time.monotonic(), np.empty((0, 2))) for side in ('left', 'right')}
+        self.node.control()
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+        self.assertGreater(self.commands[-1].angular.z, 0.)
+
+    def test_door_search_waits_for_measured_stop_before_fixing_pivot_origin(self):
+        door = self.front_opening(center=(2., .3), heading=.4)
+        self.node.door_phase = 'door_align'
+        self.node.measured = np.array([.3, 0.])
+        with patch.object(self.node.door_plan_executor, 'submit') as submit:
+            self.node._local_door_path(door, np.empty((0, 2)))
+        submit.assert_not_called()
+
+    def test_initial_pivot_drift_invalidates_path_instead_of_driving_away(self):
+        self.node.door_phase = 'door_align'
+        self.node.door_path_feasible = True
+        self.node.door_path = np.array([[0., 0., 0.], [0., 0., .5], [1., .5, .5]])
+        self.node.pose = (.12, 0., 0.)
+        self.node.measured = np.array([.08, 0.])
+        self.node._local_door_path(self.front_opening(), np.empty((0, 2)))
+        self.assertIsNone(self.node.door_path)
+        self.assertFalse(self.node.door_path_feasible)
+
+    def test_short_sensor_gap_stops_without_forgetting_active_door(self):
+        self.node.door = self.front_opening(center=(2., .2), heading=.3)
+        self.node.door_phase = 'door_align'
+        self.node.door_path = np.array([[0., 0., 0.], [1., .2, .3], [3., .2, .3]])
+        self.node.door_path_feasible = True
+        original = self.node.door_path
+        self.node.odom_time = time.monotonic()-.15
+        self.node.update_reference()
+        self.node.control()
+        self.assertEqual(self.node.reason, 'stale_input')
+        np.testing.assert_array_equal(self.node.output, [0., 0.])
+        self.assertIsNotNone(self.node.door)
+        self.assertIs(self.node.door_path, original)
+        self.node.odom_time = self.node.raw_time = time.monotonic()
+        self.node.odom_stamp = rospy.Time.now().to_sec()
+        self.node.update_reference()
+        self.assertEqual(self.node.mode, 'door_align')
+        self.assertIs(self.node.door_path, original)
+
+    def test_sustained_sensor_gap_discards_active_door(self):
+        self.node.door = self.front_opening()
+        self.node.odom_time = time.monotonic()-.15
+        self.node.sensor_stale_since = time.monotonic()-1.1
+        self.node.update_reference()
+        self.assertIsNone(self.node.door)
+
     def test_same_side_opening_needs_two_frames_and_blocks_old_wall_reacquisition(self):
         opening = self.wall_opening()
         self.node.raw = np.array([.6, .5])
@@ -558,7 +619,7 @@ class UnifiedNodeTest(unittest.TestCase):
 
         self.observe_front_door(center=(2.02, .18), heading=.10, width=1.02)
         self.node.update_reference()
-        self.assertEqual(self.node.mode, 'manual')
+        self.assertEqual(self.node.mode, 'door_wait')
         self.finish_door_plan()
 
         self.assertEqual(self.node.mode, 'door_align')
@@ -631,7 +692,7 @@ class UnifiedNodeTest(unittest.TestCase):
 
         self.node.update_reference()
         self.assertEqual(self.node.epoch, epoch)
-        self.assertEqual(self.node.mode, 'manual')
+        self.assertEqual(self.node.mode, 'door_wait')
         self.node.door_plan_request[0].result(timeout=1.)
         self.node.raw_time = self.node.odom_time = time.monotonic()
         self.node.odom_stamp = rospy.Time.now().to_sec()
@@ -652,7 +713,7 @@ class UnifiedNodeTest(unittest.TestCase):
             self.node.door_path_feasible = False
             self.node.update_reference()
 
-        self.assertEqual(self.node.mode, 'manual')
+        self.assertEqual(self.node.mode, 'door_wait')
         self.assertEqual(self.node.epoch, epoch)
 
     def test_aligned_door_commits_within_staging_heading_control_band(self):

@@ -390,6 +390,34 @@ def collision_aware_door_reference(door, obstacles, margin=.045):
     if all(clear((x, y, yaw, 0.)) for x, y, yaw in direct[1:]):
         return direct
 
+    # A differential-drive chair can turn while stationary in a clear staging
+    # area. Preserve those turns as zero-length segments for the controller;
+    # checking only their endpoints would miss the front/rear corner sweep.
+    across = float(-center @ normal)
+    staging = center + min(across, -1.15)*normal
+    bearing = math.atan2(staging[1], staging[0])
+    route = [(0., 0., 0.)]
+    checked = []
+
+    def rotate_at(position, initial, final):
+        delta = angle_difference(final, initial)
+        for theta in np.linspace(initial, initial+delta, max(2, math.ceil(abs(delta)/.02)+1)):
+            checked.append((*position, theta))
+        route.append((*position, initial+delta))
+
+    rotate_at((0., 0.), 0., bearing)
+    for t in np.linspace(0., 1., max(2, math.ceil(np.linalg.norm(staging)/.025)+1))[1:]:
+        route.append((*(t*staging), bearing))
+        checked.append(route[-1])
+    rotate_at(staging, bearing, door.heading)
+    exit_point = center+1.2*normal
+    for t in np.linspace(0., 1., max(2, math.ceil(np.linalg.norm(exit_point-staging)/.025)+1))[1:]:
+        route.append((*(staging+t*(exit_point-staging)), door.heading))
+        checked.append(route[-1])
+    if all(clearance((x, y, theta, 0.), all_obstacles) > max(margin, .06)
+           for x, y, theta in checked):
+        return np.asarray(route)
+
     start = (0., 0., 0., 0.)
     start_key = key(start)
     states = {start_key: start}
@@ -462,15 +490,56 @@ def collision_aware_door_reference(door, obstacles, margin=.045):
     return path
 
 
+def _wall_in_requested_sweep(line, path, body_clearance):
+    """Keep finite nearby walls, or walls the requested footprint approaches."""
+    tangent = np.array([math.cos(line.heading), math.sin(line.heading)])
+    normal = np.array([-tangent[1], tangent[0]])
+    endpoints = np.array([line.start, line.end])
+    along = endpoints @ tangent
+    corners = np.array([[-.5, -.4], [-.5, .4], [.97, -.4], [.97, .4]])
+    body_along = corners @ tangent
+    if along.min() <= body_along.max() and along.max() >= body_along.min():
+        return True
+
+    # Separating-axis test between the finite segment and each inflated
+    # requested footprint. A supporting line alone also spans the opening.
+    c, s = np.cos(path[:, 2]), np.sin(path[:, 2])
+    delta = endpoints[None, :, :] - path[:, None, :2]
+    x = delta[:, :, 0]*c[:, None] + delta[:, :, 1]*s[:, None]
+    y = -delta[:, :, 0]*s[:, None] + delta[:, :, 1]*c[:, None]
+    overlap = ((x.min(axis=1) <= .97+body_clearance)
+               & (x.max(axis=1) >= -.25-body_clearance)
+               & (y.min(axis=1) <= .4+body_clearance)
+               & (y.max(axis=1) >= -.4-body_clearance))
+    center = path[:, :2] + .36*np.column_stack((c, s))
+    extent = ((.61+body_clearance)*np.abs(normal[0]*c+normal[1]*s)
+              + (.4+body_clearance)*np.abs(-normal[0]*s+normal[1]*c))
+    return bool(np.any(overlap & (np.abs(line.distance-center @ normal) <= extent)))
+
+
 def wall_reference(lines, v, w, body_clearance=.12, preferred_side=0):
     raw_path = arc_path(max(v, .1), w)
     candidates = [line for line in lines if abs(line.heading) < 1.30
-                  and .45 < abs(line.distance) < 1.80
-                  and max(line.start[0], line.end[0]) > .5]
+                  and .45 < abs(line.distance) < 1.80]
     intended_side = math.copysign(1., w) if abs(w) >= .12 else preferred_side
     if intended_side:
         candidates = [line for line in candidates
                       if math.copysign(1., line.distance) == intended_side]
+    side_lines = candidates
+    candidates = [line for line in side_lines
+                  if _wall_in_requested_sweep(line, raw_path, body_clearance)]
+
+    # Inside a gap, a fast requested arc may reach the far jamb even though
+    # no wall remains alongside the chair. Preserve the turn by reducing its
+    # radius before considering a wall tangent that would cross the opening.
+    if (candidates and abs(w) >= .12
+            and not any(_wall_in_requested_sweep(line, raw_path[:1], body_clearance)
+                        for line in candidates)):
+        for scale in (.75, .5, .25):
+            tighter = arc_path(max(v*scale, .1), w)
+            if not any(_wall_in_requested_sweep(line, tighter, body_clearance)
+                       for line in side_lines):
+                return tighter, 'manual', 0
 
     def intended_clearance(line):
         normal = np.array([-math.sin(line.heading), math.cos(line.heading)])

@@ -10,3 +10,4 @@ superpowers/
 __pycache__/
 .pytest_cache/
 .cache/
+.superpowers/behavior/
