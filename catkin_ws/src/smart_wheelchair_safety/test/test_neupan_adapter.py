@@ -62,6 +62,28 @@ class AdapterTest(unittest.TestCase):
         a = NeuPANAdapter()
         self.assertFalse(a.available)
 
+    def test_explicit_heading_and_stationary_turn_preserved(self):
+        a = NeuPANAdapter(planner=Planner())
+        path = [[0, 0, .1], [0, 0, .9], [1, 1, 1.1]]
+        a.set_initial_path(path)
+        np.testing.assert_allclose(np.stack(a.planner.path)[:, :3, 0], path)
+
+    def test_nonfinite_state_and_bad_trajectory_rejected(self):
+        a = NeuPANAdapter(planner=Planner())
+        a.set_obstacles([], now=10)
+        command, _ = a.step([0, float('nan'), 0], now=10)
+        self.assertTrue(np.allclose(command, 0))
+        with self.assertRaises(ValueError):
+            a.set_initial_path([[0, 0, float('nan')]])
+        with self.assertRaises(ValueError):
+            a.set_obstacles([[1, 2, 3]])
+        class Bad(Planner):
+            def __call__(self, state, points):
+                return [.5, 0], {'opt_state_list': [[1, 2, 3, 4]]}
+        a.planner = Bad()
+        command, _ = a.step([0, 0, 0], now=10)
+        self.assertTrue(np.allclose(command, 0))
+
     def test_planner_stop_overrides_action(self):
         class Stopped(Planner):
             def __call__(self, state, points):

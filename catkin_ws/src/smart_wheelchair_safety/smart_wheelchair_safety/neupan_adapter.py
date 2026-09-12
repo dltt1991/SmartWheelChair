@@ -51,7 +51,8 @@ class NeuPANAdapter:
         a = np.asarray(points, dtype=float)
         if a.size == 0:
             return np.empty((0, 2), dtype=float)
-        a = a.reshape((-1, 2))
+        if a.ndim != 2 or a.shape[1] != 2:
+            raise ValueError("points must be Nx2")
         return a[np.isfinite(a).all(axis=1)]
 
     def set_obstacles(self, points, now=None):
@@ -72,18 +73,21 @@ class NeuPANAdapter:
         if p.size:
             if p.ndim != 2 or p.shape[1] not in (2, 3):
                 raise ValueError("path must be Nx2 or Nx3")
-            p = p[np.isfinite(p).all(axis=1), :2]
+            if not np.isfinite(p).all():
+                raise ValueError("path must be finite")
         else:
             p = np.empty((0, 2))
         if len(p):
-            # Normalize to a finite, ordered Nx2 path and remove duplicate points.
+            # Preserve explicit headings, including turns at the same position.
             p = p[np.r_[True, np.linalg.norm(np.diff(p, axis=0), axis=1) > 1e-6]]
         self.initial_path = p
         if self.planner is not None and hasattr(self.planner, "set_initial_path") and len(p):
             # NeuPAN expects [x, y, heading, gear] columns.
-            delta = np.vstack((np.diff(p, axis=0), p[-1] - p[-2] if len(p) > 1 else [1., 0.]))
-            heading = np.arctan2(delta[:, 1], delta[:, 0])
-            path4 = np.column_stack((p, heading, np.ones(len(p)))).T
+            if p.shape[1] == 2:
+                delta = np.vstack((np.diff(p, axis=0), p[-1] - p[-2] if len(p) > 1 else [1., 0.]))
+                heading = np.arctan2(delta[:, 1], delta[:, 0])
+                p = np.column_stack((p, heading))
+            path4 = np.column_stack((p, np.ones(len(p)))).T
             self.planner.set_initial_path([column.reshape(4, 1) for column in path4.T])
             # Preserve the optimizer velocity warm start across reference
             # updates; only clear the endpoint latch from the previous path.
@@ -103,41 +107,29 @@ class NeuPANAdapter:
         now = time.monotonic() if now is None else float(now)
         if self._last_update is None or not 0 <= now - self._last_update <= self.action_timeout:
             self.reason = "stale input"
-            return np.zeros(2), np.empty((0, 2))
+            return np.zeros(2), np.empty((0, 3))
         if not self.available:
-            return np.zeros(2), np.empty((0, 2))
+            return np.zeros(2), np.empty((0, 3))
         try:
-            state3 = np.asarray(state, dtype=float).reshape(-1)[:3].reshape(3, 1)
-            # Upstream NeuPAN is callable and takes state (3,1), points (2,N),
-            # and optional point velocities; test doubles may expose step().
-            if hasattr(self.planner, "step"):
-                result = self.planner.step(self.obstacles, self.initial_path, state3)
-            else:
-                result = self.planner(state3, self.obstacles.T if len(self.obstacles) else None)
-            if isinstance(result, dict):
-                action = result.get("action", (0, 0))
-                trajectory = result.get("trajectory", result.get("opt_state_list", []))
-            else:
-                action, info = result
-                if isinstance(info, dict) and any(info.get(key, False) for key in ("stop", "arrive", "collision")):
-                    self.reason = "planner stopped"
-                    return np.zeros(2), np.empty((0, 3))
-                trajectory = info.get("opt_state_list", []) if isinstance(info, dict) else []
+            state3 = np.asarray(state, dtype=float).reshape(3, 1)
+            if not np.isfinite(state3).all():
+                raise ValueError("state must be finite")
+            # Upstream NeuPAN is callable and returns (action, info).
+            action, info = self.planner(state3, self.obstacles.T if len(self.obstacles) else None)
+            if not isinstance(info, dict):
+                raise ValueError("NeuPAN returned no info dictionary")
+            if any(info.get(key, False) for key in ("stop", "arrive", "collision")):
+                self.reason = "planner stopped"
+                return np.zeros(2), np.empty((0, 3))
+            trajectory = info.get("opt_state_list", [])
             self.reason = "ok"
             trajectory = np.asarray(trajectory, dtype=float)
-            if trajectory.ndim == 3:
-                trajectory = np.concatenate([x.T[:, :3] for x in trajectory], axis=0)
-            elif trajectory.ndim == 2 and trajectory.shape[0] >= 3 and trajectory.shape[1] != 3:
-                trajectory = trajectory[:3].T
-            elif trajectory.ndim == 2 and trajectory.shape[1] == 2:
-                trajectory = np.column_stack((trajectory, np.zeros(len(trajectory))))
-            elif trajectory.size == 0:
-                trajectory = np.empty((0, 3))
-            else:
+            if trajectory.ndim != 3 or trajectory.shape[1:] != (3, 1) or not len(trajectory):
                 raise ValueError("invalid trajectory shape")
+            trajectory = trajectory[:, :, 0]
             if trajectory.size and not np.isfinite(trajectory).all():
                 raise ValueError("invalid trajectory")
             return self._clip(action), trajectory.reshape((-1, 3))
         except Exception as exc:
             self.reason = "inference failed: %s" % exc
-            return np.zeros(2), np.empty((0, 2))
+            return np.zeros(2), np.empty((0, 3))
