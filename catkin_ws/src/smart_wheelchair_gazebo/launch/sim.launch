@@ -1,0 +1,34 @@
+<launch>
+  <arg name="world" default="$(find smart_wheelchair_gazebo)/worlds/m6_room.world"/>
+  <arg name="gui" default="false"/>
+  <arg name="use_neupan" default="false"/>
+  <arg name="dune_checkpoint" default=""/>
+  <param name="use_sim_time" value="true"/>
+  <env name="GAZEBO_MODEL_PATH" value="$(find smart_wheelchair_gazebo)/models:$(optenv GAZEBO_MODEL_PATH)"/>
+
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="use_sim_time" value="true"/>
+  </include>
+
+  <node pkg="smart_wheelchair_safety" type="local_path_follower_node" name="local_path_follower_node" output="screen">
+    <rosparam command="load" file="$(find smart_wheelchair_gazebo)/config/local_path_follower.yaml"/>
+  </node>
+  <node pkg="smart_wheelchair_safety" type="unified_control_node" name="unified_control_node" output="screen">
+    <param name="use_neupan" value="$(arg use_neupan)"/>
+  </node>
+  <group if="$(arg use_neupan)">
+    <include file="$(find smart_wheelchair_safety)/launch/neupan_wheelchair.launch">
+      <arg name="dune_checkpoint" value="$(arg dune_checkpoint)"/>
+    </include>
+  </group>
+  <node pkg="smart_wheelchair_safety" type="odom_frame_relay" name="odom_frame_relay" output="screen"/>
+  <node pkg="smart_wheelchair_safety" type="web_joystick_node" name="web_joystick_node" output="screen">
+    <param name="http_port" value="8090"/>
+    <param name="command_timeout_s" value="1.0"/>
+    <param name="max_forward_linear_mps" value="1.6666667"/>
+    <param name="max_reverse_linear_mps" value="0.8333333"/>
+    <param name="max_angular_rps" value="1.4"/>
+  </node>
+</launch>

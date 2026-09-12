@@ -1,0 +1,1786 @@
+{
+  "environment": "Ubuntu 20.04.6 / ROS Noetic / Gazebo 11.15.1 / arm64",
+  "field_notes": {
+    "junction.max_speed": "Maximum sampled cmd_vel linear command, not measured odometry speed",
+    "junction.yaw_change": "Final wrapped yaw change, not peak yaw deviation",
+    "junction.steady_gap_min_max": "Wall gap among moving wall-mode samples selected by the probe"
+  },
+  "full_junction_measured_speed_peak_mps": 0.8035210486893525,
+  "full_junction_straight_yaw_peak_deg": 1.9017247378493434,
+  "door_manifest": {
+    "expected": 84,
+    "angles": [
+      0,
+      -15,
+      15,
+      -30,
+      30,
+      -45,
+      45
+    ],
+    "directions": [
+      "in",
+      "out"
+    ],
+    "doors": [
+      "nw_horizontal",
+      "ne_horizontal",
+      "sw_horizontal",
+      "se_horizontal",
+      "nw_vertical",
+      "se_vertical"
+    ],
+    "timeout": 35,
+    "pose_margin": 0.02,
+    "sweep_step": 0.005,
+    "sources": {
+      "smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py": "fa02a585e723d8c579419b05a2dd986a80c7699b8ca265b76e360e4d6da57850",
+      "smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py": "96f4182c7512c2e8db5d5b3cb7f877a45c4663037f36d2b6a57fe6a0da5a2f72",
+      "smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py": "54da01982891cbc015c52c61a8ffaf53ff0c6f9449fee096709c7cae6eb7a3f7",
+      "smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower_node.py": "2cf21059e3e6a965ff9960f50e049e57ea30d0494fbeff7e59f7dabcf8d6eb10",
+      "smart_wheelchair_gazebo/test/check_door_matrix.py": "df15152c96cc63becf2657049bad25c53877ccf956c384fb6148239b7c64a55a",
+      "smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf": "3cb6a0199b623bcb7bcb2419fc33decafacd07c6bc28d8506bf070700520ec69"
+    }
+  },
+  "door_pose_samples_replayed": 59551,
+  "door_cases": [
+    {
+      "case": "nw_horizontal-in-+0",
+      "result": "passed",
+      "elapsed": 5.046,
+      "longest_stop": 0.4884980420001739,
+      "crossed_aperture": true,
+      "progress": 0.5904170059154052,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.006183117848333409,
+        -0.016294225866943235
+      ]
+    },
+    {
+      "case": "nw_horizontal-in--15",
+      "result": "passed",
+      "elapsed": 17.527,
+      "longest_stop": 0.243401208999785,
+      "crossed_aperture": true,
+      "progress": 0.6511382692097927,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0048501948257818105,
+        -0.0128679292814823
+      ]
+    },
+    {
+      "case": "nw_horizontal-in-+15",
+      "result": "passed",
+      "elapsed": 16.909,
+      "longest_stop": 0.4090568749998056,
+      "crossed_aperture": true,
+      "progress": 0.646089034577846,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.005045292039734448,
+        -0.016345857860598775
+      ]
+    },
+    {
+      "case": "nw_horizontal-in--30",
+      "result": "passed",
+      "elapsed": 18.868,
+      "longest_stop": 0.3250842500001454,
+      "crossed_aperture": true,
+      "progress": 0.6260417215731002,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0026255397708062037,
+        -0.007204078567450248
+      ]
+    },
+    {
+      "case": "nw_horizontal-in-+30",
+      "result": "passed",
+      "elapsed": 17.56,
+      "longest_stop": 0.3244140420001713,
+      "crossed_aperture": true,
+      "progress": 0.5808638901790506,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0053068166083217695,
+        -0.014660212939313223
+      ]
+    },
+    {
+      "case": "nw_horizontal-in--45",
+      "result": "passed",
+      "elapsed": 20.087,
+      "longest_stop": 0.32624458400005096,
+      "crossed_aperture": true,
+      "progress": 0.6563280794404518,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.01770470069963686,
+        -0.012000666116922508
+      ]
+    },
+    {
+      "case": "nw_horizontal-in-+45",
+      "result": "passed",
+      "elapsed": 18.995,
+      "longest_stop": 0.3249076249994687,
+      "crossed_aperture": true,
+      "progress": 0.6677255102606945,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.005667571855276295,
+        -0.015828587125824845
+      ]
+    },
+    {
+      "case": "nw_horizontal-out-+0",
+      "result": "passed",
+      "elapsed": 5.348,
+      "longest_stop": 0.40560187499977474,
+      "crossed_aperture": true,
+      "progress": 0.5450536497289372,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0017030526027319267,
+        -0.005107609632989608
+      ]
+    },
+    {
+      "case": "nw_horizontal-out--15",
+      "result": "passed",
+      "elapsed": 17.548,
+      "longest_stop": 0.407761166000455,
+      "crossed_aperture": true,
+      "progress": 0.5601278429268403,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0005590745458682948,
+        -0.0011562078609408852
+      ]
+    },
+    {
+      "case": "nw_horizontal-out-+15",
+      "result": "passed",
+      "elapsed": 16.824,
+      "longest_stop": 0.40732008400027553,
+      "crossed_aperture": true,
+      "progress": 0.5305595932497965,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0004486946777039856,
+        -0.00073403831864982
+      ]
+    },
+    {
+      "case": "nw_horizontal-out--30",
+      "result": "passed",
+      "elapsed": 20.014,
+      "longest_stop": 0.4057651249995615,
+      "crossed_aperture": true,
+      "progress": 0.586047055899835,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.004277882040861475,
+        -0.011637957649687534
+      ]
+    },
+    {
+      "case": "nw_horizontal-out-+30",
+      "result": "passed",
+      "elapsed": 17.94,
+      "longest_stop": 0.4081112920002852,
+      "crossed_aperture": true,
+      "progress": 0.5779845917690727,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.002487799701361842,
+        -0.006910021416351305
+      ]
+    },
+    {
+      "case": "nw_horizontal-out--45",
+      "result": "passed",
+      "elapsed": 19.896,
+      "longest_stop": 0.4079191250002623,
+      "crossed_aperture": true,
+      "progress": 0.5619316294343434,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00035228384049826924,
+        -0.00016269244942019356
+      ]
+    },
+    {
+      "case": "nw_horizontal-out-+45",
+      "result": "passed",
+      "elapsed": 18.814,
+      "longest_stop": 0.3263410829995337,
+      "crossed_aperture": true,
+      "progress": 0.5174193683340252,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00027093686898940745,
+        0.0005399803586868208
+      ]
+    },
+    {
+      "case": "ne_horizontal-in-+0",
+      "result": "passed",
+      "elapsed": 5.55,
+      "longest_stop": 0.40543116699973325,
+      "crossed_aperture": true,
+      "progress": 0.638538145183078,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.000041382905573986436,
+        0.0007389339626324458
+      ]
+    },
+    {
+      "case": "ne_horizontal-in--15",
+      "result": "passed",
+      "elapsed": 6.775,
+      "longest_stop": 0.48797416700017493,
+      "crossed_aperture": true,
+      "progress": 0.7199792900009645,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.006180682317254395,
+        -0.016481785598370574
+      ]
+    },
+    {
+      "case": "ne_horizontal-in-+15",
+      "result": "passed",
+      "elapsed": 7,
+      "longest_stop": 0.4074805000000197,
+      "crossed_aperture": true,
+      "progress": 0.6405824524006916,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.011229799839456328,
+        -0.01797453591157869
+      ]
+    },
+    {
+      "case": "ne_horizontal-in--30",
+      "result": "passed",
+      "elapsed": 17.347,
+      "longest_stop": 0.4116807919999701,
+      "crossed_aperture": true,
+      "progress": 0.6066733239634396,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0011762459170621743,
+        -0.004663622157094593
+      ]
+    },
+    {
+      "case": "ne_horizontal-in-+30",
+      "result": "passed",
+      "elapsed": 16.849,
+      "longest_stop": 0.48743833400021686,
+      "crossed_aperture": true,
+      "progress": 0.6247553590514443,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.01660830088990433,
+        -0.01278675784067121
+      ]
+    },
+    {
+      "case": "ne_horizontal-in--45",
+      "result": "passed",
+      "elapsed": 19.22,
+      "longest_stop": 0.32460954199996195,
+      "crossed_aperture": true,
+      "progress": 0.6403368605406452,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.014033440387640058,
+        -0.018439742836435586
+      ]
+    },
+    {
+      "case": "ne_horizontal-in-+45",
+      "result": "passed",
+      "elapsed": 18.159,
+      "longest_stop": 0.6498777919996428,
+      "crossed_aperture": true,
+      "progress": 0.7153241447712508,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.011609940225730643,
+        -0.007563244031569017
+      ]
+    },
+    {
+      "case": "ne_horizontal-out-+0",
+      "result": "passed",
+      "elapsed": 5.026,
+      "longest_stop": 0.48760787499941216,
+      "crossed_aperture": true,
+      "progress": 0.5433448259435651,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00042590457600442624,
+        -0.0006623230412109916
+      ]
+    },
+    {
+      "case": "ne_horizontal-out--15",
+      "result": "passed",
+      "elapsed": 6.643,
+      "longest_stop": 0.48880545900010475,
+      "crossed_aperture": true,
+      "progress": 0.5365791505031715,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.010267475049699881,
+        -0.0112943928200712
+      ]
+    },
+    {
+      "case": "ne_horizontal-out-+15",
+      "result": "passed",
+      "elapsed": 6.955,
+      "longest_stop": 0.48721062499953405,
+      "crossed_aperture": true,
+      "progress": 0.5788039504844628,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0002399931330606424,
+        -0.0000933287919153033
+      ]
+    },
+    {
+      "case": "ne_horizontal-out--30",
+      "result": "passed",
+      "elapsed": 17.187,
+      "longest_stop": 0.40611933399941336,
+      "crossed_aperture": true,
+      "progress": 0.5548279244149996,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.009199063130149178,
+        -0.013603504603464397
+      ]
+    },
+    {
+      "case": "ne_horizontal-out-+30",
+      "result": "passed",
+      "elapsed": 16.808,
+      "longest_stop": 0.40767541700006404,
+      "crossed_aperture": true,
+      "progress": 0.54744242932227,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        -0.00009743688736521647,
+        0.0003692949022219636
+      ]
+    },
+    {
+      "case": "ne_horizontal-out--45",
+      "result": "passed",
+      "elapsed": 18.155,
+      "longest_stop": 0.32475833399985277,
+      "crossed_aperture": true,
+      "progress": 0.5345850034679738,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.008500515692761569,
+        -0.0013995788496490942
+      ]
+    },
+    {
+      "case": "ne_horizontal-out-+45",
+      "result": "passed",
+      "elapsed": 18.052,
+      "longest_stop": 0.32712145900040923,
+      "crossed_aperture": true,
+      "progress": 0.5661366176252799,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0021354464884108344,
+        -0.005682744495895943
+      ]
+    },
+    {
+      "case": "sw_horizontal-in-+0",
+      "result": "passed",
+      "elapsed": 5.454,
+      "longest_stop": 0.406247541999619,
+      "crossed_aperture": true,
+      "progress": 0.6388258919770231,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.01632942753262856,
+        -0.015229227450121684
+      ]
+    },
+    {
+      "case": "sw_horizontal-in--15",
+      "result": "passed",
+      "elapsed": 7.138,
+      "longest_stop": 0.491793250000228,
+      "crossed_aperture": true,
+      "progress": 0.6604369266380234,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0008794581957163448,
+        -0.0000626103037524518
+      ]
+    },
+    {
+      "case": "sw_horizontal-in-+15",
+      "result": "passed",
+      "elapsed": 7.191,
+      "longest_stop": 0.40650258299956477,
+      "crossed_aperture": true,
+      "progress": 0.6925502697567558,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0005574107773276762,
+        -0.0011244658322509032
+      ]
+    },
+    {
+      "case": "sw_horizontal-in--30",
+      "result": "passed",
+      "elapsed": 18.457,
+      "longest_stop": 0.4093688339999062,
+      "crossed_aperture": true,
+      "progress": 0.7554900559284361,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0005367008771022509,
+        0.0004138796375570486
+      ]
+    },
+    {
+      "case": "sw_horizontal-in-+30",
+      "result": "passed",
+      "elapsed": 17.375,
+      "longest_stop": 0.32670395800050755,
+      "crossed_aperture": true,
+      "progress": 0.6425217234007585,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.006897853437841506,
+        -0.01845834993197146
+      ]
+    },
+    {
+      "case": "sw_horizontal-in--45",
+      "result": "passed",
+      "elapsed": 18.311,
+      "longest_stop": 0.2432664999996632,
+      "crossed_aperture": true,
+      "progress": 0.7021616506012243,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0012681641550554004,
+        -0.006064881268659929
+      ]
+    },
+    {
+      "case": "sw_horizontal-in-+45",
+      "result": "passed",
+      "elapsed": 18.264,
+      "longest_stop": 0.40592012600063754,
+      "crossed_aperture": true,
+      "progress": 0.6913078551580298,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0038927212680215355,
+        -0.012795106912179305
+      ]
+    },
+    {
+      "case": "sw_horizontal-out-+0",
+      "result": "passed",
+      "elapsed": 5.621,
+      "longest_stop": 0.4874268339999617,
+      "crossed_aperture": true,
+      "progress": 0.5796239133000742,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00127091191121874,
+        -0.004961867211325435
+      ]
+    },
+    {
+      "case": "sw_horizontal-out--15",
+      "result": "passed",
+      "elapsed": 6.754,
+      "longest_stop": 0.4056095420000929,
+      "crossed_aperture": true,
+      "progress": 0.5732992968108455,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0029861027481693646,
+        -0.00721194916672313
+      ]
+    },
+    {
+      "case": "sw_horizontal-out-+15",
+      "result": "passed",
+      "elapsed": 7.035,
+      "longest_stop": 0.4056676250002056,
+      "crossed_aperture": true,
+      "progress": 0.6045735716797624,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0047374407492642955,
+        -0.012609849577663795
+      ]
+    },
+    {
+      "case": "sw_horizontal-out--30",
+      "result": "passed",
+      "elapsed": 18.026,
+      "longest_stop": 0.32498525100072584,
+      "crossed_aperture": true,
+      "progress": 0.5639645317904382,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.005679046404165818,
+        -0.018072345442572132
+      ]
+    },
+    {
+      "case": "sw_horizontal-out-+30",
+      "result": "passed",
+      "elapsed": 17.131,
+      "longest_stop": 0.3249566250005955,
+      "crossed_aperture": true,
+      "progress": 0.5986808891198997,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.007553080390085215,
+        -0.01843311493370046
+      ]
+    },
+    {
+      "case": "sw_horizontal-out--45",
+      "result": "passed",
+      "elapsed": 19.007,
+      "longest_stop": 0.4062578749999375,
+      "crossed_aperture": true,
+      "progress": 0.5258695195411207,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.004588250892802207,
+        -0.012838124104089686
+      ]
+    },
+    {
+      "case": "sw_horizontal-out-+45",
+      "result": "passed",
+      "elapsed": 18.137,
+      "longest_stop": 0.32485758399980114,
+      "crossed_aperture": true,
+      "progress": 0.5767716414231222,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0035958145437035936,
+        -0.008304964715664734
+      ]
+    },
+    {
+      "case": "se_horizontal-in-+0",
+      "result": "passed",
+      "elapsed": 5.556,
+      "longest_stop": 0.4058848329996181,
+      "crossed_aperture": true,
+      "progress": 0.6880072401324404,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.010160952635664128,
+        -0.01181137309836191
+      ]
+    },
+    {
+      "case": "se_horizontal-in--15",
+      "result": "passed",
+      "elapsed": 17.589,
+      "longest_stop": 0.35243499999978667,
+      "crossed_aperture": true,
+      "progress": 0.6524331874992937,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        -0.00013977884584071164,
+        -0.0022417535696671372
+      ]
+    },
+    {
+      "case": "se_horizontal-in-+15",
+      "result": "passed",
+      "elapsed": 17.54,
+      "longest_stop": 0.4074270000000979,
+      "crossed_aperture": true,
+      "progress": 0.6731512586341637,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.004133466802106294,
+        -0.01092062143407913
+      ]
+    },
+    {
+      "case": "se_horizontal-in--30",
+      "result": "passed",
+      "elapsed": 19.84,
+      "longest_stop": 0.4059726249997766,
+      "crossed_aperture": true,
+      "progress": 0.6325461134935393,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0011888152604533709,
+        -0.0033874341461446094
+      ]
+    },
+    {
+      "case": "se_horizontal-in-+30",
+      "result": "passed",
+      "elapsed": 18.146,
+      "longest_stop": 0.4879920840003251,
+      "crossed_aperture": true,
+      "progress": 0.6513900937025352,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0056153888369280276,
+        -0.017700657519260404
+      ]
+    },
+    {
+      "case": "se_horizontal-in--45",
+      "result": "passed",
+      "elapsed": 20.909,
+      "longest_stop": 0.4061501669993959,
+      "crossed_aperture": true,
+      "progress": 0.6480953597396513,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.005038141648249374,
+        -0.010351056178383368
+      ]
+    },
+    {
+      "case": "se_horizontal-in-+45",
+      "result": "passed",
+      "elapsed": 18.708,
+      "longest_stop": 0.4096578340004271,
+      "crossed_aperture": true,
+      "progress": 0.6327225321998435,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0020800608852223398,
+        -0.008360489430409835
+      ]
+    },
+    {
+      "case": "se_horizontal-out-+0",
+      "result": "passed",
+      "elapsed": 5.445,
+      "longest_stop": 0.4058847500000411,
+      "crossed_aperture": true,
+      "progress": 0.5883764418665195,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0003608149777719079,
+        -0.00012884293592296386
+      ]
+    },
+    {
+      "case": "se_horizontal-out--15",
+      "result": "passed",
+      "elapsed": 17.43,
+      "longest_stop": 0.32793025099999795,
+      "crossed_aperture": true,
+      "progress": 0.597006995771549,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0008988075135358693,
+        -0.0052858949687313505
+      ]
+    },
+    {
+      "case": "se_horizontal-out-+15",
+      "result": "passed",
+      "elapsed": 17.021,
+      "longest_stop": 0.40590016699934495,
+      "crossed_aperture": true,
+      "progress": 0.5282827270076698,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0020628906388969383,
+        -0.0052764526382958355
+      ]
+    },
+    {
+      "case": "se_horizontal-out--30",
+      "result": "passed",
+      "elapsed": 19.771,
+      "longest_stop": 0.406921083999805,
+      "crossed_aperture": true,
+      "progress": 0.5389561327838335,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.005245900596689465,
+        -0.01388623063213726
+      ]
+    },
+    {
+      "case": "se_horizontal-out-+30",
+      "result": "passed",
+      "elapsed": 17.533,
+      "longest_stop": 0.4890280420004274,
+      "crossed_aperture": true,
+      "progress": 0.5834357405898369,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0007735888088564951,
+        -0.0017455007484602888
+      ]
+    },
+    {
+      "case": "se_horizontal-out--45",
+      "result": "passed",
+      "elapsed": 19.771,
+      "longest_stop": 0.40561445799994544,
+      "crossed_aperture": true,
+      "progress": 0.5546213146642351,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00004560532033014336,
+        -0.0008808298066307256
+      ]
+    },
+    {
+      "case": "se_horizontal-out-+45",
+      "result": "passed",
+      "elapsed": 18.598,
+      "longest_stop": 0.48983775000033347,
+      "crossed_aperture": true,
+      "progress": 0.5774644714515019,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00032537226786995976,
+        -0.0004901951268620826
+      ]
+    },
+    {
+      "case": "nw_vertical-in-+0",
+      "result": "passed",
+      "elapsed": 5.557,
+      "longest_stop": 0.41022266700019827,
+      "crossed_aperture": true,
+      "progress": 0.6379814068524374,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0005544314904229957,
+        -0.004447005215357919
+      ]
+    },
+    {
+      "case": "nw_vertical-in--15",
+      "result": "passed",
+      "elapsed": 7.056,
+      "longest_stop": 0.40830025099967315,
+      "crossed_aperture": true,
+      "progress": 0.6327260614089976,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00029497670037558133,
+        -0.0036421196039309366
+      ]
+    },
+    {
+      "case": "nw_vertical-in-+15",
+      "result": "passed",
+      "elapsed": 7.055,
+      "longest_stop": 0.40835079199950997,
+      "crossed_aperture": true,
+      "progress": 0.6334631759141858,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0001377282429204293,
+        0.0005423129810669091
+      ]
+    },
+    {
+      "case": "nw_vertical-in--30",
+      "result": "passed",
+      "elapsed": 16.938,
+      "longest_stop": 0.40590079100002185,
+      "crossed_aperture": true,
+      "progress": 0.5933661836500927,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0007351677583158846,
+        -0.003878323937372507
+      ]
+    },
+    {
+      "case": "nw_vertical-in-+30",
+      "result": "passed",
+      "elapsed": 16.835,
+      "longest_stop": 0.40984704099992086,
+      "crossed_aperture": true,
+      "progress": 0.6040935916252799,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.004035224413608456,
+        -0.012244552005065442
+      ]
+    },
+    {
+      "case": "nw_vertical-in--45",
+      "result": "passed",
+      "elapsed": 19.295,
+      "longest_stop": 0.4082282919998761,
+      "crossed_aperture": true,
+      "progress": 0.6935366783008359,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.003042312491171102,
+        -0.008366748911968256
+      ]
+    },
+    {
+      "case": "nw_vertical-in-+45",
+      "result": "passed",
+      "elapsed": 18.334,
+      "longest_stop": 0.3249170420003793,
+      "crossed_aperture": true,
+      "progress": 0.6401691308405442,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00039905989947384735,
+        -0.001429237861130169
+      ]
+    },
+    {
+      "case": "nw_vertical-out-+0",
+      "result": "passed",
+      "elapsed": 5.547,
+      "longest_stop": 0.4060131249998449,
+      "crossed_aperture": true,
+      "progress": 0.6846982124652347,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.017602931513148987,
+        -0.012151861226125152
+      ]
+    },
+    {
+      "case": "nw_vertical-out--15",
+      "result": "passed",
+      "elapsed": 7.24,
+      "longest_stop": 0.406292540999857,
+      "crossed_aperture": true,
+      "progress": 0.732793226085882,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        -0.00012938669854899995,
+        -0.002062697916000551
+      ]
+    },
+    {
+      "case": "nw_vertical-out-+15",
+      "result": "passed",
+      "elapsed": 7.047,
+      "longest_stop": 0.40849016700030916,
+      "crossed_aperture": true,
+      "progress": 0.6609282323402063,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0019660602807704403,
+        -0.004900958914937804
+      ]
+    },
+    {
+      "case": "nw_vertical-out--30",
+      "result": "passed",
+      "elapsed": 17.358,
+      "longest_stop": 0.3259209590005412,
+      "crossed_aperture": true,
+      "progress": 0.6724806535094336,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0015878091623075898,
+        -0.004026853325292407
+      ]
+    },
+    {
+      "case": "nw_vertical-out-+30",
+      "result": "passed",
+      "elapsed": 17.127,
+      "longest_stop": 0.32483479199981957,
+      "crossed_aperture": true,
+      "progress": 0.6547657314592638,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.015878488290365367,
+        -0.014503115205701748
+      ]
+    },
+    {
+      "case": "nw_vertical-out--45",
+      "result": "passed",
+      "elapsed": 18.915,
+      "longest_stop": 0.41122470800019073,
+      "crossed_aperture": true,
+      "progress": 0.6702090291077151,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.001905071891227822,
+        -0.005741848468482123
+      ]
+    },
+    {
+      "case": "nw_vertical-out-+45",
+      "result": "passed",
+      "elapsed": 18.417,
+      "longest_stop": 0.3252217079998445,
+      "crossed_aperture": true,
+      "progress": 0.646217343786664,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0017716585150707002,
+        -0.005022500238350171
+      ]
+    },
+    {
+      "case": "se_vertical-in-+0",
+      "result": "passed",
+      "elapsed": 5.187,
+      "longest_stop": 0.4879096260001461,
+      "crossed_aperture": true,
+      "progress": 0.6762555952746254,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.011607730371505127,
+        -0.017364161422187125
+      ]
+    },
+    {
+      "case": "se_vertical-in--15",
+      "result": "passed",
+      "elapsed": 7.007,
+      "longest_stop": 0.4060938749998968,
+      "crossed_aperture": true,
+      "progress": 0.6187315838684873,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0032872805659461112,
+        -0.009610446961692535
+      ]
+    },
+    {
+      "case": "se_vertical-in-+15",
+      "result": "passed",
+      "elapsed": 6.859,
+      "longest_stop": 0.4113748330000817,
+      "crossed_aperture": true,
+      "progress": 0.6355549231553788,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.004238478802060364,
+        -0.012830852884186448
+      ]
+    },
+    {
+      "case": "se_vertical-in--30",
+      "result": "passed",
+      "elapsed": 17.247,
+      "longest_stop": 0.32650070900035644,
+      "crossed_aperture": true,
+      "progress": 0.6108180914727963,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.006346836006399357,
+        -0.01983136271486003
+      ]
+    },
+    {
+      "case": "se_vertical-in-+30",
+      "result": "passed",
+      "elapsed": 17.331,
+      "longest_stop": 0.3304640409996864,
+      "crossed_aperture": true,
+      "progress": 0.6488104526570224,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0058289747980752845,
+        -0.012136186861778694
+      ]
+    },
+    {
+      "case": "se_vertical-in--45",
+      "result": "passed",
+      "elapsed": 19.055,
+      "longest_stop": 0.40578412500053673,
+      "crossed_aperture": true,
+      "progress": 0.6206594229566988,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.001910980456410069,
+        -0.005126842710738035
+      ]
+    },
+    {
+      "case": "se_vertical-in-+45",
+      "result": "passed",
+      "elapsed": 18.414,
+      "longest_stop": 0.3248847499999101,
+      "crossed_aperture": true,
+      "progress": 0.688273308758514,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00007486999278507151,
+        -0.00018032956035162243
+      ]
+    },
+    {
+      "case": "se_vertical-out-+0",
+      "result": "passed",
+      "elapsed": 5.553,
+      "longest_stop": 0.4103384170002755,
+      "crossed_aperture": true,
+      "progress": 0.6879687595793129,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.017303161461319876,
+        -0.012785526463133379
+      ]
+    },
+    {
+      "case": "se_vertical-out--15",
+      "result": "passed",
+      "elapsed": 7.051,
+      "longest_stop": 0.331523124999876,
+      "crossed_aperture": true,
+      "progress": 0.7330441182438092,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.018245707385263755,
+        -0.013740669725455274
+      ]
+    },
+    {
+      "case": "se_vertical-out-+15",
+      "result": "passed",
+      "elapsed": 6.758,
+      "longest_stop": 0.4877511670001695,
+      "crossed_aperture": true,
+      "progress": 0.7638885969061512,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0052156532419184555,
+        -0.01419726735732687
+      ]
+    },
+    {
+      "case": "se_vertical-out--30",
+      "result": "passed",
+      "elapsed": 17.301,
+      "longest_stop": 0.32520916599969496,
+      "crossed_aperture": true,
+      "progress": 0.6690842762858848,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.0052146906820659915,
+        -0.016752495295220507
+      ]
+    },
+    {
+      "case": "se_vertical-out-+30",
+      "result": "passed",
+      "elapsed": 16.815,
+      "longest_stop": 0.24363137499949516,
+      "crossed_aperture": true,
+      "progress": 0.6502546514905766,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.004055235882180414,
+        -0.013431479489398287
+      ]
+    },
+    {
+      "case": "se_vertical-out--45",
+      "result": "passed",
+      "elapsed": 19.272,
+      "longest_stop": 0.33090912500028935,
+      "crossed_aperture": true,
+      "progress": 0.6705606842507787,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        -0.00019458530176776022,
+        0.000904820360731404
+      ]
+    },
+    {
+      "case": "se_vertical-out-+45",
+      "result": "passed",
+      "elapsed": 18.118,
+      "longest_stop": 0.48884662499949627,
+      "crossed_aperture": true,
+      "progress": 0.7196095277295018,
+      "final_cmd": [
+        0,
+        0
+      ],
+      "final_measured": [
+        0.00037175872419027944,
+        -0.00019457061143772855
+      ]
+    }
+  ],
+  "junction": {
+    "final-junction-full": {
+      "sources": {
+        "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py": "fa02a585e723d8c579419b05a2dd986a80c7699b8ca265b76e360e4d6da57850",
+        "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py": "96f4182c7512c2e8db5d5b3cb7f877a45c4663037f36d2b6a57fe6a0da5a2f72",
+        "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py": "54da01982891cbc015c52c61a8ffaf53ff0c6f9449fee096709c7cae6eb7a3f7",
+        "catkin_ws/src/smart_wheelchair_gazebo/test/check_junction_matrix.py": "64b9693037071acd170ffc55199581256860105266f8a9015f898cd83b100b2b",
+        "scripts/probe_unified_control.py": "3fc31b074b3d6e4ee0b11e46c12191e34372e52f8f4017039d237c95c8b711a7"
+      },
+      "config": {
+        "cases": [
+          "opening_gap",
+          "opening_turn",
+          "opening_straight"
+        ],
+        "angles": [
+          0,
+          90,
+          180,
+          270
+        ],
+        "sides": [
+          "left",
+          "right"
+        ],
+        "expected": 20,
+        "horizon": 20,
+        "forward_y": 1,
+        "interpolation_step": 0.005,
+        "footprint_margin": 0.02
+      },
+      "cases": [
+        {
+          "case": "opening_gap-left-0",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 1611,
+          "min_sampled_clearance": 0.0673503834742275,
+          "max_speed": 0.8,
+          "yaw_change": 2.573958756061462,
+          "junction_exit_time": 5.007,
+          "junction_longest_stop": 0.2060000000000004,
+          "junction_max_sampled_angular_acceleration": 0.805987820536906
+        },
+        {
+          "case": "opening_gap-right-0",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 1716,
+          "min_sampled_clearance": 0.08021958668791501,
+          "max_speed": 0.8,
+          "yaw_change": -1.7000092287545951,
+          "junction_exit_time": 6.395,
+          "junction_longest_stop": 0.5139999999999993,
+          "junction_max_sampled_angular_acceleration": 0.8433509296941294
+        },
+        {
+          "case": "opening_gap-left-90",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2192,
+          "min_sampled_clearance": 0.0741559407681505,
+          "max_speed": 0.8,
+          "yaw_change": 1.6662440164708854,
+          "junction_exit_time": 4.907,
+          "junction_longest_stop": 0.20699999999999985,
+          "junction_max_sampled_angular_acceleration": 0.8073998193434896
+        },
+        {
+          "case": "opening_gap-right-90",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2171,
+          "min_sampled_clearance": 0.05574778784249835,
+          "max_speed": 0.8,
+          "yaw_change": -1.6999313191875265,
+          "junction_exit_time": 4.908,
+          "junction_longest_stop": 0.10299999999999976,
+          "junction_max_sampled_angular_acceleration": 0.8005837616643138
+        },
+        {
+          "case": "opening_gap-left-180",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 1705,
+          "min_sampled_clearance": 0.12588889821910496,
+          "max_speed": 0.8,
+          "yaw_change": 1.771204634416752,
+          "junction_exit_time": 4.788,
+          "junction_longest_stop": 0.10099999999999998,
+          "junction_max_sampled_angular_acceleration": 0.819473530264735
+        },
+        {
+          "case": "opening_gap-right-180",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 1720,
+          "min_sampled_clearance": 0.09048374288170645,
+          "max_speed": 0.8,
+          "yaw_change": -1.6937534905276834,
+          "junction_exit_time": 6.734,
+          "junction_longest_stop": 0.4089999999999998,
+          "junction_max_sampled_angular_acceleration": 0.8150727325046342
+        },
+        {
+          "case": "opening_gap-left-270",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2173,
+          "min_sampled_clearance": 0.05473118815932558,
+          "max_speed": 0.8,
+          "yaw_change": 1.699464011128136,
+          "junction_exit_time": 5.008,
+          "junction_longest_stop": 0.10499999999999998,
+          "junction_max_sampled_angular_acceleration": 0.8064729535434146
+        },
+        {
+          "case": "opening_gap-right-270",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2207,
+          "min_sampled_clearance": 0.07304045981513295,
+          "max_speed": 0.8,
+          "yaw_change": -1.6732112867712239,
+          "junction_exit_time": 5.008,
+          "junction_longest_stop": 0.10199999999999987,
+          "junction_max_sampled_angular_acceleration": 0.8154320432640622
+        },
+        {
+          "case": "opening_turn-left-0",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2278,
+          "min_sampled_clearance": 0.11911670390148599,
+          "max_speed": 0.8,
+          "yaw_change": 1.7442481255199125,
+          "junction_max_sampled_angular_acceleration": 0.8133852483974693
+        },
+        {
+          "case": "opening_turn-right-0",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2282,
+          "min_sampled_clearance": 0.12052819076788912,
+          "max_speed": 0.8,
+          "yaw_change": -1.7591379706024772,
+          "junction_max_sampled_angular_acceleration": 0.8141703002650638
+        },
+        {
+          "case": "opening_turn-left-90",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2694,
+          "min_sampled_clearance": 0.049696260462757026,
+          "max_speed": 0.8,
+          "yaw_change": 1.633069297807129,
+          "junction_max_sampled_angular_acceleration": 0.804348996739057
+        },
+        {
+          "case": "opening_turn-right-90",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2697,
+          "min_sampled_clearance": 0.050955454778317304,
+          "max_speed": 0.8,
+          "yaw_change": -1.650438174811965,
+          "junction_max_sampled_angular_acceleration": 0.8024214485628608
+        },
+        {
+          "case": "opening_turn-left-180",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2275,
+          "min_sampled_clearance": 0.11831687896701204,
+          "max_speed": 0.8,
+          "yaw_change": 1.730105530668589,
+          "junction_max_sampled_angular_acceleration": 0.8079852454613006
+        },
+        {
+          "case": "opening_turn-right-180",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2281,
+          "min_sampled_clearance": 0.12014588401962711,
+          "max_speed": 0.8,
+          "yaw_change": -1.76485826696667,
+          "junction_max_sampled_angular_acceleration": 0.8116917458966378
+        },
+        {
+          "case": "opening_turn-left-270",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2694,
+          "min_sampled_clearance": 0.06655299869425439,
+          "max_speed": 0.8,
+          "yaw_change": 1.6326614900518828,
+          "junction_max_sampled_angular_acceleration": 0.8051999085405396
+        },
+        {
+          "case": "opening_turn-right-270",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2688,
+          "min_sampled_clearance": 0.04949037724920631,
+          "max_speed": 0.8,
+          "yaw_change": -1.6455550045293887,
+          "junction_max_sampled_angular_acceleration": 0.8064431419976795
+        },
+        {
+          "case": "opening_straight-left-0",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2524,
+          "min_sampled_clearance": 0.09932796820429088,
+          "max_speed": 0.8,
+          "yaw_change": -0.007447412331223799,
+          "junction_max_sampled_angular_acceleration": 0.6424067369817802
+        },
+        {
+          "case": "opening_straight-left-90",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2138,
+          "min_sampled_clearance": 0.0973988442200594,
+          "max_speed": 0.8,
+          "yaw_change": -0.003602635637344864,
+          "junction_max_sampled_angular_acceleration": 0.6208758424468479
+        },
+        {
+          "case": "opening_straight-left-180",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2528,
+          "min_sampled_clearance": 0.09795051115532849,
+          "max_speed": 0.8,
+          "yaw_change": -0.004084217027735981,
+          "junction_max_sampled_angular_acceleration": 0.6335217025806323
+        },
+        {
+          "case": "opening_straight-left-270",
+          "passed": true,
+          "forward_y": 1,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 2128,
+          "min_sampled_clearance": 0.09682877905171355,
+          "max_speed": 0.8,
+          "yaw_change": -0.005010670177909127,
+          "junction_max_sampled_angular_acceleration": 0.6527576026234349
+        }
+      ]
+    },
+    "final-junction-supplemental": {
+      "sources": {
+        "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py": "fa02a585e723d8c579419b05a2dd986a80c7699b8ca265b76e360e4d6da57850",
+        "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py": "96f4182c7512c2e8db5d5b3cb7f877a45c4663037f36d2b6a57fe6a0da5a2f72",
+        "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py": "54da01982891cbc015c52c61a8ffaf53ff0c6f9449fee096709c7cae6eb7a3f7",
+        "catkin_ws/src/smart_wheelchair_gazebo/test/check_junction_matrix.py": "64b9693037071acd170ffc55199581256860105266f8a9015f898cd83b100b2b",
+        "scripts/probe_unified_control.py": "3fc31b074b3d6e4ee0b11e46c12191e34372e52f8f4017039d237c95c8b711a7"
+      },
+      "config": {
+        "cases": [
+          "opening_gap",
+          "wall_gap"
+        ],
+        "angles": [
+          0
+        ],
+        "sides": [
+          "left",
+          "right"
+        ],
+        "expected": 4,
+        "horizon": 20,
+        "forward_y": 0.5,
+        "interpolation_step": 0.005,
+        "footprint_margin": 0.02
+      },
+      "cases": [
+        {
+          "case": "opening_gap-left-0",
+          "passed": true,
+          "forward_y": 0.5,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 1742,
+          "min_sampled_clearance": 0.15410226725713072,
+          "max_speed": 0.8,
+          "yaw_change": 1.8058986686543685,
+          "junction_exit_time": 5,
+          "junction_longest_stop": 0.20699999999999985,
+          "junction_max_sampled_angular_acceleration": 0.8103409636220641
+        },
+        {
+          "case": "opening_gap-right-0",
+          "passed": true,
+          "forward_y": 0.5,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 1766,
+          "min_sampled_clearance": 0.1541069168371712,
+          "max_speed": 0.8,
+          "yaw_change": -1.8103735437786683,
+          "junction_exit_time": 5.107,
+          "junction_longest_stop": 0.20500000000000007,
+          "junction_max_sampled_angular_acceleration": 0.8280339682105035
+        },
+        {
+          "case": "wall_gap-left-0",
+          "passed": true,
+          "forward_y": 0.5,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 0,
+          "min_sampled_clearance": 0.11070121582585701,
+          "max_speed": 0.8,
+          "junction_max_sampled_angular_acceleration": 0,
+          "steady_gap_min_max": [
+            0.1149947856194799,
+            0.11886990525998015
+          ],
+          "steady_gap_samples": 61
+        },
+        {
+          "case": "wall_gap-right-0",
+          "passed": true,
+          "forward_y": 0.5,
+          "horizon": 20,
+          "overlap": null,
+          "interpolated_poses_checked": 0,
+          "min_sampled_clearance": 0.12005394324020802,
+          "max_speed": 0.8,
+          "junction_max_sampled_angular_acceleration": 0,
+          "steady_gap_min_max": [
+            0.11999814203282538,
+            0.12089933068201064
+          ],
+          "steady_gap_samples": 27
+        }
+      ]
+    }
+  },
+  "catkin_summary": {
+    "tests": 307,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "native_render": {
+    "alpha": 0.035,
+    "lidar_frames_each": 66,
+    "lidar_hz": 10,
+    "camera_frames": 97,
+    "preview_slots": 60,
+    "visibility_cycles": 3
+  }
+}

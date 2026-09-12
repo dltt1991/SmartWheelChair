@@ -1,0 +1,381 @@
+{
+  "configuration": "each side 200 degrees; self-filtered shared input",
+  "tests": 385,
+  "failures": 0,
+  "native_render": {
+    "passed": true,
+    "unchanged_scans_per_side": 79,
+    "camera_frames": 119
+  },
+  "door_smoke": {
+    "passed": 12,
+    "total": 12,
+    "manifest": {
+      "expected": 12,
+      "angles": [
+        0.0
+      ],
+      "directions": [
+        "in",
+        "out"
+      ],
+      "doors": [
+        "nw_horizontal",
+        "ne_horizontal",
+        "sw_horizontal",
+        "se_horizontal",
+        "nw_vertical",
+        "se_vertical"
+      ],
+      "timeout": 35.0,
+      "lateral_offset": 0.0,
+      "pose_margin": 0.02,
+      "sweep_step": 0.005,
+      "sources": {
+        "smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py": "37972d3edb3c8117cf62615ff5c401f12a29792057499749ac399330d91f9e6c",
+        "smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py": "2216f568de7cf024389493513b20acdef85464b31bb9afc9e16b486380f6047a",
+        "smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py": "54da01982891cbc015c52c61a8ffaf53ff0c6f9449fee096709c7cae6eb7a3f7",
+        "smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower_node.py": "2cf21059e3e6a965ff9960f50e049e57ea30d0494fbeff7e59f7dabcf8d6eb10",
+        "smart_wheelchair_gazebo/test/check_door_matrix.py": "5e87364939c99de43988836c8ece938e8aea08a1c4ffad395269688bc545d000",
+        "smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf": "4b4bfb968c94a32a2eeba00ce4e5b8518e2fce2fc093fad600476a2c58559c0e"
+      }
+    },
+    "cases": [
+      {
+        "case": "nw_horizontal-in-+0",
+        "result": "passed",
+        "elapsed": 5.236,
+        "modes": [
+          "manual",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "manual"
+        ],
+        "final_pose": [
+          -4.500793789505358,
+          2.0815414124777303,
+          1.5549020965365012
+        ],
+        "progress": 0.7315414124777302,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.0008432711765030151,
+          -0.0019391777147436363
+        ],
+        "longest_stop": 0.40848100000584964,
+        "crossed_aperture": true
+      },
+      {
+        "case": "nw_horizontal-out-+0",
+        "result": "passed",
+        "elapsed": 4.962,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "door_wait"
+        ],
+        "final_pose": [
+          -4.499806415217556,
+          0.7967322621544618,
+          -1.576948413590744
+        ],
+        "progress": 0.5532677378455383,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.018547318080755666,
+          -0.01889826586893067
+        ],
+        "longest_stop": 0.4891122500048368,
+        "crossed_aperture": true
+      },
+      {
+        "case": "ne_horizontal-in-+0",
+        "result": "passed",
+        "elapsed": 5.326,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "manual"
+        ],
+        "final_pose": [
+          4.499898534821396,
+          2.0349360917630293,
+          1.55298924715987
+        ],
+        "progress": 0.6849360917630292,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          -9.818648557168217e-05,
+          -3.733506210908802e-06
+        ],
+        "longest_stop": 0.5717350839986466,
+        "crossed_aperture": true
+      },
+      {
+        "case": "ne_horizontal-out-+0",
+        "result": "passed",
+        "elapsed": 5.692,
+        "modes": [
+          "waiting",
+          "manual",
+          "door_wait",
+          "door_pass"
+        ],
+        "final_pose": [
+          4.49990376836182,
+          0.7386265981094835,
+          -1.5826640882464293
+        ],
+        "progress": 0.6113734018905166,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.00560124044521606,
+          -0.015419244700306995
+        ],
+        "longest_stop": 0.48856216699641664,
+        "crossed_aperture": true
+      },
+      {
+        "case": "sw_horizontal-in-+0",
+        "result": "passed",
+        "elapsed": 5.495,
+        "modes": [
+          "waiting",
+          "manual",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "manual"
+        ],
+        "final_pose": [
+          -4.500790622206103,
+          -1.9822691619727646,
+          -1.576670878707875
+        ],
+        "progress": 0.6322691619727645,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.00556966393929854,
+          -0.011822751099940207
+        ],
+        "longest_stop": 0.40704195899888873,
+        "crossed_aperture": true
+      },
+      {
+        "case": "sw_horizontal-out-+0",
+        "result": "passed",
+        "elapsed": 4.907,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass"
+        ],
+        "final_pose": [
+          -4.499690022018275,
+          -0.7465747594860286,
+          1.5607550068140486
+        ],
+        "progress": 0.6034252405139715,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.010530023284472152,
+          -0.01852579406704676
+        ],
+        "longest_stop": 0.3258907499985071,
+        "crossed_aperture": true
+      },
+      {
+        "case": "se_horizontal-in-+0",
+        "result": "passed",
+        "elapsed": 5.498,
+        "modes": [
+          "waiting",
+          "manual",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "manual"
+        ],
+        "final_pose": [
+          4.500560665806238,
+          -1.9875643256112017,
+          -1.5795017443161232
+        ],
+        "progress": 0.6375643256112016,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.006267382925146356,
+          -0.015602778013740893
+        ],
+        "longest_stop": 0.4069387919953442,
+        "crossed_aperture": true
+      },
+      {
+        "case": "se_horizontal-out-+0",
+        "result": "passed",
+        "elapsed": 4.821,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "door_wait"
+        ],
+        "final_pose": [
+          4.499857475634623,
+          -0.7891134069067509,
+          1.5659413078664712
+        ],
+        "progress": 0.5608865930932492,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.000744957455823147,
+          -0.0036520185598834603
+        ],
+        "longest_stop": 0.3255987090014969,
+        "crossed_aperture": true
+      },
+      {
+        "case": "nw_vertical-in-+0",
+        "result": "passed",
+        "elapsed": 5.065,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "manual"
+        ],
+        "final_pose": [
+          -1.9942882130191582,
+          3.4998516528473695,
+          3.12823132576463
+        ],
+        "progress": 0.6442882130191581,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.00021380836030077187,
+          0.0003237049579390591
+        ],
+        "longest_stop": 0.32571316700341413,
+        "crossed_aperture": true
+      },
+      {
+        "case": "nw_vertical-out-+0",
+        "result": "passed",
+        "elapsed": 5.115,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "front_stop"
+        ],
+        "final_pose": [
+          -0.6357379849000999,
+          3.499892636148762,
+          -0.009386695068459797
+        ],
+        "progress": 0.7142620150999002,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.002355221614449212,
+          -0.0066456210930287835
+        ],
+        "longest_stop": 0.32588420899992343,
+        "crossed_aperture": true
+      },
+      {
+        "case": "se_vertical-in-+0",
+        "result": "passed",
+        "elapsed": 4.922,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "manual"
+        ],
+        "final_pose": [
+          1.9819161650682253,
+          -3.499981380355319,
+          -0.008909064279318818
+        ],
+        "progress": 0.6319161650682252,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.0008612041626348336,
+          -0.002739425850239394
+        ],
+        "longest_stop": 0.3253702500005602,
+        "crossed_aperture": true
+      },
+      {
+        "case": "se_vertical-out-+0",
+        "result": "passed",
+        "elapsed": 5.027,
+        "modes": [
+          "waiting",
+          "door_wait",
+          "door_pass",
+          "door_clear",
+          "front_stop"
+        ],
+        "final_pose": [
+          0.6714096059288628,
+          -3.4997898722028675,
+          3.131978067254918
+        ],
+        "progress": 0.6785903940711373,
+        "final_cmd": [
+          0.0,
+          0.0
+        ],
+        "final_measured": [
+          0.0001259937819151374,
+          -3.6582634923751036e-05
+        ],
+        "longest_stop": 0.32636754200211726,
+        "crossed_aperture": true
+      }
+    ]
+  }
+}

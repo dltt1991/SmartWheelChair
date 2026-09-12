@@ -1,6 +1,6 @@
 # 当前方案架构与算法详解
 
-本文依据 2026-09-10 当前工作区中的实现编写，说明智能轮椅 ROS 2 仿真的组成、控制分支、算法与参数。参数以文中链接的源码和配置为准，启动方法见 [README](../README.md)。文中新增五张示意图使用 baoyu-diagram 风格绘制，分别提供可缩放 SVG 和 2 倍分辨率 PNG。
+本文依据 2026-09-11 当前工作区中的实现编写，说明智能轮椅 ROS1 仿真的组成、控制分支、算法与参数。参数以文中链接的源码和配置为准，启动方法见 [README](../README.md)。文中新增五张示意图使用 baoyu-diagram 风格绘制，分别提供可缩放 SVG 和 2 倍分辨率 PNG。
 
 阅读导航：
 
@@ -11,7 +11,7 @@
 5. [意图仲裁与状态机](#5-意图仲裁与状态机)
 6. [沿墙与宽开口转弯](#6-沿墙与宽开口转弯)
 7. [窄门路径搜索与专用跟踪](#7-窄门路径搜索与专用跟踪)
-8. [Nav2 MPPI 与局部代价地图](#8-nav2-mppi-与局部代价地图)
+8. [ROS1 局部路径跟踪器](#8-ros1-局部路径跟踪器)
 9. [速度平滑、正面停车与独立制动检查](#9-速度平滑正面停车与独立制动检查)
 10. [浏览器交互与可视化](#10-浏览器交互与可视化)
 11. [阅读源码与验证方案](#11-阅读源码与验证方案)
@@ -21,7 +21,7 @@
 
 系统实现由人持续操作摇杆的局部共享控制：用户决定前进、后退和转向，辅助控制器利用两侧激光扫描识别墙线与开口，生成局部参考路径，调整速度和转向，并检查整车制动扫掠区域。系统没有目标点任务、全局地图、SLAM 或自主导航任务管理。
 
-![系统架构：浏览器和 Gazebo 输入统一协调器，协调器调用几何算法与 Nav2，并发布最终速度](diagram/01-system-architecture.svg)
+![系统架构：浏览器和 Gazebo 输入统一协调器，协调器调用几何算法与 局部跟踪器，并发布最终速度](diagram/01-system-architecture.svg)
 
 图 1：当前运行模块与主要数据流。统一协调器拥有最终指令发布权；各辅助分支的候选速度来源见图 2。[查看 SVG](diagram/01-system-architecture.svg) · [下载高清 PNG](diagram/01-system-architecture@2x.png)。
 
@@ -29,8 +29,8 @@
 
 | 用户模式 | 指令处理 | 对传感器和规划器的依赖 |
 | --- | --- | --- |
-| 辅助模式 | 意图判断、参考路径、局部规划或专用跟踪、速度平滑、独立制动检查 | 需要新鲜摇杆、里程计和两侧扫描；通常还需要新鲜 MPPI 输出，可行门洞路径是例外 |
-| 手动模式 | 将新鲜、有限值的 `/cmd_vel_raw` 直接发布到 `/cmd_vel` | 只保留指令超时与模式切换回中约束，不要求扫描、里程计或 MPPI 有效 |
+| 辅助模式 | 意图判断、参考路径、局部规划或专用跟踪、速度平滑、独立制动检查 | 需要新鲜摇杆、里程计和两侧扫描；通常还需要新鲜局部跟踪器输出，可行门洞路径是例外 |
+| 手动模式 | 将新鲜、有限值的 `/cmd_vel_raw` 直接发布到 `/cmd_vel` | 只保留指令超时与模式切换回中约束，不要求扫描、里程计或局部跟踪器有效 |
 
 **手动模式绕过避障、沿墙、过门、辅助速度上限、舒适性限制和制动检查。** 状态名称中的 `manual` 另有含义：它是辅助模式下的普通摇杆参考状态，仍受辅助控制链约束；真正的用户手动模式状态名为 `manual_direct`。
 
@@ -38,31 +38,33 @@
 
 | 模块 | 职责 | 实现入口 |
 | --- | --- | --- |
-| Docker 与桌面环境 | ROS 2 Jazzy、Gazebo、Nav2、VNC/noVNC 运行环境 | [Dockerfile](../docker/Dockerfile)、[Compose](../docker-compose.yml) |
-| 仿真启动 | 启动 Gazebo、ROS/Gazebo 桥、控制节点与生命周期管理器 | [sim.launch.py](../ros2_ws/src/smart_wheelchair_gazebo/launch/sim.launch.py) |
-| 轮椅与环境 | 后轮差速底盘、被动前轮、雷达、后摄和碰撞场景 | [model.sdf](../ros2_ws/src/smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf)、[m6_room.sdf](../ros2_ws/src/smart_wheelchair_gazebo/worlds/m6_room.sdf) |
-| Web 输入与显示 | HTTP 摇杆、手动/辅助切换、后摄画面、倒车轨迹 | [web_joystick_node.py](../ros2_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/web_joystick_node.py)、[joystick.py](../ros2_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/joystick.py) |
-| 统一协调器 | 数据有效性、TF、意图仲裁、参考路径、动作请求、最终速度与状态发布 | [unified_control_node.py](../ros2_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py) |
-| 纯几何算法 | 分段墙线、开口识别、路径生成、门洞搜索、整车制动检查 | [unified_geometry.py](../ros2_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py) |
-| Nav2 局部规划 | MPPI 预测控制、滚动代价地图、FollowPath 动作 | [unified_control.yaml](../ros2_ws/src/smart_wheelchair_gazebo/config/unified_control.yaml) |
-| Gazebo 轨迹显示 | 显示原始指令和最终指令各自的恒曲率三线预测 | [trajectory_preview_system.cc](../ros2_ws/src/smart_wheelchair_gazebo/src/trajectory_preview_system.cc) |
+| Docker 与桌面环境 | ROS Noetic、Gazebo 11、VNC/noVNC 运行环境 | [Dockerfile](../docker/Dockerfile)、[Compose](../docker-compose.yml) |
+| 仿真启动 | 启动 Gazebo Classic 与四个 ROS1 应用节点 | [sim.launch](../catkin_ws/src/smart_wheelchair_gazebo/launch/sim.launch) |
+| 轮椅与环境 | 后轮差速底盘、被动前轮、雷达、后摄和碰撞场景 | [model.sdf](../catkin_ws/src/smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf)、[m6_room.world](../catkin_ws/src/smart_wheelchair_gazebo/worlds/m6_room.world) |
+| Web 输入与显示 | HTTP 摇杆、手动/辅助切换、后摄画面、倒车轨迹 | [web_joystick_node.py](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/web_joystick_node.py)、[joystick.py](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/joystick.py) |
+| 统一协调器 | 数据有效性、TF、意图仲裁、参考路径、最终速度与状态发布 | [unified_control_node.py](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py) |
+| 纯几何算法 | 分段墙线、开口识别、路径生成、门洞搜索、整车制动检查 | [unified_geometry.py](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py) |
+| 局部路径跟踪器 | 有限速度采样、矩形碰撞检查与路径评分 | [local_path_follower.py](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py)、[节点](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower_node.py)、[配置](../catkin_ws/src/smart_wheelchair_gazebo/config/local_path_follower.yaml) |
+| 后轴里程计转发 | 将 P3D 后轴真值的父坐标系从 `world` 标记为重合的 `odom` | [odom_frame_relay.py](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/odom_frame_relay.py) |
+| Gazebo 轨迹显示 | 显示原始指令和最终指令各自的恒曲率三线预测 | [trajectory_preview_plugin.cc](../catkin_ws/src/smart_wheelchair_gazebo/src/trajectory_preview_plugin.cc) |
 
 ### 1.2 实际控制数据流
 
 ![最终指令决策流程：入口校验、手动透传、辅助速度来源、平滑与独立制动检查](diagram/02-command-control-flow.svg)
 
-图 2：按最终输出逻辑展开主要分支。手动透传直接结束本周期；辅助模式中的门洞专用跟踪可绕过 MPPI 超时，但仍须经过制动检查。图中的“输入有效”包括原始指令新鲜且为有限值，“传感有效”包括两侧扫描和里程计通过检查。[查看 SVG](diagram/02-command-control-flow.svg) · [下载高清 PNG](diagram/02-command-control-flow@2x.png)。
+图 2：按最终输出逻辑展开主要分支。手动透传直接结束本周期；辅助模式中的门洞专用跟踪可绕过局部跟踪器超时，但仍须经过制动检查。图中的“输入有效”包括原始指令新鲜且为有限值，“传感有效”包括两侧扫描和里程计通过检查。[查看 SVG](diagram/02-command-control-flow.svg) · [下载高清 PNG](diagram/02-command-control-flow@2x.png)。
 
-常规辅助前进的处理顺序是：Web/键盘 → `/cmd_vel_raw` → 统一协调器选择参考路径 → Nav2 `FollowPath` → MPPI `/cmd_vel_planned` → 场景转向修正 → 速度平滑 → 制动检查 → `/cmd_vel` → Gazebo 差速驱动。
+常规辅助前进的处理顺序是：Web/键盘 → `/cmd_vel_raw` → 协调器发布 `/shared_control/reference` 与 `/speed_limit` → 局部跟踪器发布 `/cmd_vel_planned` → 场景转向修正 → 速度平滑 → 制动检查 → `/cmd_vel` → Gazebo 差速驱动。
 
 以下分支会改变候选速度的来源：
 
 - 倒车、原地转向、沿墙退出 `override`：从用户原始指令构造候选速度，继续经过辅助限幅、平滑与制动检查。
+- 已停在安全余量内的 `clearance_recovery`：按摇杆比例限制为最多 `0.05 m/s`、`0.1 rad/s`，使用有符号距离及立即停车基线检查能否安全离开；不等待不可行规划，也不自动选择脱困方向。普通/恢复检查均可省去按完整时间域可证明不可达的远点，轨迹、采样和余量判定不因此放宽。详细约束与测试见 [近障碍恢复验收](testing/2026-09-11-clearance-recovery.md)。
 - 正面横墙 `front_stop`：根据前方净空计算允许速度，主动抑制前进时的角速度，最后仍做制动检查。
-- 已获得可行路径的门洞辅助：优先使用门洞路径跟踪器与安全速度搜索构造候选速度，即使 MPPI 输出新鲜也是如此。MPPI 超时时可继续该分支，并报告 `planner_fallback`。
+- 已获得可行路径的门洞辅助：优先使用门洞路径跟踪器与安全速度搜索构造候选速度，即使局部跟踪器输出新鲜也是如此。局部跟踪器超时时可继续该分支，并报告 `planner_fallback`。
 - 用户关闭辅助：直接透传新鲜摇杆指令，提前返回，不进入以上处理。
 
-启动配置中，统一协调器是最终 `/cmd_vel` 的发布者；Nav2 的输出被重映射到 `/cmd_vel_planned`。Gazebo 预览插件仅消费指令画线，不参与控制。
+启动配置中，统一协调器是最终 `/cmd_vel` 的唯一应用发布者；局部跟踪器直接发布 `/cmd_vel_planned`。Gazebo 预览插件通过 ROS1 订阅指令画线，不参与控制。
 
 ### 1.3 运行部署与调度
 
@@ -75,33 +77,34 @@ Compose 提供 `sim` 和 `gui` 两个服务：前者打开 ROS shell，后者经
 | 后摄 | 15 Hz | 图像供浏览器观察，不进入避障算法 |
 | 统一参考路径更新 | 5 Hz | `REFERENCE_PERIOD=0.2 s` |
 | 最终控制循环 | 20 Hz | 仿真时钟计时器，计算步长裁剪至 `0.001–0.1 s` |
-| MPPI | 20 Hz | 预测离散步长 `0.05 s` |
-| 局部代价地图更新/发布 | 10 Hz / 2 Hz | 更新频率不同于向外发布频率 |
+| 局部跟踪器 | 20 Hz | 预测 `1 s`，离散步长 `0.1 s` |
+| 后轴真值里程计 | 50 Hz | P3D 测量后轴 link，relay 保留采集时间 |
 | 开口观测处理 | 最小间隔 `0.08 s` | 由扫描回调触发，不是独立固定频率线程 |
 
-门洞路径搜索放在单个后台工作线程中。ROS 回调负责提交和领取结果，避免复杂路径搜索长时间阻塞里程计、扫描与停车回调。搜索结果携带请求位姿和门洞代次；取消旧目标后，旧代次结果不再用于新目标。
+门洞路径搜索放在单个 `spawn` 后台进程中，避免 CPU 密集搜索通过 Python GIL 拖慢制动检查和里程计回调。ROS 回调负责提交和领取结果；传入纯几何对象和 NumPy 副本，不向子进程传递 ROS 对象。搜索结果携带请求位姿和门洞代次；取消旧目标后，旧代次结果不再用于新目标。提交或搜索失败时路径保持不可用，不终止参考定时器；工作进程异常退出后需重启控制节点恢复搜索能力。关闭时先发布零速度、释放控制锁，再等待搜索进程回收。
 
 ## 2. ROS 接口与坐标系
 
-### 2.1 主要话题与动作
+### 2.1 主要话题
 
 | 接口 | 类型 | 生产者 → 消费者 | 用途 |
 | --- | --- | --- | --- |
-| `/cmd_vel_raw` | `geometry_msgs/Twist` | Web/键盘 → 协调器；经桥接到预览插件 | 用户原始意图 |
+| `/cmd_vel_raw` | `geometry_msgs/Twist` | Web/键盘 → 协调器；预览插件直接订阅 | 用户原始意图 |
 | `/assist_enabled` | `std_msgs/Bool` | Web → 协调器 | 辅助模式心跳与切换 |
-| `/scan_left`、`/scan_right` | `sensor_msgs/LaserScan` | Gazebo → 桥 → 协调器 | 原始二维扫描 |
-| `/unified_scan_left`、`/unified_scan_right` | `sensor_msgs/LaserScan` | 协调器 → Nav2 | 校验并重标坐标系后的扫描 |
-| `/odom` | `nav_msgs/Odometry` | 差速驱动 → 桥 → 协调器/Nav2 | 位姿与实测速度 |
-| `/shared_control/reference` | `nav_msgs/Path` | 协调器 → 诊断订阅者 | 当前几何参考路径，坐标系 `odom` |
-| `/follow_path` | `nav2_msgs/action/FollowPath` | 协调器 → Nav2 controller server | 让 MPPI 跟踪局部参考 |
-| `/speed_limit` | `nav2_msgs/SpeedLimit` | 协调器 → Nav2 | 绝对速度限制，非百分比 |
-| `/cmd_vel_planned` | `geometry_msgs/TwistStamped` | Nav2 → 协调器 | 带时间戳的规划速度 |
-| `/cmd_vel` | `geometry_msgs/Twist` | 协调器 → 桥 → 差速驱动 | 最终执行指令 |
+| `/scan_left`、`/scan_right` | `sensor_msgs/LaserScan` | Gazebo ROS 插件 → 协调器 | 原始二维扫描 |
+| `/unified_scan_left`、`/unified_scan_right` | `sensor_msgs/LaserScan` | 协调器 →局部跟踪器| 校验并重标坐标系后的扫描 |
+| `/rear_axle_ground_truth` | `nav_msgs/Odometry` | Gazebo P3D → relay | 后轴 link 的世界位姿与局部速度 |
+| `/odom` | `nav_msgs/Odometry` | relay → 协调器/局部跟踪器 | `odom` 中后轴位姿与实测速度 |
+| `/diff_drive/odom` | `nav_msgs/Odometry` | 差速插件 → 诊断订阅者 | 模型原点数据，不用于控制 |
+| `/shared_control/reference` | `nav_msgs/Path` | 协调器 → 局部跟踪器/诊断订阅者 | 当前几何参考路径，坐标系 `odom` |
+| `/speed_limit` | `std_msgs/Float32` | 协调器 → 局部跟踪器 | 绝对线速度上限，单位 `m/s` |
+| `/cmd_vel_planned` | `geometry_msgs/TwistStamped` |局部跟踪器→ 协调器 | 带时间戳的规划速度 |
+| `/cmd_vel` | `geometry_msgs/Twist` | 协调器 → 差速驱动 | 最终执行指令 |
 | `/shared_control/status` | `std_msgs/String` | 协调器 → 诊断订阅者 | JSON：模式、原因、速度及可选门洞信息 |
-| `/camera/rear/image`、`/camera/rear/camera_info` | `Image`、`CameraInfo` | Gazebo → 桥；图像由 Web 消费 | 后摄显示 |
-| `/clock` | `rosgraph_msgs/Clock` | Gazebo → ROS | 协调器、Nav2 的仿真时间 |
+| `/camera/rear/image`、`/camera/rear/camera_info` | `Image`、`CameraInfo` | Gazebo ROS 插件 → ROS；图像由 Web 消费 | 后摄显示 |
+| `/clock` | `rosgraph_msgs/Clock` | Gazebo → ROS | 协调器、局部跟踪器 的仿真时间 |
 
-协调器通过动态 TF 发布 `odom → rear_axle`，通过静态 TF 发布 `rear_axle → unified_lidar_left/right`。扫描使用传感器 QoS 订阅。
+协调器通过动态 TF 发布 `odom → rear_axle`，通过静态 TF 发布 `rear_axle → unified_lidar_left/right`。传感器由 Gazebo ROS 插件直接发布，节点用 `rospy` 有界队列订阅。
 
 ### 2.2 后轴中心是控制原点
 
@@ -116,7 +119,7 @@ Compose 提供 `sim` 和 `gui` 两个服务：前者打开 ROS shell，后者经
 | 左雷达相对后轴 | `(0.79,+0.26) m` |
 | 右雷达相对后轴 | `(0.79,-0.26) m` |
 
-Gazebo 里程计的 `child_frame_id` 写作 `base_link`，但当前实现按照差速后轴积分解释其数值，再显式发布 `odom → rear_axle`。不能仅依据消息中的子坐标系名称，把模型几何中心当作运动学原点。雷达在 SDF 中的 `x=0.46 m`，换算到后轴后为 `0.46-(-0.33)=0.79 m`。
+Gazebo P3D 插件直接测量固定在底盘上的 `rear_axle` link，发布 `/rear_axle_ground_truth`，位姿父坐标系为 `world`，`localTwist=true` 使速度采用后轴局部坐标。`odom_frame_relay` 深复制消息，仅将 `header.frame_id` 改为 `odom`，保留位姿、速度、后轴子坐标系与时间戳；这依赖本仿真中 `world` 与 `odom` 重合。协调器再发布 `odom → rear_axle` TF。差速插件的 `/diff_drive/odom` 测量模型原点，控制链不消费它。雷达在 SDF 中的 `x=0.46 m`，换算到后轴后为 `0.79 m`。
 
 设位姿为 `(x,y,θ)`，局部点到里程计坐标的转换为 `p_odom=R(θ)p_local+[x,y]ᵀ`；逆变换为 `p_local=R(θ)ᵀ(p_odom-[x,y]ᵀ)`。扫描先按采集时刻 TF 转到 `odom` 保存，在控制时再按最新有效位姿转回当前后轴坐标。
 
@@ -141,7 +144,7 @@ dθ/dt = ω
 
 ### 3.1 观测范围
 
-两颗雷达各输出 `401` 束扫描，约 `0.5°` 角分辨率。左侧约为 `[-50°,150°]`，右侧约为 `[-150°,50°]`；量程为 `0.08–5.0 m`。它们在模型上代表旋转单线雷达，但发布的是有效侧边/侧前视场。硬件标称 `12 m` 不用于当前仿真参数。
+两颗雷达各输出 `721` 束完整 `[-180°,180°]` 扫描，约 `0.5°` 角分辨率；量程为 `0.08–5.0 m`。最终安全检查使用完整扫描。规划分支仍使用左侧 `[-50°,150°]`、右侧 `[-150°,50°]` 的各 `401` 束有效数据，其余束在发布副本中置为正无穷。硬件标称 `12 m` 不用于当前仿真参数。
 
 ### 3.2 扫描处理顺序
 
@@ -150,12 +153,12 @@ dθ/dt = ω
 1. 检查采集时间相对 ROS 当前时刻的年龄，允许最多 `0.05 s` 的未来偏差，历史年龄不超过 `scan_timeout=0.45 s`。
 2. 校验角度、增量和量程元数据为有限值，角增量非零，量程上下界合法；至少有三束扫描。
 3. 至少 `90%` 的回波必须是合法量程内有限距离或正无穷。正无穷表示量程内无回波；NaN、负无穷和越界值不计为健康回波。
-4. 复制扫描并把 `frame_id` 改为 `unified_lidar_left/right`，发布给 Nav2。
+4. 复制扫描并把 `frame_id` 改为 `unified_lidar_left/right`，发布给 局部跟踪器。
 5. 查询采集时间的 TF。若失败，不更新协调器中该侧障碍点及其有效接收时间。
 6. 将不超过 `min(range_max,4.5 m)` 的有限回波转换为二维点，并转到 `odom`。
 7. 在采集时的后轴坐标中剔除落在整车矩形内部的自回波，保存剩余点及单调时钟接收时间。
 
-给 Nav2 的扫描是校验后的原始量程副本，**没有套用步骤 7 的点级自回波过滤**。协调器/制动检查的点集与 Nav2 地图是两条独立消费链，不能把它们视为完全相同的障碍表示。
+给局部跟踪器的扫描是校验并屏蔽原侧前规划视场之外回波的量程副本，**没有套用步骤 7 的点级自回波过滤**。跟踪器将有限回波按固定雷达偏移转换为后轴局部点，不建立栅格地图；协调器分别保存完整安全点云与侧前规划点云，原始扫描不被修改。
 
 过滤自身回波必须使用采集时的几何：如果用车体移动后的矩形剔除历史点，已经接近的真实障碍可能被错误当作自身而删除。当前实现没有逐束运动去畸变。
 
@@ -169,7 +172,7 @@ dθ/dt = ω
 | 原始 ROS 指令 | `0.3 s` | 协调器检查接收新鲜度与有限值 |
 | 里程计 | `0.10 s` | 接收新鲜度；回调和每次辅助控制循环均检查采集年龄 |
 | 每侧雷达 | `0.45 s` | 回调检查采集年龄；控制循环检查成功处理的接收时间 |
-| MPPI 输出 | `0.25 s` | 检查已接受规划命令的接收新鲜度和有限值 |
+|局部跟踪器输出 | `0.25 s` | 检查已接受规划命令的接收新鲜度和有限值 |
 
 接收超时使用 `time.monotonic()`，消息采集年龄使用 ROS 时钟；两者承担不同检查。Web 节点还活着但浏览器失联时，协调器可能继续收到新鲜指令，直到 Web 自己的 `1 s` 超时将其归零，因此不能把 `0.3 s` 直接当作浏览器断联停车延迟。
 
@@ -215,12 +218,12 @@ dθ/dt = ω
 `update_reference()` 先处理用户手动、模式切换未回中、数据失效、非前进输入和主动退出。正常辅助前进时，几何分支按以下顺序选择：
 
 1. 已锁存的宽开口转弯 `opening_turn`。
-2. 已锁定或刚选中的前方窄门；搜索尚未可行时暂处 `manual`，可行后进入 `door_*`。
+2. 已锁定或刚选中的前方窄门；搜索尚未可行时在 `door_wait` 减速等待，可行后进入对正/通过阶段。
 3. 尚待第二次观测确认、但符合意图的窄门候选；暂处 `manual`，不立即切到沿墙或横墙停车。
 4. 正面横墙或已锁存的横墙停车 `front_stop`。
 5. 沿墙参考 `wall`；无合适墙则使用普通摇杆弧线 `manual`。沿墙时也会尝试锁存用户所指的宽侧开口。
 
-“路径搜索尚未完成”本身不是无条件停车状态：代码先回到普通摇杆参考；若 MPPI 不新鲜则停车，否则仍可按普通辅助链运行。进入 `door_*` 专用跟踪必须已有可行路径。
+常规确认门洞后，`door_wait` 请求零速度并通过正常平滑与制动检查减速。实测与指令速度的两个分量均小于 `0.025` 才提交搜索，防止搜索期间前进消耗对正空间。近障碍恢复期间，距障碍不超过 `6 cm` 时暂停门路径搜索；离开该区后允许在受保护低速移动时搜索，速度门槛为线速度 `0.055 m/s`、角速度 `0.11 rad/s`，待搜索时恢复目标进一步降为五分之一。领取结果时位姿漂移超过 `0.03 m/rad` 会重新规划；初始原地转向点漂移超过 `0.04 m` 时停止并重算。后续转向阶段一旦进入则锁存，偏移超过 `0.12 m` 时清除路径重新规划。传感器短暂失效仍立即输出零，但保留已锁定路径最多 `1 s`；持续失效、松杆或摇杆失联则清除辅助状态。
 
 ### 5.2 状态与退出条件
 
@@ -229,6 +232,7 @@ dθ/dt = ω
 | `waiting` | 节点初始化 | 后续参考更新 |
 | `manual_direct` | 用户关闭辅助，直接控制 | 开启辅助，随后等待回中 |
 | `manual` | 辅助普通路径、无前进意图或过渡状态 | 几何与输入触发其他辅助分支 |
+| `door_wait` | 确认门洞后减速，等待实测停稳和可行路径 | 获得路径、用户取消或数据失效 |
 | `wall` | 跟随用户选定侧墙 | 反向转向、门洞意图、宽开口转弯、停止等 |
 | `override` | 用户退出当前沿墙/门洞接管 | 退出输入减弱或新的意图条件改变仲裁 |
 | `front_stop` | 正面横墙减速停车并锁存 | 松杆、倒车或原地转向等 `raw_v≤0.02` 输入 |
@@ -257,9 +261,11 @@ dθ/dt = ω
 
 图 3：左侧解释后轴坐标与扫描点处理，右侧对比后轴距墙和车身边沿净距。雷达射线仅示意点的来源，不代表完整视场；右侧为已平行沿墙的目标状态。[查看 SVG](diagram/03-lidar-wall-geometry.svg) · [下载高清 PNG](diagram/03-lidar-wall-geometry@2x.png)。
 
-`wall_reference()` 筛选航向绝对值小于 `1.30 rad`、法向距离绝对值在 `0.45–1.80 m`、至少一个端点位于前方 `0.5 m` 以外的墙。
+`wall_reference()` 筛选航向绝对值小于 `1.30 rad`、法向距离绝对值在 `0.45–1.80 m` 的有限墙段。墙段必须仍覆盖当前车身纵向范围（近端保持至后轴后 `0.5 m`），或与摇杆预测的膨胀整车扫掠相交；路口远端共线墙不会自动延伸到当前开口。条件不满足时恢复摇杆参考，仍执行正常平滑与独立制动检查。
 
 `|raw_ω|≥0.12 rad/s` 时用户转向决定左右侧；直行则保留记忆的侧别。指定侧不可见时返回普通摇杆参考，不自动改选另一侧。候选墙按用户预测轨迹与墙的最小有符号间距排序。
+
+已进入开口、当前车身旁没有墙，但高速摇杆圆弧会扫到远端墙角时，先尝试保持摇杆角速度、把参考线速度降至原值的 `0.75/0.5/0.25`，缩小转弯半径；最后一档覆盖最大前推输入。只有较紧圆弧与该侧全部合格有限墙段都不相交才释放沿墙参考；近端墙尚未离开车尾时不使用此分支。最终仍由局部跟踪器和制动检查决定实际速度。
 
 墙切向为 `t`、法向为 `n`、有符号距离为 `d`，参考终点为：
 
@@ -273,7 +279,7 @@ wall_clearance = 0.12 m
 
 `approach_path()` 用三次 Hermite 曲线连接原点与目标。起始切向沿车头，终止切向沿墙，尺度为 `min(length,‖target‖)`；对曲线坐标求梯度得到参考航向。曲线只提供几何引导，可行性由规划器与制动检查判断。
 
-直行沿墙时还读取约 `0.8 m` 预瞄处航向，计算 `clip(-1.5×航向误差,-0.2,0.2)` 的角速度修正。只有修正方向背离所跟墙、幅值超过 `0.01 rad/s` 时才增强该修正，避免 MPPI 转向不足；显式用户转向不走这条直行补偿分支。
+直行沿墙时还读取约 `0.8 m` 预瞄处航向，计算 `clip(-1.5×航向误差,-0.2,0.2)` 的角速度修正。只有修正方向背离所跟墙、幅值超过 `0.01 rad/s` 时才增强该修正，避免局部跟踪器转向不足；显式用户转向不走这条直行补偿分支。
 
 ### 6.2 宽通道进入
 
@@ -281,7 +287,7 @@ wall_clearance = 0.12 m
 
 锁存后先沿原墙切向前进，直到近端门框沿通道切向投影位于后轴后方至少 `0.50 m`。这比只让车头越过墙角更晚，目的是减少车尾转弯扫到内角的风险。等待段结合初始轨迹原点、横向漂移和 `0.8 m` 预瞄修正航向，角速度限制为 `±0.2 rad/s`。
 
-满足尾部余量后生成指向“开口中心 + 穿越法向 `1.2 m`”的切向连续路径，向 Nav2 发布 `0.5 m/s` 速度限制。若用户继续朝开口转向，协调器可给该侧角速度设置不超过 `0.5 rad/s` 的意图下限，之后仍受总限幅与制动检查约束。
+满足尾部余量后生成指向“开口中心 + 穿越法向 `1.2 m`”的切向连续路径，向局部跟踪器发布 `0.5 m/s` 速度限制。若用户继续朝开口转向，协调器可给该侧角速度设置不超过 `0.5 rad/s` 的意图下限，之后仍受总限幅与制动检查约束。
 
 相对进入前切向转过至少 `1.05 rad`、开口中心落到 `x<-0.25 m` 或持续 `12 s` 后解除锁存；停止、倒车和明确反向转向也会取消。
 
@@ -293,9 +299,11 @@ wall_clearance = 0.12 m
 
 ### 7.1 先尝试直接参考，再做有界搜索
 
-`collision_aware_door_reference()` 只生成前进路径，不执行自动倒车脱困。无障碍点时返回直接门洞参考；否则先以 `0.04 m` 网格去重障碍，再检查直接对正曲线。若其采样位姿的整车净距都大于 `0.045 m`，直接采用。
+`collision_aware_door_reference()` 不执行自动倒车脱困，允许整车扫掠验证后的停稳转向。无障碍点时返回直接门洞参考；否则先以 `0.04 m` 网格去重障碍，再检查直接对正曲线。若其采样位姿的整车净距都大于 `0.045 m`，直接采用。
 
-直接路径不可用时，使用带启发式优先队列的离散位姿搜索：
+直接路径不可用时，先尝试门前安全调整：原地转向到对正位置、前进到门中心线、原地转为门法向、直行过门。对正位置在门前至少 `1.15 m`；平移每 `0.025 m`、旋转每 `0.02 rad` 检查全部原始障碍点，要求整车净距大于 `0.06 m`。路径保留零长度转向段；跟踪器按次序停稳执行，角速度限制为 `0.4 rad/s`，不直接跨过转向点。实际动作仍接受带实测动量的制动检查。
+
+该调整不可行时，使用带启发式优先队列的离散位姿搜索：
 
 | 搜索项 | 实现值 |
 | --- | --- |
@@ -330,7 +338,7 @@ entry_clearance = width/2 - 0.04
 
 ### 7.3 曲率前馈与反馈
 
-`_door_preview_angular()` 找到锁定折线路径上离后轴最近的线段投影，插值参考航向，并计算：
+`_door_preview_angular()` 找到锁定折线路径上离后轴最近的有效平移线段投影，排除零长度转向段、已完成阶段与尚未执行的转向点之后的路径，插值参考航向，并计算：
 
 ```text
 κ_ref = 相邻参考航向差 / 线段长度
@@ -340,9 +348,11 @@ entry_clearance = width/2 - 0.04
 
 `lateral_error` 是最近投影点在当前车体坐标中的 `y` 值。短的初始避障弯曲通过最近线段保留，不会被较远预瞄点直接跨过。
 
+存在待执行转向点时，先随到点距离降低线速度；距点小于 `0.07 m` 后请求零线速度，实测线速度小于 `0.025 m/s` 才执行角度反馈转向。角误差小于 `0.04 rad` 且实测角速度小于 `0.08 rad/s` 后进入下一段。原地转向使用通用角加速度平滑；平移阶段继续使用曲率跟踪。
+
 `_safe_door_command()` 在 `[0,min(raw_v,cruise)]` 内进行七轮二分安全试探，每次按路径计算角速度，并调用带实测动量的 `braking_clear()`；`cruise` 在对正阶段为 `0.35 m/s`，通过和尾部清空阶段为 `0.55 m/s`。这是固定次数的安全速度试探，不是全局最优速度求解。
 
-只要 `mode` 为 `door_*` 且 `door_path_feasible=True`，该速度分支优先于 MPPI 速度分支。MPPI 仍接收门洞参考和限速，但其输出不是此时最终候选速度的必要来源。正常门洞分支会在平滑线速度之后重新计算角速度以保持路径曲率，因此不能把通用角加速度平滑参数理解为所有门洞操作的硬保证。
+只要 `mode` 为 `door_*` 且 `door_path_feasible=True`，该速度分支优先于局部跟踪器速度分支。局部跟踪器仍接收门洞参考和限速，但其输出不是此时最终候选速度的必要来源。正常门洞分支会在平滑线速度之后重新计算角速度以保持路径曲率，因此不能把通用角加速度平滑参数理解为所有门洞操作的硬保证。
 
 ### 7.4 过门后转向交还
 
@@ -361,47 +371,42 @@ entry_clearance = width/2 - 0.04
 
 过门阶段保留最近有效记忆供制动检查使用，抵御前置雷达暂时看不到近端门框的问题。成功完成过门立即清空；取消辅助后保留 `1.5 s` 制动尾段宽限，再由当前扫描主导；距离超过 `4.5 m` 的记忆点另行裁剪。用户切换手动/辅助模式时也清空该记忆。
 
-## 8. Nav2 MPPI 与局部代价地图
+## 8. ROS1 局部路径跟踪器
 
-本仓库复用 Nav2 的 `nav2_mppi_controller::MPPIController`，未自行实现随机优化器。其职责是在局部地图中，以差速运动模型对未来速度序列进行采样评价，使运动趋向选定路径。以下是本仓库明确配置的行为；Nav2 内部默认项与实现细节取决于实际安装版本。
+[local_path_follower.py](../catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py) 实现有界、确定性的恒速轨迹采样。ROS 节点将 odom 中的参考转换到当前后轴坐标，结合两侧有限扫描点选择下一条速度指令；没有滚动栅格地图、随机优化或全局任务。
 
-### 8.1 预测控制参数
+### 8.1 候选与碰撞检查
 
-| 参数组 | 当前值 | 含义 |
-| --- | --- | --- |
-| 模型 | `DiffDrive` | 优化前向速度与角速度 |
-| 时域 | `60 × 0.05 s = 3 s` | 每周期预测长度 |
-| 采样 | `batch_size=600`，`iteration_count=1` | 每次迭代的候选规模和迭代次数 |
-| 噪声 | `vx_std=0.25`，`wz_std=0.30` | 线速度、角速度采样扰动尺度 |
-| 速度 | `vx∈[0,0.80] m/s`，`|wz|≤0.65 rad/s` | MPPI 不规划倒车 |
-| 加速度 | `ax∈[-0.50,0.50] m/s²`，`az_max=0.80 rad/s²` | 规划模型限制 |
-| 优化参数 | `temperature=0.3`，`gamma=0.015` | MPPI 权重相关配置 |
-| 路径裁剪 | `prune_distance=3.5 m` | 局部参考处理范围 |
+| 项目 | 实现值 |
+| --- | --- |
+| 执行频率 | 配置默认 `20 Hz` |
+| 线速度 | `9` 个等间距值，范围 `[0,min(speed_limit,0.8)] m/s` |
+| 角速度 | `15` 个等间距值，范围 `[-0.65,0.65] rad/s` |
+| 候选总数 | `135` 组恒定 `(v,ω)` |
+| 每条预测 | `1 s`，步长 `0.1 s`，包含起点共 `11` 个位姿 |
+| 碰撞矩形 | 后轴坐标 `[-0.29,1.01] × [-0.44,0.44] m`，含 `4 cm` 裕量 |
 
-| Critic | 权重 | 本项目启用的评价方向 |
-| --- | --- | --- |
-| `ConstraintCritic` | `4.0` | 运动约束 |
-| `CostCritic` | `1.0` | 地图代价及碰撞；整车轮廓检查开启，碰撞代价 `1000000` |
-| `PathFollowCritic` | `8.0` | 沿参考路径前进 |
-| `PathAlignCritic` | `6.0` | 与路径对齐，使用路径朝向 |
-| `PathAngleCritic` | `2.0` | 相对路径方向的角度 |
-| `PreferForwardCritic` | `3.0` | 前进偏好 |
+候选沿差速圆弧积分，任一采样位姿的矩形包含障碍点就被拒绝。无可行候选、路径/点集格式或有限值非法、速度上限非正时返回零速度。这里不建模执行加速度或完整制动尾段，最终安全检查由协调器承担；采样未碰撞不等于连续运动安全证明。
 
-controller server 的进展检查要求 `30 s` 内产生 `0.05 m` 的移动，目标容差为位置 `0.15 m`、航向 `0.2 rad`。这些用于 FollowPath 生命周期，不是门洞通过判据。生命周期管理器自动激活 `controller_server`。
+实现按时间步批量检查候选，并提前排除“一秒最大平移距离 + 膨胀车身最远角点距离”之外的障碍点。候选顺序、碰撞边界、评分及同分选择不变；测试用逐候选标量实现核对随机场景、边界点及上一速度的影响。
 
-### 8.2 地图与障碍链
+### 8.2 路径评分
 
-局部地图使用 `odom` 作为全局坐标、`rear_axle` 作为机器人基准，是 `8×8 m`、分辨率 `0.025 m` 的滚动窗口，即约 `320×320` 个栅格。没有静态地图层。
+对每条剩余候选，以预测终点寻找最近参考点，计算：
 
-`ObstacleLayer` 从两侧 `/unified_scan_*` 写入并清除障碍，障碍标记最远 `4.0 m`，射线清除最远 `4.5 m`，正无穷可用于清除。`InflationLayer` 的膨胀半径为 `1.15 m`，代价衰减系数 `5.0`。
+```text
+score = 4 × 终点位置误差 + 2 × 航向误差
+        - 2 × 最近参考点索引/(路径点数-1)
+        + 0.05 × 与上次候选速度的欧氏差
+```
 
-地图 footprint 与控制器一致，为 `[-0.25,0.97]×[-0.40,0.40] m`，`footprint_padding=0`。地图膨胀用于软代价引导，不能等同于独立制动检查的 `0.04 m` 硬几何裕量，也不能把 `1.15 m` 理解为所有障碍周围都绝对禁止进入。
+分母至少为 1。选择最低分候选，偏好贴近参考、向前推进和较小速度变化。此评分不保证全局最优，也没有独立避障方向决策。
 
-### 8.3 规划目标更新和旧输出隔离
+### 8.3 输入新鲜度和旧输出隔离
 
-协调器通常每 `0.2 s` 发布参考并尝试更新 FollowPath。门洞可行路径接管后，有活动目标时不重复提交锁定路径。异步目标返回通过 `epoch` 检查；取消或切换后返回的旧目标会被取消。
+节点的参考路径、里程计、速度上限和每侧扫描按单调时钟记录接收时间；任一输入超过默认 `0.25 s` 未更新就发布零。频率与超时来自 [local_path_follower.yaml](../catkin_ws/src/smart_wheelchair_gazebo/config/local_path_follower.yaml)，采样边界与评分常量在纯算法源码中。
 
-接收规划速度需要辅助已开启、完成回中、允许接收规划输出，且 `TwistStamped` 时间戳晚于新目标被接受的时刻。取消会清空规划速度和接收时间，关闭接收许可，防止旧目标排队输出在模式恢复后重新驱动车辆。
+协调器每 `0.2 s` 发布参考与速度上限，每条参考使用严格递增的 `Path.header.stamp`。跟踪器把本次消费的参考时间戳原样放入 `TwistStamped.header.stamp`，它表示参考身份，不是输出生成时间。协调器只接受时间戳与当前参考完全相同、辅助已开启且完成回中的输出；接收新鲜度另用单调时钟检查。取消或模式切换清空接收许可与当前参考身份，旧参考计算结果即使延迟到达也不能重新驱动车辆。
 
 ## 9. 速度平滑、正面停车与独立制动检查
 
@@ -411,14 +416,14 @@ controller server 的进展检查要求 `30 s` 内产生 `0.05 m` 的移动，�
 | --- | --- | --- | --- |
 | Web 原始输入 | `1.6666667 m/s`，即 `6 km/h` | `0.8333333 m/s`，即 `3 km/h` | `1.4 rad/s` |
 | 辅助协调器总限幅 | `min(raw_v,max_speed)`，默认最高 `0.8 m/s` | 负向下界 `-0.4 m/s` | `±0.65 rad/s` |
-| MPPI 静态配置 | `0.8 m/s` | 不生成倒车 | `±0.65 rad/s` |
+|局部跟踪器静态配置 | `0.8 m/s` | 不生成倒车 | `±0.65 rad/s` |
 | 门洞对正 | 规划动态限速与专用跟踪上限均 `0.35 m/s` | 不自动倒车 | 路径跟踪决定，再检查 |
 | 门洞通过/车尾清空 | 规划动态限速与专用跟踪上限均 `0.55 m/s` | 不自动倒车 | 路径/摇杆混合，再检查 |
-| 宽开口转弯 | 向 Nav2 发布 `0.5 m/s` 动态限速 | 不自动倒车 | 场景修正后受总限幅约束 |
+| 宽开口转弯 | 向局部跟踪器发布 `0.5 m/s` 动态限速 | 不自动倒车 | 场景修正后受总限幅约束 |
 
-正向输入不会采用负向 MPPI 速度。当前辅助倒车限幅下界是固定 `-0.4`，并非将该下界再与摇杆倒车幅度求最大值；普通倒车候选本身来自摇杆。用户手动透传不执行此表中的辅助限幅，Gazebo 差速插件仍有自己的执行加速度限制。
+正向输入不会采用负向局部跟踪器速度。当前辅助倒车限幅下界是固定 `-0.4`，并非将该下界再与摇杆倒车幅度求最大值；普通倒车候选本身来自摇杆。用户手动透传不执行此表中的辅助限幅。
 
-`max_speed` 等协调器参数与 YAML 中 MPPI 静态上限分别配置，修改一处不会自动同步另一处。代码里也有门洞阈值等常量，不是所有表中参数都能通过 ROS 参数动态配置。
+`max_speed` 等协调器参数与跟踪器源码中的静态采样上限分别定义，修改一处不会自动同步另一处。YAML 只配置跟踪频率与输入超时；门洞阈值等常量也在代码中。
 
 ### 9.2 正常平滑
 
@@ -479,11 +484,15 @@ b × state_age × (reaction + transition_time + stop_time)
 
 该项按实测运动强度缩放，静止的延迟样本不会因为未来候选速度而凭空产生加速不确定性。对于初始仅落在额外采样填充带、且随后始终远离的点，允许去掉其采样填充约束，但基础及延迟不确定性裕量仍保留。
 
+近障碍低速恢复是显式例外：比较逐点有符号距离与立即停车名义基线，且静止起步理想轨迹不得接近已有近点。名义停车尚大于 4 cm、但完整停车证书已失败的点，还必须保持名义 4 cm、终值严格改善并越过候选完整余量。停车本来安全的其它点不豁免；此例外不恢复公共初始延迟段的完整鲁棒保证，详见 [恢复策略边界](testing/2026-09-11-clearance-recovery.md)。
+
 ### 9.5 最终候选筛选
 
 控制器对平滑后的 `(v,ω)` 同比尝试 `1.0、0.8、0.6、0.4、0.2、0.0` 六个尺度，选择第一个通过制动检查的候选。同比缩放在非零时保持曲率；每次检查的实测速度不随候选缩放。
 
-缩放时报告 `braking_envelope`；连零候选都不能通过检查时仍输出零，报告 `emergency_stop`。后者表示当前模型预测已无法在所设裕量内停车，并不意味着零指令能瞬间停止物理车体。Gazebo 驱动另有 `0.6 m/s²` 线加速度和 `1.2 rad/s²` 角加速度参数。
+仅在低速恢复时，过小的 jerk 起步候选可能无法消除既有停车证书不足。非零平滑候选均失败后、尝试零命令之前，额外按 `0.2、0.4、0.6、0.8、1.0` 尺度尝试限速后的摇杆目标；只保留大于原起步幅度、相对上一命令及实测速度均满足 `0.5 m/s²、0.8 rad/s²` 单周期变化上限的候选，仍逐一执行同一恢复 guard。此起步只可绕过舒适 jerk 限制，不绕过加速度、速度、新鲜度、松杆或制动检查；不是自动选择脱困方向。
+
+缩放时报告 `braking_envelope`；连零候选都不能通过检查时仍输出零，报告 `emergency_stop`。后者表示当前模型预测已无法在所设裕量内停车，并不意味着零指令能瞬间停止物理车体。Gazebo Classic 差速插件显式保留默认 `wheelAcceleration=0`（不做轮速斜坡限制）与 `wheelTorque=5`；仿真实际响应由关节动力学和接触决定，不能把协调器参数当作真实执行保证。
 
 若障碍点集为空，几何检查返回可通行；上层的新鲜度判断负责区分“有效扫描全为正无穷”和“传感器没有有效更新”。
 
@@ -506,13 +515,15 @@ Web 线程与 ROS 发布回调之间通过锁保护共享输入。模式返回�
 
 ### 10.2 三类路径显示的区别
 
+原生雷达扇面/射线是 Gazebo `DynamicLines`，普通 SDF 透明度无法修改它们。`FaintLidarVisualPlugin` 克隆每颗雷达的专用显示材质，将漫反射与纹理手动 alpha 设为 `0.035`，启用透明混合、关闭深度写入，保留 GUI-only 可见性；不修改原始公共材质或传感器数据。
+
 | 显示内容 | 来源 | 表达的含义 |
 | --- | --- | --- |
 | Gazebo 两套三线轨迹 | `/cmd_vel_raw` 与 `/cmd_vel` | 各自恒速恒曲率预测 `3 s`，步长 `0.3 s`，包含中心及左右轮位置；显示超时 `0.5 s` |
 | `/shared_control/reference` | 几何模式选出的 `Path` | 希望跟踪的局部参考，可能是 Hermite 曲线或门洞搜索路径 |
 | 后摄倒车左右轮叠加 | 页面当前摇杆速度 | 按差速曲率向后预测约 `2 m`，用于驾驶观察 |
 
-后摄叠加使用 `κ=ω/v`、负行驶距离 `s`：`θ_s=κs`、`x_s=sin(θ_s)/κ`、`y_s=(1-cos(θ_s))/κ`，再叠加左右轮横向偏移 `±L/2`；零曲率退化为直线。它不消费 MPPI 时变轨迹，也不表示当前刹车距离或已验证净空。Nav2 配置中的 `visualize=false`，上述画线均不是优化器内部完整预测序列。
+后摄叠加使用 `κ=ω/v`、负行驶距离 `s`：`θ_s=κs`、`x_s=sin(θ_s)/κ`、`y_s=(1-cos(θ_s))/κ`，再叠加左右轮横向偏移 `±L/2`；零曲率退化为直线。它不表示当前刹车距离或已验证净空。Gazebo 轨迹使用 Classic 渲染插件的固定线段槽位；GUI 可见的射线提示与模型标记不进入激光或摄像头传感器画面。
 
 ## 11. 阅读源码与验证方案
 
@@ -522,36 +533,38 @@ Web 线程与 ROS 发布回调之间通过锁保护共享输入。模式返回�
 
 | 测试/工具 | 主要覆盖范围 |
 | --- | --- |
-| [test_unified_geometry.py](../ros2_ws/src/smart_wheelchair_safety/test/test_unified_geometry.py) | 墙线、真假开口、窄门、路径、车尾扫掠与制动几何 |
-| [test_unified_node.py](../ros2_ws/src/smart_wheelchair_safety/test/test_unified_node.py) | 模式切换、旧规划隔离、意图优先级、门洞阶段、开口记忆、超时和速度处理；需要 ROS Python 环境 |
-| [test_joystick.py](../ros2_ws/src/smart_wheelchair_safety/test/test_joystick.py)、[test_web_joystick.py](../ros2_ws/src/smart_wheelchair_safety/test/test_web_joystick.py) | 输入映射、图像载荷、网页协议与模式行为 |
-| [Gazebo 测试目录](../ros2_ws/src/smart_wheelchair_gazebo/test) | 模型、地图、通道可达性及探针相关回归 |
+| [test_unified_geometry.py](../catkin_ws/src/smart_wheelchair_safety/test/test_unified_geometry.py) | 墙线、真假开口、窄门、路径、车尾扫掠与制动几何 |
+| [test_unified_node.py](../catkin_ws/src/smart_wheelchair_safety/test/test_unified_node.py) | 模式切换、旧规划隔离、意图优先级、门洞阶段、开口记忆、超时和速度处理；需要 ROS Python 环境 |
+| [test_local_path_follower.py](../catkin_ws/src/smart_wheelchair_safety/test/test_local_path_follower.py)、[test_local_path_follower_node.py](../catkin_ws/src/smart_wheelchair_safety/test/test_local_path_follower_node.py) | 候选选择、碰撞、速度边界、输入超时与参考时间戳传播 |
+| [test_odom_frame_relay.py](../catkin_ws/src/smart_wheelchair_safety/test/test_odom_frame_relay.py) | 后轴位姿、速度、时间戳和子坐标系保留 |
+| [test_joystick.py](../catkin_ws/src/smart_wheelchair_safety/test/test_joystick.py)、[test_web_joystick.py](../catkin_ws/src/smart_wheelchair_safety/test/test_web_joystick.py) | 输入映射、图像载荷、网页协议与模式行为 |
+| [Gazebo 测试目录](../catkin_ws/src/smart_wheelchair_gazebo/test) | 模型、地图、通道可达性及探针相关回归 |
 | [probe_unified_control.py](../scripts/probe_unified_control.py) | Gazebo 中的沿墙、横墙停车、主动退出、左右开口和门洞闭环探针 |
 
 ### 11.2 本地回归与运行观察
 
-在仓库根目录可以用 Python 与 NumPy 运行以下测试发现命令，无须先启动 Gazebo。几何、摇杆映射及模型文件等测试可在非 ROS 环境运行；统一节点和 Web 节点的 ROS 测试在缺少 `rclpy` 时会跳过，要完整执行需进入已加载 ROS 的容器环境：
+在仓库根目录可以用 Python 与 NumPy 运行以下测试发现命令，无须先启动 Gazebo。几何、摇杆映射及模型文件等测试可在非 ROS 环境运行；统一节点和 Web 节点的 ROS 测试在缺少 `rospy` 时会跳过，要完整执行需进入已加载 ROS 的容器环境：
 
 ```bash
-PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest discover -s ros2_ws/src/smart_wheelchair_safety/test
-PYTHONPATH=ros2_ws/src/smart_wheelchair_safety python3 -m unittest discover -s ros2_ws/src/smart_wheelchair_gazebo/test
+PYTHONPATH=catkin_ws/src/smart_wheelchair_safety python3 -m unittest discover -s catkin_ws/src/smart_wheelchair_safety/test
+PYTHONPATH=catkin_ws/src/smart_wheelchair_safety python3 -m unittest discover -s catkin_ws/src/smart_wheelchair_gazebo/test
 ```
 
 仿真启动后，分别观察以下话题可以定位“用户意图、所选路径、规划输出、最终输出”的差别：
 
 ```bash
-ros2 topic echo /shared_control/status
-ros2 topic echo /shared_control/reference
-ros2 topic echo /cmd_vel_raw
-ros2 topic echo /cmd_vel_planned
-ros2 topic echo /cmd_vel
+rostopic echo /shared_control/status
+rostopic echo /shared_control/reference
+rostopic echo /cmd_vel_raw
+rostopic echo /cmd_vel_planned
+rostopic echo /cmd_vel
 ```
 
-`reason` 常见值包括 `clear`、`mode_transition`、`user_stop`、`stale_input`、`planner_timeout`、`planner_fallback`、`braking_envelope` 和 `emergency_stop`。一般场景出现 `planner_timeout` 时先检查 FollowPath 是否被接受及消息时间戳；门洞 `planner_fallback` 则表示正在用可行几何路径继续控制。
+`reason` 常见值包括 `clear`、`mode_transition`、`user_stop`、`stale_input`、`planner_timeout`、`planner_fallback`、`braking_envelope` 和 `emergency_stop`。一般场景出现 `planner_timeout` 时先检查参考与限速是否持续发布、跟踪器输入新鲜度及参考时间戳是否匹配；门洞 `planner_fallback` 则表示正在用可行几何路径继续控制。
 
 ### 11.3 场景复测与结果边界
 
-`m6_room` 为 `16×12 m` 室内测试区，主通道净宽 `2.58 m`，包含六个净宽 `1.0/1.1/1.2 m` 的门；[unified_door.sdf](../ros2_ws/src/smart_wheelchair_gazebo/worlds/unified_door.sdf) 是独立 `1.0 m` 门洞场景。当前地图几何回归以整车矩形附加 `0.06 m` 裕量检查路线，这不同于运行时制动检查的 `0.04 m`。
+`m6_room` 为 `16×12 m` 室内测试区，主通道净宽 `2.58 m`，包含六个净宽 `1.0/1.1/1.2 m` 的门；[unified_door.world](../catkin_ws/src/smart_wheelchair_gazebo/worlds/unified_door.world) 是独立 `1.0 m` 门洞场景。当前地图几何回归以整车矩形附加 `0.06 m` 裕量检查路线，这不同于运行时制动检查的 `0.04 m`。
 
 按 [README](../README.md) 启动对应场景后，在已加载 ROS 和工作区环境的 GUI 容器中、仓库根目录下运行 [闭环复测脚本](../scripts/probe_unified_control.py)。每次用例前重启对应场景，不能仅靠瞬移和清地图假定门框记忆、沿墙侧别等协调器状态已重置；测试期间避免其他摇杆客户端同时发指令。
 
@@ -563,7 +576,63 @@ python3 scripts/probe_unified_control.py wall --seconds 18 --output /tmp/wall-pr
 python3 scripts/probe_unified_control.py door --lateral-m .20 --yaw-deg 15 --active-align --seconds 55 --output /tmp/door-probe.json
 ```
 
-探针报告包含按采样重建的净距和场景进展，并在结束时发送零指令。门洞世界坐标由已知起始位姿和轮式里程计重建，非独立 Gazebo 接触真值。本文记录实现与复测入口，不宣称本次文档更新重新完成了 Gazebo 闭环实验。
+探针报告包含采样净距、最大速度、按发生顺序去重的模式、门洞进展与松杆后的最终指令/实测速度。门洞世界坐标由已知起始位姿和后轴真值里程计重建；净距来自扫描与矩形计算，不是独立接触真值。每个场景必须显式传入名称，门洞探针会拒绝错误世界；执行探针会实际移动车辆，仅用于仿真。
+
+### 11.4 首次迁移验证记录（2026-09-11）
+
+无缓存重建 ARM64 镜像，并从干净 build/devel 编译两个 C++ 插件与原生检查器。完整 catkin 结果为 **276 项，零错误、零失败、零跳过**。清理重复 ROS 测试注册后，每个测试结果只由一个入口写入，避免并行覆盖 XML。
+
+每个下面的用例都重新启动 ROS master、Gazebo world 与全部应用节点，确认扫描、里程计、相机和 HTTP 就绪，再运行默认 30 秒探针；门洞初始横向偏置 0.15 m、偏角 10°。三轮均通过：
+
+| 场景/轮次 | 最小采样净距 (m) | 最大指令速度 (m/s) | 最终后轴世界 x (m) | 松杆后指令 |
+| --- | --- | --- | --- | --- |
+| front 1 | 0.128672 | 0.375751 | 不适用 | 0 / 0 |
+| front 2 | 0.120002 | 0.374480 | 不适用 | 0 / 0 |
+| front 3 | 0.119481 | 0.373557 | 不适用 | 0 / 0 |
+| wall 1 | 0.118480 | 0.800000 | 不适用 | 0 / 0 |
+| wall 2 | 0.116712 | 0.800000 | 不适用 | 0 / 0 |
+| wall 3 | 0.121353 | 0.800000 | 不适用 | 0 / 0 |
+| door 1 | 0.063165 | 0.800000 | 2.793195 | 0 / 0 |
+| door 2 | 0.060781 | 0.800000 | 2.792039 | 0 / 0 |
+| door 3 | 0.061985 | 0.800000 | 2.791603 | 0 / 0 |
+
+前障模式为 `manual → front_stop`。沿墙输入持续向左转，因此三轮均为 `manual → wall → opening_turn → wall → front_stop`。门洞三轮均为 `manual → door_align → door_pass → door_clear → manual → front_stop`，没有沿墙误接管。松杆后的 `manual` 复位可能出现在最后一条状态记录中。所有运行最终实测线速度绝对值小于 0.0003 m/s、角速度绝对值小于 0.0005 rad/s；这些接近零的残余反映仿真关节/接触数值扰动。
+
+三次沿墙终点位置相差约 1.2 cm，门洞终点横向位置相差约 8 mm。沿墙第三轮在 `wall → front_stop` 切换前有一帧 `emergency_stop`，下一帧正常进入前障停车；该帧采样净距约 0.207 m，保护检查保留实测动量。其余各轮也在相同前墙停止，没有持续卡停或输入失联。
+
+独立原生渲染检查通过 60 个固定轨迹槽位、三轮显隐、66 个子节点和 209 个场景视觉对象检查。两侧各 68 帧激光数据无变化，约 9.9985 Hz；99 帧相机图像有效。显式写入 DiffDrive 既有默认值后，场景启动不再出现缺参数警告。
+
+另一个全新实例通过真实 HTTP/ROS 链路验证了模式与超时：手动输出约 1.0 m/s；切回辅助并回中后恢复受限运动；关闭局部跟踪节点后报告 `planner_timeout` 并输出零；关闭 Web 输入节点后报告 `stale_input` 并保持零。所有本次验证实例和 Compose GUI 已停止。
+
+
+### 11.5 紧急制动事件的定量复核
+
+为复核上述瞬态事件，另做六轮完整沿墙运行，以临时诊断包装器记录真实控制函数的输入与返回，不更改候选、参数或最终输出。共捕获九次零速候选被拒绝的事件；其中八次对应北外墙，一次对应侧墙。每次完整运行仍通过，记录的轨迹用已有 SDF 检查器重建为 8,532 个位姿，对全部 18 个碰撞墙体检查，整车外加 6 cm 矩形均不相交。这里验证的是记录位姿及其插值轨迹，不能代替连续真实接触测量；诊断开销也可能改变事件出现频率。
+
+第一组实际输入已固定为 [wall_guard_capture.json](../catkin_ws/src/smart_wheelchair_safety/test/fixtures/wall_guard_capture.json)，由 [几何回归测试](../catkin_ws/src/smart_wheelchair_safety/test/test_unified_geometry.py) 直接调用原始 `braking_clear()` 重放六个候选。该周期处于 `wall`，摇杆 `(v,ω)=(0.83333335,0.42)`，规划输出 `(0.7,-0.092857)`，上一输出 `(0.786857,-0.092857)`，实测速度 `(0.787030,-0.084866)`。里程计采集年龄 15 ms、接收年龄约 10 ms，左右扫描接收年龄约 79/78 ms。
+
+六个速度尺度全部按真实输入重放为拒绝。对最保守的零速度候选：
+
+| 量 | 数值 |
+| --- | --- |
+| 基础裕量 | 0.040000 m |
+| 里程计年龄不确定性增量 | 0.035809 m |
+| 离散采样增量 | 0.008761 m |
+| 本周期实际拒绝阈值 | 0.084571 m |
+| 完整名义停止轨迹最小净距 | 0.080114 m |
+| 后轴预测停止路径长度 | 0.802771 m |
+| 首次拒绝位置的预测时刻 | 1.68 s |
+| 拒绝障碍点，当前后轴坐标 | `(1.811318,-0.536352) m` |
+| 同一点，世界坐标 | `(-0.321698,5.929227) m` |
+| 该点在首次拒绝位姿的车体坐标 | `(1.053135,-0.412944) m` |
+
+该障碍对应北外墙内侧 `y=5.93 m`。整车基础矩形为 `[-0.25,0.97]×[-0.40,0.40] m`，名义停止路径仍未碰到车身或基础 4 cm 裕量，但不足以满足该周期包含状态年龄的不确定性阈值。因此这是保守且符合当前模型的拒绝，没有修改制动逻辑或缩小裕量。仅作离线反事实比较时，忽略状态年龄会接受该停止候选；回归测试明确防止这种改动进入生产行为。
+
+记录显示下一控制周期已恢复为 `wall + clear`，150 ms 后进入 `front_stop`；最终对真实北墙平面的矩形净距约 13.18 cm。六次诊断运行最终北墙净距均超过 13.08 cm。另保留全部扫描、障碍点、各候选判定与前后控制周期，避免仅根据状态名称推断原因。
+
+复核还将探针停车条件改为两路接收时间必须晚于本次松杆，并在冻结结果时仍不超过 0.25 s；分别覆盖缓存零值、只更新指令未更新里程计、接收过期和仍在移动等情况。catkin 的依赖生命周期警告 `package 'gazebo_ros' is deprecated`、`package 'gazebo_msgs' is deprecated` 以及 `Gazebo classic 11 reaching end-of-life` 属于当前栈的已知限制，测试通过不代表工具输出完全没有警告。
+
+复核后的完整 catkin 回归为 **279 项、零错误、零失败、零跳过**，包括原 276 项基线和新增探针/回放测试。原生渲染再次通过 60 个槽位、三轮显隐、左右各 68 帧不变扫描及 100 帧有效图像。另用未加诊断包装的普通节点重启执行前障、沿墙、门洞各三轮，**9/9 通过**，每轮最终停车均有新的指令及里程计接收时间作证；三轮沿墙的 4,267 个重建位姿也通过全部墙体的 6 cm 膨胀矩形检查。新的 HTTP/ROS 实例再次通过手动/辅助切换、规划器失联和输入失联停车检查。
 
 ## 12. 当前边界与修改时的耦合项
 
@@ -573,10 +642,10 @@ python3 scripts/probe_unified_control.py door --lateral-m .20 --yaw-deg 15 --act
 
 | 变更内容 | 需要同时核对的位置 |
 | --- | --- |
-| 车体尺寸、后轴位置 | SDF 碰撞几何与驱动位置、协调器 TF/自过滤、几何模块矩形与过门余量、Nav2 footprint、可视化原点及模型/可达性测试 |
-| 雷达安装和量程 | SDF 传感器、静态 TF、采集时自过滤偏移、协调器 `4.5 m` 点范围、Nav2 标记/清除范围 |
-| 速度与动力学 | Web 上限、协调器限幅与平滑、门洞速度常量、MPPI 参数、制动模型、Gazebo 执行限制 |
-| 超时和线程调度 | 采集年龄与接收年龄、ROS 仿真时间和单调时钟、规划目标接受隔离、后台搜索返回条件 |
+| 车体尺寸、后轴位置 | SDF 碰撞几何与驱动位置、协调器 TF/自过滤、几何模块矩形与过门余量、跟踪器碰撞矩形、可视化原点及模型/可达性测试 |
+| 雷达安装和量程 | SDF 传感器、静态 TF、采集时自过滤偏移、协调器 `4.5 m` 点范围、跟踪器点集 |
+| 速度与动力学 | Web 上限、协调器限幅与平滑、门洞速度常量、跟踪器采样边界、制动模型、Gazebo 执行限制 |
+| 超时和线程调度 | 采集年龄与接收年龄、ROS 仿真时间和单调时钟、参考时间戳隔离、后台搜索返回条件 |
 | 门洞/沿墙行为 | 意图容差、状态退出阈值、几何可行性、参考路径、最终转向修正和闭环场景 |
 
 这些参数和检查共同构成当前仿真控制行为；几何可通行、单元测试通过和少量闭环成功分别提供不同层面的证据，均不能单独作为载人实车安全保证。

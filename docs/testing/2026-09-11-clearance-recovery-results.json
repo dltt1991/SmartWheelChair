@@ -1,0 +1,454 @@
+{
+  "generated_utc": "2026-09-11T06:13:43.425084+00:00",
+  "branch": "feature/ros1-noetic-migration",
+  "baseline_commit": "9eca0c823c07ba348e08029c43f97a4c528bc93c",
+  "environment": "Ubuntu 20.04 / ROS Noetic / Gazebo 11; Docker; GUI LP_NUM_THREADS=2",
+  "source_sha256": {
+    ".superpowers/behavior/check_restored_gui.py": "5d8c821959da7a51d7cb7afe855e9f277c3e68dfa9265b706a7446ea213e7dd7",
+    "catkin_ws/src/smart_wheelchair_gazebo/models/smart_wheelchair/model.sdf": "5a60aaf11768c78464a5b5b39040a738669378959e38621261725215d34b485d",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_corner_recovery.py": "e8dabe6c140ea40b31b9f588b5a2593058ab4a8c7cad202b759b9baae61c23da",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_door_matrix.py": "df15152c96cc63becf2657049bad25c53877ccf956c384fb6148239b7c64a55a",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_junction_matrix.py": "64b9693037071acd170ffc55199581256860105266f8a9015f898cd83b100b2b",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_recovery_matrix.py": "a8c865b52864bc8d9e414155250434c601df30be4a1e3ebf6f21544bc83355fd",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/check_tight_recovery.py": "b3615d6791b0b47ff714fdfbd77c3d9539b6bbb9d3e8dd357dce46270b5f9a69",
+    "catkin_ws/src/smart_wheelchair_gazebo/test/test_m6_accessibility.py": "34f736b7bc75b24a3aa5560c4b743688778a6568eb7ed9ab561f2b54eb83ce4a",
+    "catkin_ws/src/smart_wheelchair_gazebo/worlds/m6_room.world": "f5a0839549fe91cb3481096b0b85873bcdf7c70c0e7c4a97554dd8733db0a385",
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py": "54da01982891cbc015c52c61a8ffaf53ff0c6f9449fee096709c7cae6eb7a3f7",
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower_node.py": "2cf21059e3e6a965ff9960f50e049e57ea30d0494fbeff7e59f7dabcf8d6eb10",
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_control_node.py": "b5bf2c57ff206fd603216be11f505eba0b8dd9fde960e2f49cf3211471350b1b",
+    "catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety/unified_geometry.py": "86ab16f938fa9fb2b8ab4aaeeaef8810e58aa7d9986d03b86e4dddd464f34f1b",
+    "catkin_ws/src/smart_wheelchair_safety/test/fixtures/near_wall_lock_capture.json": "c2f7b1f2f058b4cf96617bd8aa09dc417bb8132f973a67e12743f856335f3b42",
+    "docker/gazebo-gui-vnc.sh": "231ab4418dc3adb6a5466e66ecfb34cf978cc95115bd0910f0b82ba85404027a",
+    "scripts/probe_unified_control.py": "3fc31b074b3d6e4ee0b11e46c12191e34372e52f8f4017039d237c95c8b711a7"
+  },
+  "catkin": {
+    "tests": 372,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0
+  },
+  "normal_guard_baseline_comparison": {
+    "cases": 1000,
+    "seed": 2191,
+    "identical": 1000,
+    "accepted": 208
+  },
+  "matrices": [
+    {
+      "run": "recovery-final-v11",
+      "raw_directory": ".superpowers/behavior/recovery-final-v11",
+      "expected": 96,
+      "completed": 96,
+      "passed": 96,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          -60,
+          -30,
+          0,
+          30,
+          60,
+          150,
+          180,
+          -150
+        ],
+        "seconds": 6,
+        "doors": null,
+        "footprint": [
+          -0.25,
+          0.97,
+          -0.4,
+          0.4
+        ],
+        "sweep_step": 0.002
+      },
+      "min_progress_m": 0.36070840568323126,
+      "max_inward_excursion_m": 0.00024283968653912488,
+      "max_inward_yaw_rad": 0.0004977764149542985
+    },
+    {
+      "run": "recovery-corners-final-v11-clean",
+      "raw_directory": ".superpowers/behavior/recovery-corners-final-v11-clean",
+      "expected": 24,
+      "completed": 24,
+      "passed": 24,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          -30,
+          0,
+          30,
+          150,
+          180,
+          210
+        ],
+        "seconds": 10,
+        "doors": null,
+        "footprint": [
+          -0.25,
+          0.97,
+          -0.4,
+          0.4
+        ],
+        "sweep_step": 0.002
+      },
+      "min_progress_m": 0.39515358724846456,
+      "max_inward_excursion_m": 0.00023525776756876593,
+      "max_inward_yaw_rad": 0.00043010585434932747
+    },
+    {
+      "run": "recovery-tight-final-v11",
+      "raw_directory": ".superpowers/behavior/recovery-tight-final-v11",
+      "expected": 24,
+      "completed": 24,
+      "passed": 24,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          0,
+          180
+        ],
+        "seconds": 6,
+        "doors": null,
+        "footprint": [
+          -0.25,
+          0.97,
+          -0.4,
+          0.4
+        ],
+        "sweep_step": 0.002
+      },
+      "min_progress_m": 0.17046950971940056,
+      "max_inward_excursion_m": 0.0002322978981966642,
+      "max_inward_yaw_rad": 0.000431470511555121
+    },
+    {
+      "run": "recovery-doors-final-v11",
+      "raw_directory": ".superpowers/behavior/recovery-doors-final-v11",
+      "expected": 84,
+      "completed": 84,
+      "passed": 84,
+      "required_fraction": 0.9,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          0,
+          -15,
+          15,
+          -30,
+          30,
+          -45,
+          45
+        ],
+        "directions": [
+          "in",
+          "out"
+        ],
+        "doors": [
+          "nw_horizontal",
+          "ne_horizontal",
+          "sw_horizontal",
+          "se_horizontal",
+          "nw_vertical",
+          "se_vertical"
+        ],
+        "timeout": 35,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      }
+    },
+    {
+      "run": "recovery-junction-final-v11",
+      "raw_directory": ".superpowers/behavior/recovery-junction-final-v11",
+      "expected": 20,
+      "completed": 20,
+      "passed": 20,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "cases": [
+          "opening_turn",
+          "opening_straight",
+          "opening_gap"
+        ],
+        "angles": [
+          0,
+          90,
+          180,
+          270
+        ],
+        "sides": [
+          "left",
+          "right"
+        ],
+        "horizon": 20,
+        "forward_y": 0.5,
+        "interpolation_step": 0.005,
+        "footprint_margin": 0.02
+      }
+    },
+    {
+      "run": "recovery-fullstick-final-v11",
+      "raw_directory": ".superpowers/behavior/recovery-fullstick-final-v11",
+      "expected": 4,
+      "completed": 4,
+      "passed": 4,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "cases": [
+          "opening_gap"
+        ],
+        "angles": [
+          0,
+          180
+        ],
+        "sides": [
+          "left",
+          "right"
+        ],
+        "horizon": 20,
+        "forward_y": 1,
+        "interpolation_step": 0.005,
+        "footprint_margin": 0.02
+      }
+    },
+    {
+      "run": "recovery-doors-gui-final-v11",
+      "raw_directory": ".superpowers/behavior/recovery-doors-gui-final-v11",
+      "expected": 84,
+      "completed": 84,
+      "passed": 83,
+      "required_fraction": 0.9,
+      "passed_fraction": 0.9880952380952381,
+      "failures": [
+        {
+          "case": "se_horizontal-out--45",
+          "result": "timeout",
+          "elapsed": 35.201,
+          "modes": [
+            "waiting",
+            "manual",
+            "door_wait",
+            "door_align",
+            "clearance_recovery"
+          ],
+          "final_pose": [
+            4.5517985931255325,
+            -1.2223301154490551,
+            1.4766803287966497
+          ],
+          "progress": 0.12766988455094497,
+          "final_cmd": [
+            0,
+            0
+          ],
+          "final_measured": [
+            0.0001310730948273167,
+            0.0004528341465163701
+          ],
+          "longest_stop": 0.4929088330027298,
+          "crossed_aperture": true
+        }
+      ],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          0,
+          -15,
+          15,
+          -30,
+          30,
+          -45,
+          45
+        ],
+        "directions": [
+          "in",
+          "out"
+        ],
+        "doors": [
+          "nw_horizontal",
+          "ne_horizontal",
+          "sw_horizontal",
+          "se_horizontal",
+          "nw_vertical",
+          "se_vertical"
+        ],
+        "timeout": 35,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      }
+    },
+    {
+      "run": "recovery-door-gui-repeat-v11-1",
+      "raw_directory": ".superpowers/behavior/recovery-door-gui-repeat-v11-1",
+      "expected": 1,
+      "completed": 1,
+      "passed": 1,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          -45
+        ],
+        "directions": [
+          "out"
+        ],
+        "doors": [
+          "se_horizontal"
+        ],
+        "timeout": 35,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      }
+    },
+    {
+      "run": "recovery-door-gui-repeat-v11-2",
+      "raw_directory": ".superpowers/behavior/recovery-door-gui-repeat-v11-2",
+      "expected": 1,
+      "completed": 1,
+      "passed": 1,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          -45
+        ],
+        "directions": [
+          "out"
+        ],
+        "doors": [
+          "se_horizontal"
+        ],
+        "timeout": 35,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      }
+    },
+    {
+      "run": "recovery-door-gui-repeat-v11-3",
+      "raw_directory": ".superpowers/behavior/recovery-door-gui-repeat-v11-3",
+      "expected": 1,
+      "completed": 1,
+      "passed": 1,
+      "required_fraction": 1,
+      "passed_fraction": 1,
+      "failures": [],
+      "source_hashes_verified": true,
+      "configuration": {
+        "angles": [
+          -45
+        ],
+        "directions": [
+          "out"
+        ],
+        "doors": [
+          "se_horizontal"
+        ],
+        "timeout": 35,
+        "pose_margin": 0.02,
+        "sweep_step": 0.005
+      }
+    }
+  ],
+  "restored_gui": {
+    "raw_file": ".superpowers/behavior/restored-gui-smoke-final-v11.json",
+    "result": {
+      "teleported": false,
+      "trials": [
+        {
+          "name": "forward",
+          "distance": 0.14795231789840535,
+          "yaw": 0.0801631936716649,
+          "stopped": true,
+          "passed": true
+        },
+        {
+          "name": "reverse",
+          "distance": 0.09904537683783392,
+          "yaw": 0.00020938394963425364,
+          "stopped": true,
+          "passed": true
+        },
+        {
+          "name": "left",
+          "distance": 0.002720444247565538,
+          "yaw": 0.23042050309006618,
+          "stopped": true,
+          "passed": true
+        },
+        {
+          "name": "right",
+          "distance": 0.000974806370580435,
+          "yaw": -0.21560223286135355,
+          "stopped": true,
+          "passed": true
+        }
+      ],
+      "mode": {
+        "assist_enabled": true,
+        "revision": 0,
+        "session": "2b731c3696877564"
+      },
+      "scans": {
+        "left": {
+          "rays": 721,
+          "sim_hz": 9.998969178435212
+        },
+        "right": {
+          "rays": 721,
+          "sim_hz": 9.997938569367136
+        }
+      },
+      "camera": {
+        "width": 640,
+        "height": 360,
+        "bytes": 691200
+      },
+      "passed": true,
+      "final": {
+        "pose": [
+          -6.952981343180836,
+          -0.0008987030446490235,
+          0.13989791927323966
+        ],
+        "measured": [
+          0.00007354049032533629,
+          0.00001947367854244326
+        ],
+        "received": 18944.732820427,
+        "cmd": [
+          0,
+          0
+        ]
+      }
+    }
+  },
+  "limitations": [
+    "Simulation evidence, not real-wheelchair safety certification.",
+    "Recovery compares nominal stop trajectories; it does not restore the complete robust uncertainty guarantee.",
+    "Recovery start may bypass comfort jerk only; acceleration, low-speed caps and final guard still apply.",
+    "GUI full matrix retains one 35-second low-speed timeout; three subsequent passes do not replace it.",
+    "Corner acceptance uses 10 seconds, not 6 seconds.",
+    "Raw interrupted, invalid and earlier-version runs remain under .superpowers/behavior and are not counted as completed final matrices."
+  ]
+}

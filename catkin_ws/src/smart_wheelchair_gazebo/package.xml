@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>smart_wheelchair_gazebo</name>
+  <version>0.1.0</version>
+  <description>Gazebo simulation assets for the smart wheelchair.</description>
+  <maintainer email="dev@example.com">SmartWheelChair</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>gazebo_ros</depend>
+  <depend>geometry_msgs</depend>
+  <depend>roscpp</depend>
+  <build_depend>gazebo_dev</build_depend>
+  <exec_depend>gazebo_plugins</exec_depend>
+  <exec_depend>smart_wheelchair_safety</exec_depend>
+  <test_depend>sensor_msgs</test_depend>
+  <test_depend>rospy</test_depend>
+  <test_depend>rosgraph_msgs</test_depend>
+  <test_depend>python3-nose</test_depend>
+  <export>
+    <gazebo_ros gazebo_model_path="${prefix}/models" plugin_path="${prefix}/../../lib"/>
+  </export>
+</package>

@@ -1,7 +1,7 @@
 """Controlled Gazebo-only smoke tests. Runs movement; never use on hardware.
 
 Run inside the sourced GUI container with no other joystick client active.
-Door requires unified_door.sdf; other cases require a fresh m6_room.sdf.
+Door requires unified_door.world; other cases require a fresh m6_room.world.
 Results are sampled sensor/odometry evidence, not a contact or safety proof.
 """
 
@@ -27,22 +27,68 @@ def check_door_modes(modes):
     assert 'door_pass' in modes, 'door alignment never committed to pass'
 
 
+def check_wall_result(result):
+    assert 'wall' in result['modes'], 'wall following was not observed'
+    assert result['max_speed'] > .6, 'wall speed did not recover'
+
+
+def check_opening_gap_result(result, intended_sign):
+    assert result['junction_exit_time'] is not None, 'junction exit was not reached'
+    assert intended_sign*result['junction_yaw_change'] >= math.radians(70), 'joystick turn was not executed in the gap'
+    assert result['junction_forward_progress'] > .25, 'junction forward progress too small'
+    assert result['junction_longest_stop'] <= 3., 'prolonged stop after clearing the near wall'
+
+
+def opening_gap_metrics(records, intended_sign, initial_pose):
+    """Separate the junction turn from later travel toward unrelated walls."""
+    progress, longest_stop, stopped_since = 0., 0., None
+    result = {'junction_exit_time': None}
+    c, s = math.cos(initial_pose[2]), math.sin(initial_pose[2])
+    for row in records:
+        x, y, yaw = row['odom']
+        progress = max(progress, (x-initial_pose[0])*c+(y-initial_pose[1])*s)
+        yaw = math.atan2(math.sin(yaw-initial_pose[2]), math.cos(yaw-initial_pose[2]))
+        if max(abs(value) for value in row.get('odom_velocity', [0., 0.])) < .03:
+            stopped_since = row['t'] if stopped_since is None else stopped_since
+            longest_stop = max(longest_stop, row['t']-stopped_since)
+        else:
+            stopped_since = None
+        if result['junction_exit_time'] is None:
+            result.update(junction_yaw_change=yaw, junction_forward_progress=progress,
+                          junction_longest_stop=longest_stop)
+            if intended_sign*yaw >= math.radians(70) and progress > .25:
+                result['junction_exit_time'] = row['t']
+    result.update(forward_progress=progress, longest_stop=longest_stop)
+    return result
+
+
+def settled_after_release(data, released, now):
+    return all(released < data.get(key + '_received', -math.inf) <= now
+               and now - data[key + '_received'] <= .25
+               and len(data.get(key, [])) == 2
+               and all(math.isfinite(value) and abs(value) < .02 for value in data[key])
+               for key in ('cmd_vel', 'odom_velocity'))
+
+
 def main():
     import numpy as np
-    import rclpy
-    from rclpy.node import Node
-    from rclpy.qos import qos_profile_sensor_data
+    import rospy
+    import yaml
     from geometry_msgs.msg import Twist, TwistStamped
     from nav_msgs.msg import Odometry
     from sensor_msgs.msg import LaserScan
     from std_msgs.msg import String
-    from smart_wheelchair_safety.unified_geometry import extract_lines, find_openings, transform_points
+    from smart_wheelchair_safety.unified_geometry import LIDAR_X_M, LIDAR_Y_M, extract_lines, find_openings, transform_points
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('case', choices=['wall', 'wall_gap', 'override', 'front', 'vertical',
-                                         'room_door', 'opening_turn', 'opening_straight', 'door'])
+                                         'room_door', 'opening_turn', 'opening_straight', 'opening_gap', 'door'])
     parser.add_argument('--seconds', type=float, default=30.)
+    parser.add_argument('--forward-y', type=float, default=.5,
+                        help='Forward joystick fraction in (0, 1]')
     parser.add_argument('--wall-side', choices=['left', 'right'], default='left')
+    parser.add_argument('--approach-yaw-deg', type=float, default=0.,
+                        help='Rotate opening-case start position and heading around the junction')
     parser.add_argument('--lateral-m', type=float, default=.15,
                         help='Door fixture body-centre lateral offset in metres')
     parser.add_argument('--yaw-deg', type=float, default=10.,
@@ -51,8 +97,9 @@ def main():
                         help='Steer toward the door for four seconds during takeover')
     parser.add_argument('--output', default='/tmp/unified-probe.json')
     args = parser.parse_args()
-    rclpy.init()
-    node = Node('unified_sim_probe')
+    if not 0. < args.forward_y <= 1.:
+        parser.error('--forward-y must be in (0, 1]')
+    rospy.init_node('unified_sim_probe')
     data, scans, records = {}, {}, []
     motion_started = False
     mode_history = []
@@ -64,17 +111,20 @@ def main():
                                  'mode': data['status'].get('mode', 'missing')})
 
     for topic in ['cmd_vel_raw', 'cmd_vel']:
-        node.create_subscription(Twist, topic, lambda m, t=topic: data.update({t: [m.linear.x, m.angular.z]}), 10)
-    node.create_subscription(
-        TwistStamped, 'cmd_vel_planned',
+        rospy.Subscriber(topic, Twist, lambda m, t=topic: data.update(
+            {t: [m.linear.x, m.angular.z], t + '_received': time.monotonic()}), queue_size=10)
+    rospy.Subscriber(
+        'cmd_vel_planned', TwistStamped,
         lambda m: data.update(cmd_vel_planned=[m.twist.linear.x,
-                                                m.twist.angular.z]), 10)
-    node.create_subscription(String, 'shared_control/status', on_status, 10)
-    node.create_subscription(Odometry, 'odom', lambda m: data.update(odom=[
+                                                m.twist.angular.z]), queue_size=10)
+    rospy.Subscriber('shared_control/status', String, on_status, queue_size=10)
+    rospy.Subscriber('odom', Odometry, lambda m: data.update(odom=[
         m.pose.pose.position.x, m.pose.pose.position.y,
-        2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)]), 10)
+        2*math.atan2(m.pose.pose.orientation.z, m.pose.pose.orientation.w)],
+        odom_velocity=[m.twist.twist.linear.x, m.twist.twist.angular.z],
+        odom_velocity_received=time.monotonic()), queue_size=10)
     for side in ['left', 'right']:
-        node.create_subscription(LaserScan, 'scan_'+side, lambda m, s=side: scans.update({s: m}), qos_profile_sensor_data)
+        rospy.Subscriber('scan_'+side, LaserScan, lambda m, s=side: scans.update({s: m}), queue_size=5)
 
     def command(x=0., y=0.):
         nonlocal motion_started
@@ -85,9 +135,14 @@ def main():
         motion_started = motion_started or x != 0. or y != 0.
 
     try:
-        services = subprocess.run(['gz', 'service', '-l'], capture_output=True, text=True, check=True, timeout=5).stdout
+        properties = yaml.safe_load(subprocess.run(
+            ['rosservice', 'call', '/gazebo/get_world_properties', '{}'],
+            capture_output=True, text=True, check=True, timeout=5).stdout)
         world = 'unified_door' if args.case == 'door' else 'm6_room'
-        if f'/world/{world}/set_pose' not in services:
+        # Classic's world-properties service exposes model names, not the world name.
+        fixture_models = ({'left_jamb', 'right_jamb', 'exit_wall'} if args.case == 'door'
+                          else {'outer_north_wall', 'outer_south_wall'})
+        if not properties['success'] or not (fixture_models | {'smart_wheelchair'}).issubset(properties['model_names']):
             raise RuntimeError(f'Requires running Gazebo world {world}; no motion sent')
         command()
         if args.case == 'door':
@@ -95,38 +150,45 @@ def main():
             x, y = -2.5, args.lateral_m
         else:
             yaw = math.pi/2 if args.case in ('front', 'vertical', 'room_door', 'wall_gap') else math.pi/6
-            if args.case in ('opening_turn', 'opening_straight', 'door'):
+            if args.case.startswith('opening_'):
                 yaw = 0.
             starts = {'vertical': (0., -4.3), 'front': (-2.5, 0.), 'room_door': (-4.5, 0.),
                       'wall_gap': (-.77, -4.3) if args.wall_side == 'left' else (.77, 1.7),
                       'opening_turn': (-3.5, .77 if args.wall_side == 'left' else -.77),
-                      'opening_straight': (-3.5, .77 if args.wall_side == 'left' else -.77)}
+                      'opening_straight': (-3.5, .77 if args.wall_side == 'left' else -.77),
+                      'opening_gap': (-.2, .77 if args.wall_side == 'left' else -.77)}
             x, y = starts.get(args.case, (-4., 0.))
-        req = (f'name: "smart_wheelchair", position: {{x: {x}, y: {y}, z: 0.04}}, '
-               f'orientation: {{z: {math.sin(yaw/2)}, w: {math.cos(yaw/2)}}}')
-        subprocess.run(['gz', 'service', '-s', f'/world/{world}/set_pose',
-            '--reqtype', 'gz.msgs.Pose', '--reptype', 'gz.msgs.Boolean',
-            '--timeout', '2000', '--req', req], check=True, timeout=5)
-        subprocess.run(['ros2', 'service', 'call', '/local_costmap/clear_entirely_local_costmap',
-            'nav2_msgs/srv/ClearEntireCostmap', '{}'], check=True, timeout=10)
+            if args.case.startswith('opening_'):
+                yaw = math.radians(args.approach_yaw_deg)
+                x, y = x*math.cos(yaw)-y*math.sin(yaw), x*math.sin(yaw)+y*math.cos(yaw)
+        opening_axle_start = (x-.33*math.cos(yaw), y-.33*math.sin(yaw), yaw)
+        req = {'model_state': {'model_name': 'smart_wheelchair', 'reference_frame': 'world',
+                              'pose': {'position': {'x': x, 'y': y, 'z': .04},
+                                       'orientation': {'z': math.sin(yaw/2), 'w': math.cos(yaw/2)}}}}
+        placed = yaml.safe_load(subprocess.run(
+            ['rosservice', 'call', '/gazebo/set_model_state', json.dumps(req)],
+            capture_output=True, text=True, check=True, timeout=5).stdout)
+        if not placed['success']:
+            raise RuntimeError(placed['status_message'])
         start = time.monotonic()
         last_send = last_log = 0.
         initial_odom = None
-        while time.monotonic()-start < args.seconds+2:
+        while not rospy.is_shutdown() and time.monotonic()-start < args.seconds+2:
             now = time.monotonic()
             elapsed = now-start
             if now-last_send >= .08:
                 turn = -.3 if args.case in ('wall', 'override') else 0.
                 if args.case == 'override' and elapsed > 13:
                     turn = .3
-                if args.case == 'opening_turn' and elapsed > 4:
+                if ((args.case == 'opening_turn' and elapsed > 4)
+                        or (args.case == 'opening_gap' and elapsed > 2)):
                     # HTTP x is screen direction; joystick_to_velocity negates it.
                     turn = -.45 if args.wall_side == 'left' else .45
                 if args.case == 'door' and args.active_align and 2. < elapsed < 6.:
                     turn = math.copysign(.22, args.lateral_m)
-                command(turn if elapsed > 2 else 0., .5 if elapsed > 2 else 0.)
+                command(turn if elapsed > 2 else 0., args.forward_y if elapsed > 2 else 0.)
                 last_send = now
-            rclpy.spin_once(node, timeout_sec=.005)
+            time.sleep(.005)  # rospy dispatches subscriptions on its own threads.
             if now-last_log < .1 or len(scans) < 2 or 'odom' not in data:
                 continue
             last_log = now
@@ -135,12 +197,12 @@ def main():
             clearances = []
             wall_clearances = []
             scan_lines = []
-            for side, msg in scans.items():
+            for side, msg in list(scans.items()):
                 ranges = np.array(msg.ranges)
                 angles = msg.angle_min + np.arange(len(ranges))*msg.angle_increment
                 valid = np.isfinite(ranges) & (ranges >= msg.range_min) & (ranges <= msg.range_max)
-                x = ranges[valid]*np.cos(angles[valid])+.79
-                y = ranges[valid]*np.sin(angles[valid]) + (.26 if side == 'left' else -.26)
+                x = ranges[valid]*np.cos(angles[valid])+LIDAR_X_M
+                y = ranges[valid]*np.sin(angles[valid]) + LIDAR_Y_M[side]
                 dx = np.maximum(np.maximum(-.25-x, x-.97), 0.)
                 dy = np.maximum(np.abs(y)-.4, 0.)
                 clearances.extend(np.hypot(dx, dy).tolist())
@@ -157,7 +219,7 @@ def main():
                             if 0. <= gap < .5:
                                 wall_clearances.append(gap)
             row = dict(t=round(elapsed, 3), **data, clearance=min(clearances, default=99.))
-            if args.case in ('opening_turn', 'opening_straight', 'door'):
+            if args.case.startswith('opening_') or args.case == 'door':
                 row['openings'] = [{'center': list(opening.center), 'heading': opening.heading,
                                     'width': opening.width}
                                    for opening in find_openings(scan_lines)]
@@ -168,32 +230,66 @@ def main():
                 axle_start = (-2.5-.33*math.cos(yaw), args.lateral_m-.33*math.sin(yaw), yaw)
                 row['world_axle'] = transform_points([relative], axle_start)[0].tolist()
                 row['world_yaw'] = data['odom'][2]-initial_odom[2]+yaw
+            elif args.case.startswith('opening_'):
+                relative = transform_points([data['odom'][:2]], initial_odom, inverse=True)[0]
+                row['world_axle'] = transform_points([relative], opening_axle_start)[0].tolist()
+                row['world_yaw'] = data['odom'][2]-initial_odom[2]+yaw
             records.append(row)
         command()
+        released = time.monotonic()
+        # Observe physical settling after release, not just the sent zero request.
+        time.sleep(.2)
+        stop_deadline = time.monotonic() + 3.
+        while time.monotonic() < stop_deadline:
+            if settled_after_release(data, released, time.monotonic()):
+                break
+            time.sleep(.05)
+        stopped = dict(data)
+        settled_at = time.monotonic()
         moving = moving_records(records)
-        result = {'case': args.case, 'samples': len(moving),
+        sequence = []
+        for entry in mode_history:
+            if not sequence or sequence[-1] != entry['mode']:
+                sequence.append(entry['mode'])
+        result = {'case': args.case, 'forward_y': args.forward_y, 'samples': len(moving),
                   'min_sampled_clearance': min((r['clearance'] for r in moving), default=0.),
                   'max_speed': max((r.get('cmd_vel', [0])[0] for r in moving), default=0.),
                   'modes': sorted({r['mode'] for r in mode_history}
                                   | {r.get('status', {}).get('mode', 'missing') for r in moving}),
+                  'mode_sequence': sequence,
+                  'final_stop': {key: stopped.get(key) for key in (
+                      'cmd_vel', 'odom_velocity', 'cmd_vel_received', 'odom_velocity_received')},
+                  'released': released,
+                  'settled_at': settled_at,
                   'last': records[-1] if records else None}
         if args.case == 'wall_gap':
             gaps = [r['wall_clearance'] for r in moving if r['wall_clearance'] is not None
                     and r.get('status', {}).get('mode') == 'wall' and r.get('cmd_vel', [0])[0] > .1]
             result['steady_gap_samples'] = len(gaps)
             result['steady_gap_min_max'] = [min(gaps), max(gaps)] if gaps else None
-        if args.case in ('opening_turn', 'opening_straight') and moving:
+        if args.case.startswith('opening_') and moving:
             result['yaw_change'] = math.atan2(math.sin(moving[-1]['odom'][2]-initial_odom[2]),
                                               math.cos(moving[-1]['odom'][2]-initial_odom[2]))
+        if args.case == 'opening_gap' and moving:
+            result.update(opening_gap_metrics(moving, 1. if args.wall_side == 'left' else -1., initial_odom))
         Path(args.output).write_text(json.dumps({'summary': result, 'records': records,
                                                'mode_history': mode_history}, indent=2)+'\n')
         print(json.dumps(result, indent=2))
         assert moving and result['min_sampled_clearance'] > .02, 'missing data or insufficient sampled clearance'
+        assert settled_after_release(stopped, released, settled_at), \
+            'release did not produce fresh stopped command and odometry samples'
+        assert result['max_speed'] <= .800001, 'assisted speed limit exceeded'
         if args.case == 'door':
             check_door_modes(result['modes'])
+            assert 'door_clear' in sequence, 'door tail-clear phase was not observed'
+            assert sequence.index('door_align') < sequence.index('door_pass') < sequence.index('door_clear'), \
+                'door phases were observed out of order'
             assert any(r['world_axle'][0] > .6 for r in moving), 'rear axle did not clear doorway'
         elif args.case == 'front':
+            assert 'front_stop' in result['modes'], 'front obstacle stop mode was not observed'
             assert abs(moving[-1].get('cmd_vel', [99])[0]) < .02, 'did not stop at front wall'
+        elif args.case == 'wall':
+            check_wall_result(result)
         elif args.case == 'override':
             assert any(r['t'] > 13 and r.get('cmd_vel', [0, 0])[1] < -.3
                        and r.get('status', {}).get('mode') == 'override' for r in moving), 'override not observed'
@@ -212,14 +308,13 @@ def main():
         elif args.case == 'opening_straight':
             assert 'opening_turn' not in result['modes'], 'opening captured a straight command'
             assert abs(result['yaw_change']) < .25, 'straight command turned into the opening'
-        else:
-            assert 'wall' in result['modes'] and result['max_speed'] > .6, 'wall speed did not recover'
+        elif args.case == 'opening_gap':
+            check_opening_gap_result(result, 1. if args.wall_side == 'left' else -1.)
     finally:
         try:
             command()
         finally:
-            node.destroy_node()
-            rclpy.shutdown()
+            rospy.signal_shutdown('probe complete')
 
 
 if __name__ == '__main__':

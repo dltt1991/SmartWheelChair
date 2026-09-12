@@ -1,0 +1,29 @@
+control_rate_hz: 10.0
+input_timeout: 0.25
+max_range: 5.0
+max_linear: 0.8
+max_angular: 0.65
+config_file: ''
+dune_checkpoint: ''
+robot:
+  kinematics: diff
+  max_speed: [0.8, 0.65]
+  max_acce: [1.0, 1.5]
+  # Rear axle frame envelope shared with independent guard: footplate x=.97,
+  # rear visual/sensor x=-.25, wheel/lidar outer edges y=+/- .40.
+  vertices: [[0.97, -0.40], [0.97, 0.40], [-0.25, 0.40], [-0.25, -0.40]]
+  length: 1.22
+  width: 0.80
+receding: 10
+step_time: 0.1
+ref_speed: 0.5
+device: cpu
+collision_threshold: 0.01
+ipath:
+  waypoints: [[0, 0, 0], [1, 0, 0]]
+  curve_style: line
+  min_radius: 0.8
+pan:
+  iter_num: 2
+  dune_max_num: 100
+  dune_checkpoint: ''

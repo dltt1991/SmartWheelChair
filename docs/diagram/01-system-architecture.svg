@@ -24,8 +24,8 @@
 <rect x="820" y="615" width="240" height="100" rx="10" fill="#0f172a"/>
 <rect x="820" y="615" width="240" height="100" rx="10" fill="#94a3b8" fill-opacity="0.13" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray=""/>
 <text x="40" y="48" font-size="26" fill="#f8fafc" text-anchor="start" font-weight="700">01  系统架构：由人给意图，由协调器发布最终指令</text>
-<text x="40" y="80" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">ROS 2 Jazzy + Gazebo · 仅局部共享控制 · 箭头表示主要数据流，省略桥接节点内部细节</text>
-<text x="48" y="317" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">ROS 2 控制层</text>
+<text x="40" y="80" font-size="15" fill="#94a3b8" text-anchor="start" font-weight="400">ROS Noetic + Gazebo 11 · 局部共享控制 · P3D 后轴测量经 relay 发布 odom</text>
+<text x="48" y="317" font-size="16" fill="#fbbf24" text-anchor="start" font-weight="600">ROS1 控制层</text>
 <text x="180.0" y="163" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">浏览器 / 键盘</text>
 <text x="180.0" y="187" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">摇杆、模式切换、后摄显示</text>
 <text x="560.0" y="163" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">Gazebo 传感与里程计</text>
@@ -39,9 +39,9 @@
 <text x="180.0" y="643" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">纯几何算法</text>
 <text x="180.0" y="667" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">墙线、开口、门洞路径</text>
 <text x="180.0" y="689" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">独立制动扫掠检查</text>
-<text x="560.0" y="643" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">Nav2 controller_server</text>
-<text x="560.0" y="667" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">MPPI 20 Hz · 60 × 0.05 s · 600 样本</text>
-<text x="560.0" y="689" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">滚动代价地图 8 × 8 m · 0.025 m</text>
+<text x="560.0" y="643" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">ROS1 局部路径跟踪器</text>
+<text x="560.0" y="667" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">20 Hz · 1 s 预测 · 135 组恒速候选</text>
+<text x="560.0" y="689" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">双侧扫描点 · 整车矩形检查</text>
 <text x="940.0" y="643" font-size="18" fill="#f8fafc" text-anchor="middle" font-weight="600">诊断与轨迹显示</text>
 <text x="940.0" y="667" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">status / reference</text>
 <text x="940.0" y="689" font-size="14" fill="#94a3b8" text-anchor="middle" font-weight="400">Gazebo 恒曲率预览</text>
@@ -52,10 +52,10 @@
 <text x="780" y="160" font-size="13" fill="#94a3b8" text-anchor="middle" font-weight="400">运动</text>
 <text x="790" y="375" font-size="16" fill="#34d399" text-anchor="start" font-weight="400">/cmd_vel</text>
 <text x="205" y="552" font-size="14" fill="#a78bfa" text-anchor="start" font-weight="400">调用几何与制动函数</text>
-<text x="450" y="527" font-size="14" fill="#34d399" text-anchor="end" font-weight="400">FollowPath</text>
+<text x="450" y="527" font-size="14" fill="#34d399" text-anchor="end" font-weight="400">reference Path</text>
 <text x="450" y="551" font-size="13" fill="#34d399" text-anchor="end" font-weight="400">/unified_scan_*</text>
 <text x="450" y="574" font-size="13" fill="#34d399" text-anchor="end" font-weight="400">/speed_limit</text>
 <text x="669" y="549" font-size="14" fill="#60a5fa" text-anchor="start" font-weight="400">/cmd_vel_planned</text>
 <text x="810" y="552" font-size="14" fill="#94a3b8" text-anchor="start" font-weight="400">观测输出</text>
-<text x="40" y="786" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="400">辅助候选来源：普通前进用 MPPI；可行门洞用专用跟踪；倒车 / 退出 / 横墙使用受约束输入。</text>
+<text x="40" y="786" font-size="16" fill="#e2e8f0" text-anchor="start" font-weight="400">辅助候选来源：普通前进用 跟踪器；可行门洞用专用跟踪；倒车 / 退出 / 横墙使用受约束输入。</text>
 <text x="40" y="816" font-size="15" fill="#fb7185" text-anchor="start" font-weight="400">手动模式直接透传新鲜输入，不经过辅助限幅、平滑和制动检查；最终发布者仍是统一协调器。</text></svg>
