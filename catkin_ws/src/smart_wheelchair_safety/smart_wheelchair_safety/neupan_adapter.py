@@ -127,8 +127,14 @@ class NeuPANAdapter:
             trajectory = np.asarray(trajectory, dtype=float)
             if trajectory.ndim == 3:
                 trajectory = np.concatenate([x.T[:, :3] for x in trajectory], axis=0)
-            elif trajectory.ndim == 2 and trajectory.shape[0] >= 3 and trajectory.shape[1] != 2:
-                trajectory = trajectory[:2].T
+            elif trajectory.ndim == 2 and trajectory.shape[0] >= 3 and trajectory.shape[1] != 3:
+                trajectory = trajectory[:3].T
+            elif trajectory.ndim == 2 and trajectory.shape[1] == 2:
+                trajectory = np.column_stack((trajectory, np.zeros(len(trajectory))))
+            elif trajectory.size == 0:
+                trajectory = np.empty((0, 3))
+            else:
+                raise ValueError("invalid trajectory shape")
             if trajectory.size and not np.isfinite(trajectory).all():
                 raise ValueError("invalid trajectory")
             return self._clip(action), trajectory.reshape((-1, 3))
