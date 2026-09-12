@@ -48,6 +48,44 @@ class UnifiedNodeTest(unittest.TestCase):
     def tearDown(self):
         self.node.destroy_node()
 
+    def test_neupan_fresh_action_uses_existing_guard(self):
+        from geometry_msgs.msg import TwistStamped
+        self.node.use_neupan = True
+        self.node.accept_planned = True
+        self.node.active_reference_stamp = rospy.Time.now()
+        message = TwistStamped()
+        message.header.stamp = self.node.active_reference_stamp
+        message.twist.linear.x = .3
+        message.twist.angular.z = .1
+        self.node.on_neupan(message)
+        self.node.plan_time = 0.
+        self.node.last_tick = rospy.Time.now().to_sec()-.05
+        self.node.control()
+        self.assertGreater(self.commands[-1].linear.x, 0.)
+        self.assertGreater(self.commands[-1].angular.z, 0.)
+        with patch('smart_wheelchair_safety.unified_control_node.braking_clear', return_value=False):
+            self.node.control()
+        self.assertEqual(self.commands[-1].linear.x, 0.)
+
+    def test_neupan_rejects_wrong_reference_and_expired_action(self):
+        from geometry_msgs.msg import TwistStamped
+        self.node.use_neupan = True
+        self.node.accept_planned = True
+        self.node.active_reference_stamp = rospy.Time.now()
+        message = TwistStamped()
+        message.twist.linear.x = .8
+        self.node.on_neupan(message)
+        self.assertFalse(self.node.neupan_fresh(time.monotonic()))
+        message.header.stamp = self.node.active_reference_stamp
+        self.node.on_neupan(message)
+        self.assertTrue(self.node.neupan_fresh(time.monotonic()))
+        self.node.neupan_time -= 1.
+        self.assertFalse(self.node.neupan_fresh(time.monotonic()))
+        self.node.control()
+        self.assertNotEqual(self.node.reason, 'planner_timeout')
+        self.node.cancel()
+        self.assertFalse(self.node.neupan_fresh(time.monotonic()))
+
     def test_door_search_runs_outside_control_interpreter(self):
         from smart_wheelchair_safety.unified_geometry import collision_aware_door_reference
         worker_pid = self.node.door_plan_executor.submit(os.getpid).result(timeout=10.)

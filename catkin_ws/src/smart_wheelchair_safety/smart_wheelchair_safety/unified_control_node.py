@@ -101,6 +101,13 @@ class UnifiedControlNode:
         self.assist_enabled = True
         self.mode_neutral_seen = True
         self.accept_planned = False
+        self.use_neupan = bool(rospy.get_param('~use_neupan', False))
+        self.neupan_action_timeout = float(rospy.get_param('~neupan_action_timeout', .25))
+        if not math.isfinite(self.neupan_action_timeout) or not 0 < self.neupan_action_timeout <= .25:
+            raise ValueError('neupan_action_timeout must be in (0, .25]')
+        self.neupan = np.zeros(2)
+        self.neupan_time = 0.
+        self.neupan_stamp = None
         self.override = False
         self.reason = 'starting'
         self.epoch = 0
@@ -133,6 +140,7 @@ class UnifiedControlNode:
             for topic, message, callback in (
                 ('cmd_vel_raw', Twist, self.on_raw),
                 ('cmd_vel_planned', TwistStamped, self.on_planned),
+                ('neupan/cmd_vel', TwistStamped, self.on_neupan),
                 ('assist_enabled', Bool, self.on_assist_enabled),
                 ('odom', Odometry, self.on_odom))
         ]
@@ -245,6 +253,26 @@ class UnifiedControlNode:
             return
         self.planned = np.array([msg.twist.linear.x, msg.twist.angular.z])
         self.plan_time = time.monotonic()
+
+    def on_neupan(self, msg):
+        if (not self.use_neupan or not self.assist_enabled or not self.mode_neutral_seen
+                or not self.accept_planned or msg.header.stamp != self.active_reference_stamp
+                or not 0 <= rospy.Time.now().to_sec()-msg.header.stamp.to_sec() < self.neupan_action_timeout):
+            return
+        value = np.array([msg.twist.linear.x, msg.twist.angular.z], dtype=float)
+        if np.isfinite(value).all():
+            self.neupan = value
+            self.neupan_time = time.monotonic()
+            self.neupan_stamp = msg.header.stamp
+
+    def neupan_fresh(self, now=None):
+        now = time.monotonic() if now is None else float(now)
+        return (self.use_neupan and self.accept_planned and self.assist_enabled
+                and self.mode_neutral_seen and self.neupan_stamp is not None
+                and self.neupan_stamp == self.active_reference_stamp
+                and np.isfinite(self.neupan).all()
+                and 0 <= now-self.neupan_time < self.neupan_action_timeout
+                and 0 <= rospy.Time.now().to_sec()-self.neupan_stamp.to_sec() < self.neupan_action_timeout)
 
     def on_odom(self, msg):
         q = msg.pose.pose.orientation
@@ -711,6 +739,8 @@ class UnifiedControlNode:
         self.accept_planned = False
         self.active_reference_stamp = None
         self.planned[:] = 0.
+        self.neupan[:] = 0.
+        self.neupan_time = 0.
         self.plan_time = 0.
 
     def _near_recovery(self, points):
@@ -949,12 +979,16 @@ class UnifiedControlNode:
             })))
             return
         planner_stale = now-self.plan_time >= .25 or not np.isfinite(self.planned).all()
+        neupan_fresh = self.neupan_fresh(now)
+        planner_stale = planner_stale and not neupan_fresh
         door_fallback = self.mode.startswith('door_') and self.door_path_feasible
         inputs_fresh = self.fresh()
         _, points = self.points() if inputs_fresh else (None, np.empty((0, 2)))
         if inputs_fresh:
             self.recovering = self._near_recovery(points)
         if self.recovering:
+            door_fallback = False
+        if neupan_fresh:
             door_fallback = False
         if not inputs_fresh:
             self.reason = 'stale_input'
@@ -969,6 +1003,8 @@ class UnifiedControlNode:
                 if self.door_plan_request is not None and not self.door_plan_request[0].done():
                     desired *= .2
                 self.reason = 'clearance_recovery'
+            elif neupan_fresh and self.raw[0] > .02 and not self.override and self.mode not in ('door_wait', 'front_stop'):
+                desired = self.neupan.copy()
             elif self.mode == 'door_wait':
                 desired = np.zeros(2)
             elif self.raw[0] <= .02 or self.override or self.mode == 'front_stop':
@@ -988,8 +1024,8 @@ class UnifiedControlNode:
                 desired = self._safe_door_command(points, stamp)
                 if planner_stale:
                     self.reason = 'planner_fallback'
-            elif now-self.plan_time < .25 and np.isfinite(self.planned).all():
-                desired = self.planned.copy()
+            elif neupan_fresh or (now-self.plan_time < .25 and np.isfinite(self.planned).all()):
+                desired = self.neupan.copy() if neupan_fresh else self.planned.copy()
                 if (self.mode == 'wall' and self.raw[0] > .02
                         and desired[0] < .02):
                     # The lattice follower can briefly select its zero sample

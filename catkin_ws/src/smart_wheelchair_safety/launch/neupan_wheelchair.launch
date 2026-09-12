@@ -1,4 +1,9 @@
 <launch>
-  <rosparam command="load" file="$(find smart_wheelchair_safety)/config/neupan_wheelchair.yaml"/>
-  <node pkg="smart_wheelchair_safety" type="neupan_wheelchair_node" name="neupan_wheelchair_node" output="screen"/>
+  <arg name="dune_checkpoint" default=""/>
+  <arg name="config_file" default="$(find smart_wheelchair_safety)/config/neupan_wheelchair.yaml"/>
+  <node pkg="smart_wheelchair_safety" type="neupan_wheelchair_node" name="neupan_wheelchair_node" output="screen">
+    <rosparam command="load" file="$(arg config_file)"/>
+    <param name="config_file" value="$(arg config_file)"/>
+    <param name="dune_checkpoint" value="$(arg dune_checkpoint)"/>
+  </node>
 </launch>
