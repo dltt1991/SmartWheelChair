@@ -7,5 +7,20 @@ config_file: ''
 dune_checkpoint: ''
 robot:
   kinematics: diff
-  length: 1.1
-  width: 0.72
+  max_speed: [0.8, 0.65]
+  max_acce: [1.0, 1.5]
+  length: 0.95
+  width: 0.62
+  wheelbase: 0.66
+receding: 10
+step_time: 0.1
+ref_speed: 0.5
+device: cpu
+collision_threshold: 0.01
+ipath:
+  curve_style: reeds
+  min_radius: 0.8
+pan:
+  iter_num: 2
+  dune_max_num: 100
+  dune_checkpoint: ''

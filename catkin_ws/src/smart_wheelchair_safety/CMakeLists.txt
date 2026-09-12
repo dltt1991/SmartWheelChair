@@ -16,6 +16,8 @@ catkin_install_python(PROGRAMS
   nodes/neupan_wheelchair_node
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
+install(FILES config/neupan_wheelchair.yaml launch/neupan_wheelchair.launch
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 if(CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
