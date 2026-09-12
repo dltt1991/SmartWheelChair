@@ -13,6 +13,7 @@ catkin_install_python(PROGRAMS
   nodes/web_joystick_node
   nodes/unified_control_node
   nodes/odom_frame_relay
+  nodes/neupan_wheelchair_node
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

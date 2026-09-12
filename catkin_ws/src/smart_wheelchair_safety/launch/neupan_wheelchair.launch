@@ -1,0 +1,4 @@
+<launch>
+  <rosparam command="load" file="$(find smart_wheelchair_safety)/config/neupan_wheelchair.yaml"/>
+  <node pkg="smart_wheelchair_safety" type="neupan_wheelchair_node" name="neupan_wheelchair_node" output="screen"/>
+</launch>

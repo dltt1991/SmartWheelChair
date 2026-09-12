@@ -1,0 +1,11 @@
+control_rate_hz: 10.0
+input_timeout: 0.25
+max_range: 5.0
+max_linear: 0.8
+max_angular: 0.65
+config_file: ''
+dune_checkpoint: ''
+robot:
+  kinematics: diff
+  length: 1.1
+  width: 0.72
