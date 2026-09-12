@@ -1,5 +1,4 @@
 """Dependency-optional adapter around NeuPAN inference."""
-import math
 import os
 import time
 import numpy as np
@@ -86,7 +85,10 @@ class NeuPANAdapter:
             heading = np.arctan2(delta[:, 1], delta[:, 0])
             path4 = np.column_stack((p, heading, np.ones(len(p)))).T
             self.planner.set_initial_path([column.reshape(4, 1) for column in path4.T])
-            self.planner.reset()
+            # Preserve the optimizer velocity warm start across reference
+            # updates; only clear the endpoint latch from the previous path.
+            self.planner.ipath.arrive_flag = False
+            self.planner.info["arrive"] = False
 
     def _clip(self, action):
         a = np.asarray(action, dtype=float).reshape(-1)

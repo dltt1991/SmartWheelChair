@@ -1,9 +1,17 @@
 import unittest
+from types import SimpleNamespace
 import numpy as np
 from smart_wheelchair_safety.neupan_adapter import NeuPANAdapter
 
 
 class Planner:
+    def __init__(self):
+        self.ipath = SimpleNamespace(arrive_flag=True)
+        self.info = {"arrive": True}
+
+    def set_initial_path(self, path):
+        self.path = path
+
     def __call__(self, state, points, velocities=None):
         return np.array([[2.], [-2.]]), {"opt_state_list": [np.array([[0.], [0.], [0.]])]} 
 
@@ -19,6 +27,8 @@ class AdapterTest(unittest.TestCase):
         a = NeuPANAdapter(planner=Planner())
         a.set_initial_path([[0, 0], [0, 0], [1, 0]])
         self.assertEqual(a.initial_path.tolist(), [[0., 0.], [1., 0.]])
+        self.assertEqual(a.planner.path[0].shape, (4, 1))
+        self.assertFalse(a.planner.info["arrive"])
 
     def test_action_clipped_and_trajectory_returned(self):
         a = NeuPANAdapter(planner=Planner())
@@ -33,6 +43,33 @@ class AdapterTest(unittest.TestCase):
         action, trajectory = a.step([0, 0, 0], now=1.0)
         self.assertTrue(np.allclose(action, 0))
         self.assertEqual(len(trajectory), 0)
+
+    def test_nan_action_and_inference_failure_stop(self):
+        for action in ([float('nan'), 0], None):
+            class Invalid(Planner):
+                def __call__(self, state, points):
+                    if action is None:
+                        raise RuntimeError('failure')
+                    return action, {}
+            a = NeuPANAdapter(planner=Invalid())
+            a.set_obstacles([], now=10)
+            command, trajectory = a.step([0, 0, 0], now=10)
+            self.assertTrue(np.allclose(command, 0))
+            self.assertEqual(len(trajectory), 0)
+            self.assertIn('inference failed', a.reason)
+
+    def test_missing_config_does_not_import_or_train(self):
+        a = NeuPANAdapter()
+        self.assertFalse(a.available)
+
+    def test_planner_stop_overrides_action(self):
+        class Stopped(Planner):
+            def __call__(self, state, points):
+                return [.5, .1], {'stop': True}
+        a = NeuPANAdapter(planner=Stopped())
+        a.set_obstacles([], now=10)
+        command, _ = a.step([0, 0, 0], now=10)
+        self.assertTrue(np.allclose(command, 0))
 
 
 if __name__ == '__main__':
