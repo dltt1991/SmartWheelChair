@@ -132,7 +132,7 @@ class NeuPANWheelchairNode:
     def _publish(self, action, trajectory, stamp, reason):
         msg = TwistStamped()
         msg.header.stamp = stamp or rospy.Time()
-        msg.header.frame_id = "odom"
+        msg.header.frame_id = "rear_axle"
         msg.twist.linear.x = float(action[0])
         msg.twist.angular.z = float(action[1])
         self.cmd_pub.publish(msg)
@@ -185,12 +185,19 @@ class NeuPANWheelchairNode:
             self.adapter.set_obstacles(np.vstack((left[2], right[2])), now=now)
             self.adapter.set_initial_path(ref[2])
             action, traj = self.adapter.step(odom[2], now=now)
-            valid = self.adapter.reason == "ok" and self._fresh(vals)
+            # New sensor samples are normal during a solve. A cleared/replaced
+            # reference or invalid current input, however, revokes its authority.
+            with self._lock:
+                current = (self._reference, self._odom,
+                           self._scans['left'], self._scans['right'])
+                same_reference = self._reference is ref
+            fresh = self._fresh(vals) and self._fresh(current) and same_reference
+            valid = self.adapter.reason == "ok" and fresh
             self._publish(
                 action if valid else [0, 0],
                 traj if valid else [],
                 ref[1] if valid else None,
-                self.adapter.reason if valid else "stale result",
+                self.adapter.reason if fresh else "stale or replaced input",
             )
         except Exception as exc:
             self._publish([0, 0], [], None, "inference error: %s" % exc)

@@ -102,6 +102,21 @@ class NodeTest(unittest.TestCase):
         node.tick()
         self.assertEqual(self.results, [])
 
+    def test_genuine_stop_retains_valid_reference(self):
+        node = self.node()
+        node.adapter.step = lambda *a, **kw: (np.zeros(2), np.empty((0, 3)))
+        node.tick()
+        self.assertEqual(self.results[-1][2], 10.)
+
+    def test_reference_cleared_while_solving_rejects_motion(self):
+        node = self.node()
+        def solve(*args, **kwargs):
+            node._reference = None
+            return np.array([.4, .1]), np.empty((0, 3))
+        node.adapter.step = solve
+        node.tick()
+        self.assertIsNone(self.results[-1][2])
+
     def test_receipt_of_old_or_future_stamp_does_not_refresh_input(self):
         node = self.node()
         for stamp in (9.0, 11.0, 0.0):
