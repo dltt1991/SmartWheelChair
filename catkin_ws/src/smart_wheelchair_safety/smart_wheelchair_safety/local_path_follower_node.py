@@ -30,6 +30,7 @@ class LocalPathFollowerNode:
         if any(not math.isfinite(value) or value <= 0.0
                for value in (control_rate_hz, self.input_timeout_s)):
             raise ValueError('control_rate_hz and input_timeout_s must be finite and positive')
+        self.use_sim_time = bool(rospy.get_param('/use_sim_time', False))
         self._clock = clock
         self._lock = threading.Lock()
         self._reference = None
@@ -54,25 +55,28 @@ class LocalPathFollowerNode:
         self._timer = rospy.Timer(rospy.Duration(1.0 / control_rate_hz), self.publish)
 
     def on_reference(self, message):
+        received, received_ros = self._clock(), rospy.Time.now().to_sec()
         path = np.asarray([
             (pose.pose.position.x, pose.pose.position.y,
              _yaw(pose.pose.orientation))
             for pose in message.poses
         ], dtype=float).reshape((-1, 3))
         with self._lock:
-            self._reference = (self._clock(), path,
-                               rospy.Time(message.header.stamp.secs, message.header.stamp.nsecs))
+            self._reference = (received, path,
+                               rospy.Time(message.header.stamp.secs, message.header.stamp.nsecs), received_ros)
 
     def on_speed_limit(self, message):
+        received, received_ros = self._clock(), rospy.Time.now().to_sec()
         with self._lock:
-            self._speed_limit = (self._clock(), float(message.data))
+            self._speed_limit = (received, float(message.data), None, received_ros)
 
     def on_odom(self, message):
+        received, received_ros = self._clock(), rospy.Time.now().to_sec()
         pose = message.pose.pose
         odom = np.asarray((pose.position.x, pose.position.y,
                            _yaw(pose.orientation)), dtype=float)
         with self._lock:
-            self._odom = (self._clock(), odom)
+            self._odom = (received, odom, message.header.stamp, received_ros)
 
     def on_scan_left(self, message):
         self._store_scan(message, "left")
@@ -81,6 +85,7 @@ class LocalPathFollowerNode:
         self._store_scan(message, "right")
 
     def _store_scan(self, message, side):
+        received, received_ros = self._clock(), rospy.Time.now().to_sec()
         ranges = np.asarray(message.ranges, dtype=float)
         angles = (message.angle_min
                   + np.arange(len(ranges)) * message.angle_increment)
@@ -90,7 +95,20 @@ class LocalPathFollowerNode:
             LIDAR_Y_M[side] + ranges[valid] * np.sin(angles[valid]),
         ))
         with self._lock:
-            self._scans[side] = (self._clock(), points)
+            self._scans[side] = (received, points, message.header.stamp, received_ros)
+
+    def _fresh(self, inputs, now):
+        if not self.use_sim_time:
+            return all(value is not None and now-value[0] <= self.input_timeout_s for value in inputs)
+        ros_now = rospy.Time.now().to_sec()
+        for value, sensor in zip(inputs, (False, True, False, True, True)):
+            if value is None or not 0 <= ros_now-value[3] <= self.input_timeout_s:
+                return False
+            if value[2] is not None:
+                stamp = value[2].to_sec()
+                if stamp <= 0 or not (-.05 if sensor else 0.) <= ros_now-stamp <= self.input_timeout_s:
+                    return False
+        return True
 
     def publish(self, _event=None):
         now = self._clock()
@@ -98,8 +116,7 @@ class LocalPathFollowerNode:
             inputs = (self._reference, self._odom, self._speed_limit,
                       self._scans["left"], self._scans["right"])
             reference_stamp = self._reference[2] if self._reference else rospy.Time()
-            if any(value is None or now - value[0] > self.input_timeout_s
-                   for value in inputs):
+            if not self._fresh(inputs, now):
                 command = np.zeros(2)
             else:
                 path, odom, speed_limit, left, right = (

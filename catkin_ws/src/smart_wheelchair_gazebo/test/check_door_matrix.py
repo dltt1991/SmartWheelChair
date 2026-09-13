@@ -12,11 +12,15 @@ import math
 from pathlib import Path
 import subprocess
 import time
-import urllib.request
+import sys
 
 import numpy as np
 
 from test_m6_accessibility import DOORS, M6AccessibilityTest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]/'scripts'))
+from probe_unified_control import (send_command, wait_for_controller, motion_metrics,
+                                   record_control_status, control_event_window, control_event_metrics)
 
 
 def start_pose(door, direction, angle, lateral_offset=0.):
@@ -105,6 +109,11 @@ def inspect_sweep(poses, boxes, door, normal):
     return None, crossed
 
 
+def matrix_passed(summaries, expected):
+    return expected > 0 and len(summaries) == expected and all(
+        row['result'] == 'passed' for row in summaries)
+
+
 def main():
     import rosnode
     import rospy
@@ -132,11 +141,15 @@ def main():
     source_root = Path(__file__).parents[2]
     source_paths = [source_root/'smart_wheelchair_safety'/'smart_wheelchair_safety'/name
                     for name in ('unified_control_node.py', 'unified_geometry.py',
-                                 'local_path_follower.py', 'local_path_follower_node.py')]
+                                 'local_path_follower.py', 'local_path_follower_node.py',
+                                 'neupan_adapter.py', 'neupan_wheelchair_node.py')]
     source_paths += [Path(__file__), source_root/'smart_wheelchair_gazebo'/'models'/'smart_wheelchair'/'model.sdf']
+    source_paths += [source_root/'../../scripts/probe_unified_control.py']
+    source_paths += [source_root/'smart_wheelchair_safety'/'config'/'neupan_wheelchair.yaml']
     hashes = {str(p.relative_to(source_root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in source_paths}
+    expected = len(args.doors)*len(args.directions)*len(args.angles)
     (args.output/'manifest.json').write_text(json.dumps(dict(
-        expected=len(args.doors)*len(args.directions)*len(args.angles),
+        expected=expected,
         angles=args.angles, directions=args.directions, doors=args.doors,
         timeout=args.timeout, lateral_offset=args.lateral_offset,
         pose_margin=.02, sweep_step=.005, sources=hashes), indent=2))
@@ -148,6 +161,7 @@ def main():
     data = {}
     poses = []
     refs = []
+    status_events = []
 
     def odom(msg):
         p, q = msg.pose.pose.position, msg.pose.pose.orientation
@@ -157,23 +171,22 @@ def main():
         poses.append(pose)
 
     rospy.Subscriber('/odom', Odometry, odom, queue_size=100)
+    rospy.Subscriber('/cmd_vel_raw', Twist, lambda m: data.update(
+        cmd_vel_raw=[m.linear.x, m.angular.z], raw_received=time.monotonic()), queue_size=10)
     rospy.Subscriber('/cmd_vel', Twist, lambda m: data.update(
         cmd=[m.linear.x, m.angular.z], cmd_received=time.monotonic()), queue_size=10)
     rospy.Subscriber('/shared_control/status', String,
-                     lambda m: data.update(status=json.loads(m.data)), queue_size=10)
+                     lambda m: record_control_status(data, status_events, json.loads(m.data)), queue_size=100)
     rospy.Subscriber('/shared_control/reference', RosPath,
                      lambda m: refs.append([(p.pose.position.x, p.pose.position.y,
                          2*math.atan2(p.pose.orientation.z, p.pose.orientation.w)) for p in m.poses]), queue_size=1)
     for side in ('left', 'right'):
         rospy.Subscriber('/scan_'+side, LaserScan, lambda m, side=side: data.update(
-            {side: {'stamp': m.header.stamp.to_sec(), 'ranges': list(m.ranges),
+            {side+'_received': time.monotonic(), side: {'stamp': m.header.stamp.to_sec(), 'ranges': list(m.ranges),
                     'min': m.angle_min, 'increment': m.angle_increment}}), queue_size=1)
 
     def command(y=0.):
-        req = urllib.request.Request('http://localhost:8090/cmd',
-            data=json.dumps(dict(x=0., y=y, client_id='door-matrix')).encode(),
-            headers={'Content-Type': 'application/json'})
-        urllib.request.urlopen(req, timeout=2).close()
+        send_command('door-matrix', y=y)
 
     children = []
     summaries = []
@@ -207,12 +220,7 @@ def main():
                                                          stdout=log, stderr=subprocess.STDOUT))
                     # New application nodes have no path, wall or door memory.
                     data.pop('status', None)
-                    ready = time.monotonic()+8.
-                    while time.monotonic() < ready and 'status' not in data:
-                        command()
-                        time.sleep(.1)
-                    if 'status' not in data:
-                        raise RuntimeError('fresh controller failed to start: '+case)
+                    wait_for_controller(data, command)
                     poses.clear()
                     refs.clear()
                     records, modes = [], []
@@ -222,6 +230,7 @@ def main():
                     hit = None
                     stopped_since = None
                     longest_stop = 0.
+                    status_events.clear()
                     started = time.monotonic()
                     result = 'timeout'
                     while time.monotonic()-started < args.timeout:
@@ -277,14 +286,25 @@ def main():
                     heading_error = data['pose'][2]-math.atan2(normal[1], normal[0])
                     if result == 'passed' and progress <= rear_extent(heading_error)+.10:
                         result = 'incomplete_clearance'
-                    summary = dict(case=case, result=result, elapsed=round(time.monotonic()-started, 3),
+                    raw_seen = any(r.get('raw_received', 0.) > started
+                                   and any(r.get('cmd_vel_raw', [])) for r in records)
+                    if not raw_seen:
+                        result = 'missing_raw_command'
+                    ended = time.monotonic()
+                    control_events = control_event_window(status_events, started, ended)
+                    summary = dict(raw_seen=raw_seen, case=case, result=result, elapsed=round(time.monotonic()-started, 3),
                                    modes=modes, final_pose=data['pose'], progress=progress,
                                    final_cmd=data['cmd'], final_measured=data['measured'],
                                    longest_stop=longest_stop, crossed_aperture=crossed_aperture,
-                                   comfort=comfort_scores(records))
+                                   comfort=comfort_scores(records), motion_metrics=motion_metrics(records))
+                    summary['control_event_metrics'] = control_event_metrics(control_events)
+                    summary['active_control_event_metrics'] = control_event_metrics(
+                        [event for event in control_events if event['monotonic'] < released])
+                    summary['control_event_window'] = dict(started=started, released=released, ended=ended)
                     summaries.append(summary)
                     (args.output/(case+'.json')).write_text(json.dumps(dict(summary=summary, records=records,
-                        poses=poses, references=refs, final_scans={k:data.get(k) for k in ('left','right')})))
+                        control_events=control_events, poses=poses, references=refs,
+                        final_scans={k:data.get(k) for k in ('left','right')})))
                     (args.output/'summary.json').write_text(json.dumps(summaries, indent=2))
                     print(json.dumps(summary), flush=True)
                     log.close()
@@ -295,8 +315,8 @@ def main():
             child.wait(timeout=10)
         rospy.signal_shutdown('matrix finished')
     passed = sum(r['result'] == 'passed' for r in summaries)
-    print('PASS {}/{} ({:.1%})'.format(passed, len(summaries), passed/max(1,len(summaries))), flush=True)
-    return 0 if summaries and passed/len(summaries) > .9 else 1
+    print('PASS {}/{} ({:.1%})'.format(passed, expected, passed/max(1,expected)), flush=True)
+    return 0 if matrix_passed(summaries, expected) else 1
 
 
 if __name__ == '__main__':

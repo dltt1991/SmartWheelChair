@@ -1,0 +1,18 @@
+{
+  "source": "development-wall-circle.json",
+  "t": 31.904,
+  "door": {
+    "center": [
+      1.5719447084690334,
+      1.3961993203220453
+    ],
+    "heading": -0.08258151061416474,
+    "width": 1.1339819052737883,
+    "entry_clearance": -1.4727661912910015
+  },
+  "raw": [
+    0.83333335,
+    0.42
+  ],
+  "description": "The same sustained turn cancels an active door then reacquires it despite missing its aperture."
+}

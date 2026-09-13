@@ -13,13 +13,12 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-import urllib.request
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT/'catkin_ws/src/smart_wheelchair_gazebo/test'))
-from check_door_matrix import overlaps
+from check_door_matrix import overlaps, send_command
 from test_m6_accessibility import M6AccessibilityTest
 
 
@@ -36,7 +35,8 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     args.output = args.output.resolve()
     sources = [ROOT/'catkin_ws/src/smart_wheelchair_safety/smart_wheelchair_safety'/name
-               for name in ('unified_control_node.py', 'unified_geometry.py', 'local_path_follower.py')]
+               for name in ('unified_control_node.py', 'unified_geometry.py', 'local_path_follower.py',
+                            'neupan_adapter.py', 'neupan_wheelchair_node.py')]
     sources += [Path(__file__).resolve(), ROOT/'scripts/probe_unified_control.py']
     fingerprints = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                     for path in sources}
@@ -47,10 +47,7 @@ def main():
         (snapshots/path.name).write_bytes(path.read_bytes())
     subprocess.run(['rosservice', 'call', '/gazebo/get_world_properties', '{}'],
                    check=True, stdout=subprocess.DEVNULL, timeout=15)
-    request = urllib.request.Request('http://localhost:8090/cmd',
-        data=json.dumps(dict(x=0., y=0., client_id='junction-matrix')).encode(),
-        headers={'Content-Type': 'application/json'})
-    urllib.request.urlopen(request, timeout=2).close()
+    send_command('junction-matrix')
     subprocess.run(['rosservice', 'call', '/gazebo/unpause_physics', '{}'],
                    check=True, stdout=subprocess.DEVNULL, timeout=10)
     for topic in ('/odom', '/scan_left', '/scan_right'):
@@ -87,7 +84,7 @@ def main():
                             result = subprocess.run(['python3', 'scripts/probe_unified_control.py', case,
                                 '--wall-side', side, '--approach-yaw-deg', str(angle), '--seconds', '20',
                                 '--forward-y', str(args.forward_y),
-                                '--output', str(output)], cwd=ROOT, stdout=probe_log, stderr=probe_log, timeout=65)
+                                '--output', str(output)], cwd=ROOT, stdout=probe_log, stderr=probe_log, timeout=95)
                             returncode = result.returncode
                         except subprocess.TimeoutExpired:
                             returncode = 124

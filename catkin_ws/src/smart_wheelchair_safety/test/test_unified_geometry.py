@@ -5,6 +5,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 import numpy as np
+from smart_wheelchair_safety import unified_geometry as g
 
 from smart_wheelchair_safety.unified_geometry import (
     Door, Opening, Segment, collision_aware_door_reference,
@@ -15,6 +16,26 @@ from smart_wheelchair_safety.unified_geometry import (
     transform_points, intended_front_door,
 )
 
+
+def dense_door_clearance(path, points):
+    # Independent 2.5 mm / 2.5 mrad oracle, no production clearance helper.
+    result = math.inf
+    for a, b in zip(path, path[1:]):
+        yaw = math.atan2(math.sin(b[2]-a[2]), math.cos(b[2]-a[2]))
+        count = max(2, math.ceil(np.linalg.norm(b[:2]-a[:2])/.0025)+1,
+                    math.ceil(abs(yaw)/.0025)+1)
+        for t in np.linspace(0., 1., count):
+            x, y = a[:2]+t*(b[:2]-a[:2])
+            theta = a[2]+t*yaw
+            dx, dy = points[:, 0]-x, points[:, 1]-y
+            px = math.cos(theta)*dx+math.sin(theta)*dy
+            py = -math.sin(theta)*dx+math.cos(theta)*dy
+            sx = np.maximum(-.25-px, px-.97)
+            sy = np.abs(py)-.4
+            distances = (np.hypot(np.maximum(sx, 0), np.maximum(sy, 0))
+                         + np.minimum(np.maximum(sx, sy), 0))
+            result = min(result, float(distances.min()))
+    return result
 
 class UnifiedGeometryTest(unittest.TestCase):
     def test_front_wall_turns_both_ways_and_rejects_blocked_sweep(self):
@@ -47,6 +68,20 @@ class UnifiedGeometryTest(unittest.TestCase):
                 from smart_wheelchair_safety.unified_geometry import footprint_clearance
                 self.assertGreater(np.min(footprint_clearance(
                     transform_points(capture['points'], pose, inverse=True))), .04)
+
+    def test_foreground_occlusion_does_not_make_a_background_wall_door(self):
+        capture = json.loads((Path(__file__).with_name('fixtures') /
+                              'outer_wall_occlusion_capture.json').read_text())
+        for side in (-1., 1.):
+            groups = [np.asarray(group)*[1., side] for group in capture['groups']]
+            lines = [line for group in groups for line in extract_opening_lines(group)]
+            for ordered in (lines, lines[::-1]):
+                with self.subTest(side=side, reversed=ordered is not lines):
+                    openings = find_openings(ordered, max_width=1.5)
+                    self.assertEqual(len(openings), 1, 'occluded background is not observed free space')
+                    self.assertAlmostEqual(openings[0].width, 1.1234767432, places=5)
+                    np.testing.assert_allclose(openings[0].center,
+                                               [1.7084971777, side*.9689253145], atol=1e-5)
 
     def test_short_contiguous_jamb_piece_cannot_enlarge_aperture(self):
         lines = [Segment((2., y0), (2., y1), math.pi/2, -2.)
@@ -366,17 +401,90 @@ class UnifiedGeometryTest(unittest.TestCase):
             door = Opening((1.6, side*.45), side*.18, 1., ())
             self.assertEqual(intended_front_door([door], .6, side*.30), door)
 
-    def test_oversteered_joystick_still_selects_current_side_front_door(self):
+    def test_far_door_cannot_capture_arc_that_turns_away_before_its_plane(self):
+        # Measured wall-following regression: the closest arc pose is still
+        # 2.28 m short of the door plane, then recedes instead of entering it.
+        for side in (-1., 1.):
+            door = Opening((4.08219, side*.75047), -side*.28981, 1.3434, ())
+            with self.subTest(side=side):
+                self.assertIsNone(intended_front_door(
+                    [door], .83333, side*.42, corridor_tolerance=.60))
+
+    def test_arc_may_turn_away_after_crossing_the_front_door_plane(self):
+        for side in (-1., 1.):
+            door = Opening((2.9, side*1.), side*.8, 1.4, ())
+            with self.subTest(side=side):
+                self.assertEqual(intended_front_door(
+                    [door], 1.2, side*.4, corridor_tolerance=.60), door)
+
+    def test_crossing_door_plane_outside_aperture_is_not_entry_intent(self):
+        # This previously passed on corridor tolerance although the arc
+        # crosses 1.17 m off-center, outside the 0.70 m half-aperture.
+        for side in (-1., 1.):
+            door = Opening((3.6, side*1.), side*.8, 1.4, ())
+            with self.subTest(side=side):
+                self.assertIsNone(intended_front_door(
+                    [door], 1.2, side*.4, corridor_tolerance=.60))
+
+    def test_oversteered_arc_cannot_capture_a_door_beyond_its_circle(self):
+        # This formerly accepted target caused a false capture: the persistent
+        # joystick circle falls over one metre short of the door plane.
         door = Opening((3.3168, 1.1490), .4428, 1.3008, ())
 
         selected = intended_front_door([door], .8977, .5182, corridor_tolerance=.60)
 
-        self.assertEqual(selected, door)
+        self.assertIsNone(selected)
+
+    def test_wall_following_cannot_capture_unreachable_door_at_horizon_boundary(self):
+        for side in (-1., 1.):
+            for x in (3.49, 3.4907612926, 3.51):
+                door = Opening((x, side*1.3861148429), -side*.1284125524, 1.4081023897)
+                with self.subTest(side=side, x=x):
+                    self.assertIsNone(intended_front_door(
+                        [door], .83333335, side*.42, corridor_tolerance=.60))
 
     def test_side_front_door_is_acquired_at_lidar_planning_range(self):
         door = Opening((3.75, -.27), math.radians(41.2), 1.23, ())
 
         self.assertEqual(intended_front_door([door], .5, 0., .35), door)
+
+    def test_captured_departing_arc_cannot_acquire_the_same_door(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        capture = json.loads((Path(__file__).with_name('fixtures') /
+                              'wall_door_recapture.json').read_text())
+        value = capture['door']
+        for side in (-1., 1.):
+            door = Opening((value['center'][0], side*value['center'][1]),
+                           side*value['heading'], value['width'])
+            v, w = capture['raw'][0], side*capture['raw'][1]
+            with self.subTest(side=side):
+                self.assertIs(active_aperture_targeted(door, v, w), False)
+                self.assertIsNone(intended_front_door([door], v, w, .60))
+
+    def test_captured_arc_must_be_able_to_clear_the_rear_after_entry(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        capture = json.loads((Path(__file__).with_name('fixtures') /
+                              'wall_incomplete_door_arc.json').read_text())
+        for case in capture['cases']:
+            value = case['door']
+            for side in (-1., 1.):
+                door = Opening((value['center'][0], side*value['center'][1]),
+                               side*value['heading'], value['width'])
+                v, w = case['raw'][0], side*case['raw'][1]
+                with self.subTest(t=case['t'], side=side):
+                    self.assertIs(active_aperture_targeted(door, v, w), False)
+                    self.assertIsNone(intended_front_door([door], v, w, .60))
+
+    def test_incomplete_door_arc_keeps_only_reachable_rear_clearance(self):
+        from smart_wheelchair_safety.unified_geometry import active_aperture_targeted
+        v, w = .83333335, .42
+        for side in (-1., 1.):
+            for penetration, expected in ((.28, False), (.30, True)):
+                door = Opening((v/w-penetration, side*1.2), 0., 1.48)
+                with self.subTest(side=side, penetration=penetration):
+                    self.assertIs(active_aperture_targeted(door, v, side*w), expected)
+                    self.assertEqual(intended_front_door([door], v, side*w, .60),
+                                     door if expected else None)
 
     def test_wall_capture_cannot_hide_a_side_front_narrow_door(self):
         door = Opening((1.63, 1.20), math.radians(69.), 1.22, ())
@@ -594,6 +702,20 @@ class UnifiedGeometryTest(unittest.TestCase):
         self.assertFalse(braking_clear([(1.4, 0.)], (0., 0.), (.8, 0.)))
         self.assertTrue(braking_clear([(2.5, 0.)], (0., 0.), (.8, 0.)))
 
+    def test_curvature_reversal_preserves_initial_front_and_rear_sweeps(self):
+        # Steering against measured yaw cannot erase the initial sweep. Check
+        # both travel directions and their reflected left/right counterparts.
+        for side in (-1., 1.):
+            with self.subTest(side=side):
+                self.assertFalse(braking_clear([(1.1, -side*.5)],
+                                               (.4, side*.6), (.4, -side*.6)))
+                self.assertTrue(braking_clear([(1.1, side*.5)],
+                                              (.4, side*.6), (.4, -side*.6)))
+                self.assertFalse(braking_clear([(-.4, side*.5)],
+                                               (-.3, side*.6), (-.3, -side*.6)))
+                self.assertTrue(braking_clear([(-.4, -side*.5)],
+                                              (-.3, side*.6), (-.3, -side*.6)))
+
     def test_stale_pose_includes_unreported_motion_before_braking(self):
         self.assertTrue(braking_clear([(1.95, 0.)], (.8, 0.), (.8, 0.)))
         self.assertFalse(braking_clear([(1.95, 0.)], (.8, 0.), (.8, 0.), state_age=.35))
@@ -643,6 +765,148 @@ class UnifiedGeometryTest(unittest.TestCase):
         path = arc_path(.5, .5, duration=2.)
         self.assertAlmostEqual(path[-1, 0], math.sin(1.), places=5)
         self.assertAlmostEqual(path[-1, 1], 1. - math.cos(1.), places=5)
+
+    def test_four_recorded_offset_failures_use_observed_inner_edges(self):
+        fixture = Path(__file__).with_name('fixtures')/'observed_door_inner_edges.json'
+        for row in json.loads(fixture.read_text()):
+            with self.subTest(case=row['case']):
+                opening = g.Opening(**row['opening'])
+                refined = g.refine_opening(opening, np.array(row['points']))
+                world = g.transform_points([refined.center], row['pose'])[0]
+                self.assertLess(refined.width, opening.width-.07)
+                self.assertAlmostEqual(refined.width, 1., delta=.002)
+                self.assertAlmostEqual(world[0], row['expected_world_x'], delta=.005)
+                self.assertEqual(refined.heading, opening.heading)
+
+    def test_single_side_support_only_shrinks_observed_edge(self):
+        opening = g.Opening((1., 0.), 0., 1.1, ())
+        points = np.array([[1., .45], [1.03, .45], [1.07, .45]])
+        refined = g.refine_opening(opening, points)
+        self.assertAlmostEqual(refined.width, 1.)
+        self.assertAlmostEqual(refined.center[1], -.05)
+        self.assertAlmostEqual(refined.center[1]-refined.width/2, -.55)
+
+    def test_no_widen_isolated_noise_far_plane_or_insufficient_support(self):
+        opening = g.Opening((1., 0.), 0., 1.1, ())
+        for points in ([], [[1., .2]], [[1., .45], [1.03, .45]],
+                       [[1., .45]]*3,
+                       [[1., .65], [1.03, .65], [1.07, .65]],
+                       [[1.5, .45], [1.53, .45], [1.57, .45]]):
+            with self.subTest(points=points):
+                self.assertEqual(g.refine_opening(opening, np.array(points)), opening)
+
+    def test_side_passages_and_wide_openings_are_unchanged(self):
+        points = np.array([[1., .45], [1.03, .45], [1.07, .45]])
+        for heading, width in ((np.pi/2, 1.1), (0., 2.)):
+            opening = g.Opening((1., 0.), heading, width, ())
+            self.assertEqual(g.refine_opening(opening, points), opening)
+
+    def test_offset_door_direct_path_reserves_full_swept_clearance(self):
+        cases = json.loads((Path(__file__).with_name('fixtures') /
+                            'offset_door_staging.json').read_text())
+        for row in cases:
+            with self.subTest(case=row['case']):
+                points = np.array(row['points'])
+                door = Opening(**row['door'])
+                direct = door_alignment_reference(door, 'align')
+                self.assertLess(dense_door_clearance(direct, points), .05)
+                with patch.object(g.heapq, 'heappop',
+                                  side_effect=AssertionError('unexpected lattice search')):
+                    route = collision_aware_door_reference(door, points)
+                self.assertIsNotNone(route)
+                self.assertGreater(dense_door_clearance(route, points), .06)
+
+
+    def test_observed_near_door_wins_over_more_centered_far_door(self):
+        records = json.loads((Path(__file__).with_name('fixtures')/'offset_door_selection.json').read_text())
+        for record in records:
+            for mirror in (1., -1.):
+                doors = [g.Opening((o['center_local'][0], mirror*o['center_local'][1]),
+                                          mirror*o['heading'], o['width'])
+                         for o in record['openings']]
+                near, far = doors
+                with self.subTest(case=record['case'], mirror=mirror):
+                    for door in doors:
+                        self.assertIs(g.intended_front_door([door], 2./3., 0.), door)
+                    for order in (doors, doors[::-1]):
+                        self.assertIs(g.intended_front_door(order, 2./3., 0.), near)
+
+    def test_near_door_without_crossing_intent_does_not_hide_far_door(self):
+        for mirror in (1., -1.):
+            near = g.Opening((1.3, mirror*.7), 0., 1.1)
+            far = g.Opening((4., 0.), 0., 1.1)
+            with self.subTest(mirror=mirror):
+                # Near passes broad corridor matching but misses the aperture.
+                self.assertIs(g.active_aperture_targeted(near, 2./3., 0.), False)
+                self.assertIsNone(g.intended_front_door([near], 2./3., 0.))
+                for order in ([near, far], [far, near]):
+                    self.assertIs(g.intended_front_door(order, 2./3., 0.), far)
+
+    def test_recorded_inward_update_matches_symmetrically(self):
+        for name in ('v10_far_opening_update.json', 'v10_se_far_opening_update.json'):
+            with self.subTest(fixture=name):
+                row = json.loads((Path(__file__).with_name('fixtures')/name).read_text())
+                old, new = Opening(**row['tracked']), Opening(**row['observed'])
+                self.assertGreater(old.width-new.width, .25)
+                self.assertTrue(opening_matches(old, new))
+                self.assertTrue(opening_matches(new, old))
+
+    def test_large_width_change_requires_stable_contained_narrow_aperture(self):
+        old = Opening((2., 0.), 0., 1.4)
+        for new in (Opening((2.031, 0.), 0., 1.), Opening((2., 0.), .031, 1.),
+                    Opening((2., .23), 0., 1.), Opening((2., 0.), 0., .9),
+                    Opening((2., 0.), 0., 1.7)):
+            with self.subTest(new=new):
+                self.assertFalse(opening_matches(old, new))
+                self.assertFalse(opening_matches(new, old))
+        self.assertTrue(opening_matches(old, Opening((2., .1), 0., 1.)))
+
+    def test_existing_small_width_matching_is_unchanged(self):
+        old = Opening((2., 0.), 0., 2.)
+        self.assertTrue(opening_matches(old, Opening((2.1, 0.), .1, 2.2)))
+        self.assertFalse(opening_matches(old, Opening((2.3, 0.), .1, 2.2)))
+        self.assertFalse(opening_matches(old, Opening((float('nan'), 0.), .1, 2.2)))
+
+
+class CrossingTests(unittest.TestCase):
+
+    def test_recorded_turn270_raw_hits_but_actual_arc_misses(self):
+        for mirror in (-1.0, 1.0):
+            door = g.Opening((2.2982257435645965, mirror * 0.5269919203496637), mirror * 1.236335296800013, 1.1227339375132526)
+            self.assertTrue(g.output_arc_targets_aperture(door, 1.6666667, mirror * 0.63))
+            self.assertFalse(g.output_arc_targets_aperture(door, 0.6998741735441372, mirror * 0.029708163281233484))
+
+    def test_straight_distant_door_has_no_time_horizon(self):
+        for distance in (1.3, 4.0, 40.0):
+            self.assertTrue(g.output_arc_targets_aperture(g.Opening((distance, 0.1), 0.0, 1.1), 0.2, 0.0))
+        self.assertFalse(g.output_arc_targets_aperture(g.Opening((4.0, 1.0), 0.0, 1.1), 0.2, 0.0))
+        self.assertFalse(g.output_arc_targets_aperture(g.Opening((4.0, 0.0), 0.0, 1.1), -0.2, 0.0))
+
+    def test_first_crossing_is_used_not_later_reverse_crossing(self):
+        for mirror in (-1.0, 1.0):
+            self.assertTrue(g.output_arc_targets_aperture(g.Opening((1.0, mirror * (2 - math.sqrt(3))), 0.0, 1.1), 1.0, mirror * 0.5))
+            self.assertFalse(g.output_arc_targets_aperture(g.Opening((1.0, mirror * (2 + math.sqrt(3))), 0.0, 1.1), 1.0, mirror * 0.5))
+            self.assertFalse(g.output_arc_targets_aperture(g.Opening((2.0, mirror * 2.0), 0.0, 1.1), 1.0, mirror * 0.5))
+            self.assertFalse(g.output_arc_targets_aperture(g.Opening((2.1, mirror * 2.0), 0.0, 1.1), 1.0, mirror * 0.5))
+
+    def test_incomplete_three_second_arc_can_still_target_far_door(self):
+        door = g.Opening((1.0, 2 - math.sqrt(3)), 0.0, 1.1)
+        self.assertTrue(g.output_arc_targets_aperture(door, 0.1, 0.05))
+
+    def test_nonfinite_inputs_are_rejected_before_trigonometry(self):
+        for value in (float('inf'), float('-inf'), float('nan')):
+            for door, v, w, tolerance in ((g.Opening((1., 0.), value, 1.), .2, .1, .25),
+                                          (g.Opening((value, 0.), 0., 1.), .2, .1, .25),
+                                          (g.Opening((1., 0.), 0., value), .2, .1, .25),
+                                          (g.Opening((1., 0.), 0., 1.), value, .1, .25),
+                                          (g.Opening((1., 0.), 0., 1.), .2, value, .25),
+                                          (g.Opening((1., 0.), 0., 1.), .2, .1, value)):
+                self.assertFalse(g.output_arc_targets_aperture(door, v, w, tolerance))
+
+    def test_circle_cannot_recapture_already_crossed_plane(self):
+        for mirror in (-1., 1.):
+            for x in (-1., 0.):
+                self.assertFalse(g.output_arc_targets_aperture(g.Opening((x, mirror*3.7), 0., 1.1), 1., mirror*.5))
 
 
 if __name__ == '__main__':

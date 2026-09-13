@@ -93,9 +93,54 @@ def angle_difference(first, second):
 
 
 def opening_matches(first, second):
-    return (np.linalg.norm(np.asarray(first.center)-second.center) <= .25
-            and abs(angle_difference(first.heading, second.heading)) <= .12
-            and abs(first.width-second.width) <= .25)
+    delta = np.asarray(first.center)-second.center
+    heading_difference = abs(angle_difference(first.heading, second.heading))
+    if not (np.linalg.norm(delta) <= .25 and heading_difference <= .12):
+        return False
+    if abs(first.width-second.width) <= .25:
+        return True
+    # A well-supported inward edge may remove more than 25 cm of an occluded
+    # initial gap. Associate only contained narrow apertures on the same plane;
+    # sorting by width keeps this relation symmetric for tracking lookups.
+    wider, narrower = sorted((first, second), key=lambda opening: -opening.width)
+    if not (.92 <= narrower.width <= wider.width <= 1.5) or heading_difference > .03:
+        return False
+    normal = np.array([math.cos(wider.heading), math.sin(wider.heading)])
+    tangent = np.array([-normal[1], normal[0]])
+    delta = np.asarray(narrower.center)-wider.center
+    return (abs(delta @ normal) <= .03
+            and abs(delta @ tangent) <= (wider.width-narrower.width)/2+.025)
+
+
+def refine_opening(opening, points):
+    """Tighten a frontal door with supported inner-edge returns near its plane.
+
+    The 16 cm window associates local jamb returns; it is not an assumed wall
+    thickness. Missing or sparse support leaves that edge unchanged. Existing
+    temporal confirmation still applies before a tracked path can be replaced.
+    """
+    if not (.92 <= opening.width <= 1.5 and math.cos(opening.heading) > DOOR_MIN_FORWARD_NORMAL):
+        return opening
+    points = np.asarray(points, dtype=float).reshape(-1, 2)
+    points = np.unique(points[np.isfinite(points).all(axis=1)], axis=0)
+    center = np.asarray(opening.center)
+    normal = np.array([math.cos(opening.heading), math.sin(opening.heading)])
+    tangent = np.array([-normal[1], normal[0]])
+    relative = points-center
+    along = relative @ tangent
+    near = np.abs(relative @ normal) <= .16
+    edges = [-opening.width/2, opening.width/2]
+    for index, sign in enumerate((-1, 1)):
+        candidates = along[near & (sign*along > 0.) & (np.abs(along) < opening.width/2)]
+        if not len(candidates):
+            continue
+        edge = float(candidates.max() if sign < 0 else candidates.min())
+        if np.count_nonzero(np.abs(candidates-edge) <= .01) >= 3:
+            edges[index] = edge
+    if edges == [-opening.width/2, opening.width/2]:
+        return opening
+    return Opening(tuple(center+sum(edges)/2*tangent), opening.heading,
+                   edges[1]-edges[0], opening.jambs)
 
 
 def find_openings(lines, min_width=.92, max_width=3.20, max_distance=4.5):
@@ -143,6 +188,23 @@ def find_openings(lines, min_width=.92, max_width=3.20, max_distance=4.5):
             upper_edge = upper[1][np.argmin(upper[1] @ tangent)]
             center = (lower_edge + upper_edge) / 2
             if center[0] <= 0. or np.linalg.norm(center) > max_distance:
+                continue
+            # A foreground wall can hide the middle of a continuous background
+            # wall. Its two visible pieces do not establish a free aperture.
+            for k, third in enumerate(lines):
+                if k in (i, j):
+                    continue
+                start = np.asarray(third.start)
+                edge = np.asarray(third.end)-start
+                matrix = np.column_stack((center, -edge))
+                if abs(np.linalg.det(matrix)) < 1e-6:
+                    continue
+                fraction, along = np.linalg.solve(matrix, start)
+                if (0. < fraction < 1. and 0. <= along <= 1.
+                        and abs((1.-fraction)*center @ left_normal) > .06):
+                    occupied = True
+                    break
+            if occupied:
                 continue
             crossing = math.copysign(1., (first_plane+second_plane)/2.) * left_normal
             openings.append(Opening(tuple(center), math.atan2(crossing[1], crossing[0]),
@@ -249,6 +311,40 @@ def arc_path(v, w, duration=3., steps=41):
     return np.column_stack((v / w * np.sin(yaw), v / w * (1 - np.cos(yaw)), yaw))
 
 
+def output_arc_targets_aperture(door, v, w, corridor_tolerance=.25):
+    """Check the first forward plane crossing of a constant output, without a horizon."""
+    cx, cy = door.center
+    if not np.isfinite([v, w, cx, cy, door.heading, door.width, corridor_tolerance]).all() or v <= 0.:
+        return False
+    nx, ny = math.cos(door.heading), math.sin(door.heading)
+    plane = cx*nx + cy*ny
+    if plane <= 0.:
+        return False
+    if abs(w) < 1e-6:
+        if v*nx <= 0. or plane/(v*nx) <= 0.:
+            return False
+        x, y = plane/nx, 0.
+    else:
+        radius = v/w
+        a, b = radius*nx, -radius*ny
+        value = (plane-radius*ny)/abs(radius)
+        if abs(value) >= 1.:
+            return False  # No crossing, including a tangent touch.
+        phase = math.atan2(b, a)
+        angle = math.asin(value)
+        crossings = []
+        for root in (angle-phase, math.pi-angle-phase):
+            theta = math.copysign(1., w)*(math.copysign(1., w)*root % (2*math.pi))
+            if theta/w > 1e-9 and v*(nx*math.cos(theta)+ny*math.sin(theta)) > 1e-9:
+                crossings.append(theta/w)
+        if not crossings:
+            return False
+        theta = w*min(crossings)
+        x, y = radius*math.sin(theta), 2*radius*math.sin(theta/2)**2
+    lateral = -(x-cx)*ny + (y-cy)*nx
+    return abs(lateral) <= door.width/2 + corridor_tolerance
+
+
 def intended_front_door(openings, v, w, corridor_tolerance=.25):
     matches = []
     for opening in openings:
@@ -261,14 +357,22 @@ def intended_front_door(openings, v, w, corridor_tolerance=.25):
         path = arc_path(max(v, .1), w, duration=duration,
                         steps=81 if duration > 3. else 41)[:, :2]
         normal = np.array([math.cos(opening.heading), math.sin(opening.heading)])
+        if abs(w) >= 1e-6:
+            radius = v/w
+            # The full joystick circle must reach rear clearance. Checking
+            # only sampled poses made unreachable doors selectable when the
+            # matching horizon shortened from seven seconds to three.
+            if radius*normal[1] - center @ normal + abs(radius) < .29:
+                continue
         tangent = np.array([-normal[1], normal[0]])
         relative = path-center
         across, along = relative@normal, relative@tangent
         closest = int(np.argmin(np.abs(across)))
         progress = abs(across[0])-abs(across[closest])
         miss = abs(along[closest])
-        if progress >= .25 and miss <= opening.width/2+corridor_tolerance:
-            matches.append(((miss, np.linalg.norm(center)), opening))
+        if (progress >= .25 and miss <= opening.width/2+corridor_tolerance
+                and active_aperture_targeted(opening, v, w) is not False):
+            matches.append(((np.linalg.norm(center), miss), opening))
     return min(matches, key=lambda item: item[0], default=(None, None))[1]
 
 
@@ -277,7 +381,9 @@ def active_aperture_targeted(door, v, w):
 
     No acquisition range/progress filters or speed floor apply to an active
     door. An arc that cannot reach the plane, or starts beyond it, is
-    inconclusive. This is intent only, not a footprint safety check.
+    inconclusive. An entry that cannot reach rear clearance is departure,
+    even if the sampled horizon ends before it turns back. This is intent
+    only, not a footprint safety check.
     """
     normal = np.array([math.cos(door.heading), math.sin(door.heading)])
     tangent = np.array([-normal[1], normal[0]])
@@ -286,6 +392,10 @@ def active_aperture_targeted(door, v, w):
     hits = np.flatnonzero((across[:-1] < 0.) & (across[1:] >= 0.))
     if across[0] >= 0. or not len(hits):
         return None
+    if abs(w) >= 1e-6:
+        radius = v/w
+        if radius*normal[1] - np.asarray(door.center) @ normal + abs(radius) < .29:
+            return False
     start = int(hits[0])
     fraction = -across[start] / (across[start+1]-across[start])
     entry = along[start] + fraction*(along[start+1]-along[start])
@@ -407,7 +517,7 @@ def collision_aware_door_reference(door, obstacles, margin=.045):
                 round(state[2]/.10))
 
     direct = door_alignment_reference(door, 'align')
-    if all(clear((x, y, yaw, 0.)) for x, y, yaw in direct[1:]):
+    if reference_is_clear(direct, all_obstacles, margin=max(margin, .06)):
         return direct
 
     # A differential-drive chair can turn while stationary in a clear staging
@@ -783,7 +893,13 @@ def _braking_envelope(points, command, measured, margin, reaction, deceleration,
     # The pose is at acquisition, not receipt. Delay includes its unreported
     # travel; padding bounds acceleration uncertainty accrued during that age
     # and its displacement through the remaining transition/braking horizon.
-    activity = min(1., max(abs(measured[0])/.4, abs(measured[1])/.65))
+    # Acceleration must reserve uncertainty for the speed being requested,
+    # not just the slower measured speed. Otherwise a certified acceleration
+    # can leave no certified stop as soon as that new speed is measured.
+    # Bounded recovery compares against stopping from the same acquired state;
+    # preserve that shared uncertainty baseline for its separation checks.
+    speeds = np.abs(measured) if independent else np.maximum(np.abs(command), np.abs(measured))
+    activity = min(1., max(speeds[0]/.4, speeds[1]/.65))
     uncertainty_rate = activity*(deceleration + 1.05*.8)
     margin += uncertainty_rate * state_age * (reaction+transition_time+stop_time)
     margin += .5 * uncertainty_rate * state_age**2
@@ -798,14 +914,11 @@ def _braking_envelope(points, command, measured, margin, reaction, deceleration,
         t = np.arange(len(brake))[:, None]*dt
         brake = np.sign(command)*np.maximum(0., np.abs(command)-t*rates)
     velocities = np.vstack((delay, transition, brake))
-    poses = [(0., 0., 0.)]
-    x = y = yaw = 0.
-    for v, w in velocities:
-        x += v * math.cos(yaw + w * dt / 2) * dt
-        y += v * math.sin(yaw + w * dt / 2) * dt
-        yaw += w * dt
-        poses.append((x, y, yaw))
-    poses = np.asarray(poses)
+    poses = np.zeros((len(velocities)+1, 3))
+    poses[1:, 2] = np.cumsum(velocities[:, 1]*dt)
+    midpoint = poses[:-1, 2] + velocities[:, 1]*dt/2
+    poses[1:, 0] = np.cumsum(velocities[:, 0]*np.cos(midpoint)*dt)
+    poses[1:, 1] = np.cumsum(velocities[:, 0]*np.sin(midpoint)*dt)
     padding = margin + dt * .5 * np.max(np.abs(velocities[:, 0]) + 1.05 * np.abs(velocities[:, 1]))
     dx = points[None, :, 0] - poses[:, None, 0]
     dy = points[None, :, 1] - poses[:, None, 1]

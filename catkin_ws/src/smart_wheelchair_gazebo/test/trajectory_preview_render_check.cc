@@ -274,17 +274,36 @@ int main(int argc, char **argv)
     Require(!scene->GetVisual("smart_wheelchair_door_detection_32"),
             "door display exceeded its 32-segment cap");
 
+    unsigned int rejectionCase = 0;
     const auto requireRejected = [&](geometry_msgs::PolygonStamped rejected, const std::string &label) {
-      doorMessage.header.stamp = ros::Time::now();
-      doors.publish(doorMessage);
-      const auto refreshEnd = ros::WallTime::now() + ros::WallDuration(.05);
-      while (ros::WallTime::now() < refreshEnd) step();
-      doors.publish(rejected);
-      const auto end = ros::WallTime::now() + ros::WallDuration(.05);
-      while (ros::WallTime::now() < end) step();
-      Require(door->GetVisible(), label + " input changed the active door display");
-      Require(door->WorldPose().Pos().Equal(doorPose.Pos(), 1e-6),
-              label + " input moved the active door display");
+      // Rendering runs at 10 Hz. A 50 ms sleep can leave the capped-door pose
+      // on screen; acknowledge a distinct baseline before sending bad input.
+      auto refresh = doorMessage;
+      const float offset = .25f * ++rejectionCase;
+      for (auto &point : refresh.polygon.points) point.x += offset;
+      const auto expected = doorPose.Pos() + ignition::math::Vector3d(offset, 0, 0);
+      const auto restored = [&]() {
+        return door->GetVisible() && door->WorldPose().Pos().Equal(expected, 1e-6);
+      };
+      const auto refreshEnd = ros::WallTime::now() + ros::WallDuration(2);
+      while (!restored() && ros::WallTime::now() < refreshEnd)
+      {
+        refresh.header.stamp = ros::Time::now();
+        doors.publish(refresh);
+        step();
+      }
+      Require(restored(), label + " baseline was not rendered before rejection check");
+      // Observe two render periods, still inside the 0.6 s door lifetime.
+      const auto end = ros::WallTime::now() + ros::WallDuration(.2);
+      while (ros::WallTime::now() < end)
+      {
+        if (label != "stale-stamp") rejected.header.stamp = ros::Time::now();
+        doors.publish(rejected);
+        step();
+        Require(door->GetVisible(), label + " input changed the active door display");
+        Require(door->WorldPose().Pos().Equal(expected, 1e-6),
+                label + " input moved the active door display");
+      }
     };
     auto rejected = doorMessage;
     rejected.polygon.points.pop_back();

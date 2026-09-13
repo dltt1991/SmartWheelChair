@@ -10,6 +10,9 @@
     <arg name="world_name" value="$(arg world)"/>
     <arg name="gui" value="$(arg gui)"/>
     <arg name="use_sim_time" value="true"/>
+    <!-- Avoid delivering every 1 kHz physics tick to each Python ROS node. -->
+    <arg name="use_clock_frequency" value="true"/>
+    <arg name="pub_clock_frequency" value="100"/>
   </include>
 
   <node pkg="smart_wheelchair_safety" type="local_path_follower_node" name="local_path_follower_node" output="screen">

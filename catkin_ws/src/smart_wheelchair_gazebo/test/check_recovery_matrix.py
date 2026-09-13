@@ -12,9 +12,9 @@ import math
 from pathlib import Path
 import subprocess
 import time
-import urllib.request
 import numpy as np
-from check_door_matrix import overlaps
+from check_door_matrix import overlaps, send_command, wait_for_controller, motion_metrics
+from probe_unified_control import record_control_status, control_event_window, control_event_metrics
 from test_m6_accessibility import DOORS, M6AccessibilityTest
 
 
@@ -50,6 +50,7 @@ def main(case_factory=cases, extra_sources=()):
     from geometry_msgs.msg import Twist
     from nav_msgs.msg import Odometry
     from std_msgs.msg import String
+    from sensor_msgs.msg import LaserScan
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--angles', nargs='+', type=float, default=[-60, -30, 0, 30, 60, 150, 180, -150])
     parser.add_argument('--seconds', type=float, default=6.)
@@ -69,6 +70,9 @@ def main(case_factory=cases, extra_sources=()):
     sources += [Path(__file__).parents[1]/'models/smart_wheelchair/model.sdf',
                 Path(__file__).parents[1]/'worlds/m6_room.world',
                 Path(__file__).parents[2]/'smart_wheelchair_safety/smart_wheelchair_safety/local_path_follower.py']
+    sources += [Path(__file__).resolve().parents[4]/'scripts/probe_unified_control.py']
+    sources += [Path(__file__).parents[2]/'smart_wheelchair_safety/smart_wheelchair_safety'/name
+                for name in ('neupan_adapter.py', 'neupan_wheelchair_node.py')]
     sources += list(extra_sources)
     hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in sources}
     (args.output/'manifest.json').write_text(json.dumps(dict(angles=args.angles, seconds=args.seconds, hashes=hashes,
@@ -76,23 +80,28 @@ def main(case_factory=cases, extra_sources=()):
     rospy.init_node('recovery_matrix', disable_signals=True)
     rospy.wait_for_service('/gazebo/set_model_state', timeout=30.)
     place = rospy.ServiceProxy('/gazebo/set_model_state', SetModelState)
-    data = {}; poses = []
+    data = {}; poses = []; status_events = []
     def odom(m):
         p, q = m.pose.pose.position, m.pose.pose.orientation
         data.update(pose=[p.x, p.y, 2*math.atan2(q.z, q.w)],
-                    measured=[m.twist.twist.linear.x, m.twist.twist.angular.z], received=time.monotonic())
+                    measured=[m.twist.twist.linear.x, m.twist.twist.angular.z], received=time.monotonic(), odom_received=time.monotonic())
         poses.append(data['pose'])
     rospy.Subscriber('/odom', Odometry, odom, queue_size=100)
     rospy.Subscriber('/cmd_vel', Twist, lambda m: data.update(cmd=[m.linear.x, m.angular.z], cmd_received=time.monotonic()))
-    rospy.Subscriber('/shared_control/status', String, lambda m: data.update(status=json.loads(m.data)))
+    rospy.Subscriber('/shared_control/status', String,
+                     lambda m: record_control_status(data, status_events, json.loads(m.data)), queue_size=100)
+    rospy.Subscriber('/cmd_vel_raw', Twist, lambda m: data.update(
+        cmd_vel_raw=[m.linear.x, m.angular.z], raw_received=time.monotonic()))
+    for side in ('left', 'right'):
+        rospy.Subscriber('/scan_'+side, LaserScan, lambda m, side=side:
+                         data.update({side+'_received': time.monotonic()}), queue_size=1)
     def command(v=0.):
-        req = urllib.request.Request('http://localhost:8090/cmd', data=json.dumps(dict(x=0., y=v, client_id='recovery-matrix')).encode(), headers={'Content-Type':'application/json'})
-        urllib.request.urlopen(req, timeout=2).close()
+        send_command('recovery-matrix', y=v)
     def drive(v, seconds, history):
         until = time.monotonic()+seconds
         while time.monotonic() < until:
             command(v); time.sleep(.05)
-            history.append(dict(data))
+            history.append(dict(data, t=time.monotonic()))
     results = []; children = []; active = None
     try:
         for case in selected:
@@ -118,17 +127,27 @@ def main(case_factory=cases, extra_sources=()):
             for executable in ('local_path_follower_node', 'unified_control_node'):
                 children.append(subprocess.Popen(['rosrun', 'smart_wheelchair_safety', executable, '__name:='+executable], stdout=log, stderr=log))
             data.pop('status', None)
-            drive(0., 1.5, [])
-            assert 'status' in data, 'controller not ready'
+            wait_for_controller(data, command)
             poses.clear(); history = []
+            status_events.clear()
             start = data['pose'][:]
+            inward_started = time.monotonic()
             drive(-case['away']*.12, 1., history)
+            inward_raw_seen = any(h.get('raw_received', 0.) > inward_started
+                                 and h.get('cmd_vel_raw', [0.])[0]*case['away'] < 0. for h in history)
             inward_distance, inward_yaw = motion_extent(poses, start)
+            neutral_started = time.monotonic()
             drive(0., .4, history)
             retreat_start = data['pose'][:]
+            retreat_started = time.monotonic()
             drive(case['away']*.12, args.seconds, history)
+            retreat_raw_seen = any(h.get('raw_received', 0.) > retreat_started
+                                  and h.get('cmd_vel_raw', [0.])[0]*case['away'] > 0. for h in history)
             retreat_end = data['pose'][:]
+            released = time.monotonic()
             drive(0., .6, history)
+            settled_at = time.monotonic()
+            control_events = control_event_window(status_events, inward_started, settled_at)
             # Unlike normal door tests, starts are already inside the margin;
             # still require no uninflated conservative rectangle overlap.
             collision = None
@@ -145,12 +164,20 @@ def main(case_factory=cases, extra_sources=()):
             stopped = (time.monotonic()-data['received'] < .2 and time.monotonic()-data['cmd_received'] < .2
                        and max(abs(v) for v in data['cmd']) < .001 and abs(data['measured'][0]) < .01
                        and abs(data['measured'][1]) < .015)
-            result = dict(name=case['name'], passed=bool(inward_distance < .012 and inward_yaw < .02 and progress > .08 and not collision and stopped),
+            result = dict(name=case['name'], passed=bool(inward_raw_seen and retreat_raw_seen and inward_distance < .012 and inward_yaw < .02 and progress > .08 and not collision and stopped),
+                          inward_raw_seen=inward_raw_seen, retreat_raw_seen=retreat_raw_seen,
                           inward_distance=inward_distance, inward_yaw=inward_yaw, progress=progress, collision=collision, stopped=stopped,
                           statuses={reason: sum(h.get('status', {}).get('reason') == reason for h in history)
                                     for reason in {h.get('status', {}).get('reason') for h in history}},
-                          start=start, end=data['pose'])
-            (args.output/(case['name']+'.json')).write_text(json.dumps(dict(result=result, history=history, poses=poses), indent=2))
+                          start=start, end=data['pose'], motion_metrics=motion_metrics(history))
+            result['control_event_window'] = dict(started=inward_started, released=released, ended=settled_at)
+            result['control_phases'] = dict(inward_start=inward_started, neutral_start=neutral_started,
+                                            retreat_start=retreat_started, release_start=released, settled=settled_at)
+            result['control_event_metrics'] = control_event_metrics(control_events)
+            result['retreat_control_event_metrics'] = control_event_metrics(
+                [event for event in control_events if retreat_started <= event['monotonic'] < released])
+            (args.output/(case['name']+'.json')).write_text(json.dumps(dict(result=result, history=history,
+                poses=poses, control_events=control_events), indent=2))
             results.append(result)
             active = None
             (args.output/'summary.json').write_text(json.dumps(results, indent=2))

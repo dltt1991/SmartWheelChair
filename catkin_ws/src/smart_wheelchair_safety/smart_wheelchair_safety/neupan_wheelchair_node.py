@@ -57,9 +57,12 @@ class NeuPANWheelchairNode:
         self._clock = clock
         self._lock = threading.Lock()
         self._solve_lock = threading.Lock()
+        self._solve_requested = threading.Event()
+        self._shutdown = threading.Event()
         hz = float(rospy.get_param("~control_rate_hz", 10))
         self.input_timeout = float(rospy.get_param("~input_timeout", 0.25))
         self.max_range = float(rospy.get_param("~max_range", 5))
+        self.use_sim_time = bool(rospy.get_param('/use_sim_time', False))
         if any(
             not math.isfinite(v) or v <= 0
             for v in (hz, self.input_timeout, self.max_range)
@@ -79,11 +82,13 @@ class NeuPANWheelchairNode:
             max_range=self.max_range,
         )
         self._reference = self._odom = None
+        self._reference_speed = None
         self._scans = {"left": None, "right": None}
         self.cmd_pub = rospy.Publisher("/neupan/cmd_vel", TwistStamped, queue_size=10)
         self.plan_pub = rospy.Publisher("/neupan/plan", Path, queue_size=10)
         self.status_pub = rospy.Publisher("/neupan/status", String, queue_size=10)
         rospy.Subscriber("/shared_control/reference", Path, self.on_reference)
+        rospy.Subscriber("/shared_control/reference_speed", TwistStamped, self.on_reference_speed)
         rospy.Subscriber("/odom", Odometry, self.on_odom)
         rospy.Subscriber(
             "/unified_scan_left", LaserScan, lambda m: self.on_scan(m, "left")
@@ -91,29 +96,62 @@ class NeuPANWheelchairNode:
         rospy.Subscriber(
             "/unified_scan_right", LaserScan, lambda m: self.on_scan(m, "right")
         )
-        rospy.Timer(rospy.Duration(1 / hz), self.tick)
+        self._worker = threading.Thread(target=self._run_solver, name="neupan_solver", daemon=True)
+        self._worker.start()
+        rospy.on_shutdown(self.close)
+        rospy.Timer(rospy.Duration(1 / hz), self.request_solve)
+
+    def request_solve(self, _event=None):
+        # One pending bit coalesces callbacks while the single solver is busy.
+        self._solve_requested.set()
+
+    def _run_solver(self):
+        while True:
+            self._solve_requested.wait()
+            self._solve_requested.clear()
+            if self._shutdown.is_set():
+                return
+            self.tick()
+
+    def close(self):
+        self._shutdown.set()
+        self._solve_requested.set()
+        self._worker.join(timeout=1.)
 
     def on_reference(self, m):
+        received, received_ros = self._clock(), self._ros_now()
         path = reference_points(m)
         valid = (
             m.header.frame_id == "odom" and len(path) >= 2 and np.isfinite(path).all()
         )
         with self._lock:
-            self._reference = (self._clock(), m.header.stamp, path) if valid else None
+            self._reference = (received, m.header.stamp, path, received_ros, False) if valid else None
+        self.request_solve()
 
     def on_odom(self, m):
+        received, received_ros = self._clock(), self._ros_now()
         p = m.pose.pose
         stamp = m.header.stamp
         state = np.array([p.position.x, p.position.y, _yaw(p.orientation)])
         with self._lock:
             self._odom = (
-                (self._clock(), stamp, state)
+                (received, stamp, state, received_ros, True)
                 if m.header.frame_id == "odom" and np.isfinite(state).all()
                 else None
             )
 
+    def on_reference_speed(self, m):
+        received, received_ros = self._clock(), self._ros_now()
+        speed = float(m.twist.linear.x)
+        valid = (m.header.frame_id == "odom" and math.isfinite(speed)
+                 and 0. <= speed <= self.adapter.max_linear)
+        with self._lock:
+            self._reference_speed = ((received, m.header.stamp, speed, received_ros, False)
+                                     if valid else None)
+        self.request_solve()
+
     def on_scan(self, m, side):
-        received = self._clock()
+        received, received_ros = self._clock(), self._ros_now()
         try:
             if m.header.stamp.to_sec() <= 0:
                 raise ValueError("unstamped scan")
@@ -123,7 +161,7 @@ class NeuPANWheelchairNode:
             points = transform_points(scan_points(m, side, self.max_range), transform)
             if not np.isfinite(points).all():
                 raise ValueError("nonfinite transform")
-            value = (received, m.header.stamp, points)
+            value = (received, m.header.stamp, points, received_ros, True)
         except Exception:
             value = None
         with self._lock:
@@ -158,10 +196,12 @@ class NeuPANWheelchairNode:
             if value is None:
                 return False
             stamp = value[1].to_sec() if hasattr(value[1], "to_sec") else value[1]
+            receipt_age = ros_now-value[3] if self.use_sim_time else now-value[0]
+            future = .05 if self.use_sim_time and value[4] else 0.
             if (
                 stamp <= 0
-                or not 0 <= now - value[0] <= self.input_timeout
-                or not 0 <= ros_now - stamp <= self.input_timeout
+                or not 0 <= receipt_age <= self.input_timeout
+                or not -future <= ros_now - stamp <= self.input_timeout
             ):
                 return False
         return True
@@ -175,24 +215,30 @@ class NeuPANWheelchairNode:
                 self._scans["left"],
                 self._scans["right"],
             )
+            speed = self._reference_speed
         vals = (ref, odom, left, right)
         if not self._fresh(vals):
             self._publish([0, 0], [], None, "invalid input")
             return
+        if not self._fresh((speed,)) or speed[1] != ref[1]:
+            self._publish([0, 0], [], None, "invalid reference speed")
+            return
+        vals += (speed,)
         if not self._solve_lock.acquire(False):
             return
         try:
             self.adapter.set_obstacles(np.vstack((left[2], right[2])), now=now)
             self.adapter.set_initial_path(ref[2])
+            self.adapter.set_reference_speed(speed[2])
             action, traj = self.adapter.step(odom[2], now=now)
             # New sensor samples are normal during a solve. A cleared/replaced
             # reference or invalid current input, however, revokes its authority.
             with self._lock:
                 current = (self._reference, self._odom,
-                           self._scans['left'], self._scans['right'])
-                same_reference = self._reference is ref
+                           self._scans['left'], self._scans['right'], self._reference_speed)
+                same_reference = self._reference is ref and self._reference_speed is speed
             fresh = self._fresh(vals) and self._fresh(current) and same_reference
-            valid = self.adapter.reason == "ok" and fresh
+            valid = self.adapter.reason == "ok" and fresh and not self._shutdown.is_set()
             self._publish(
                 action if valid else [0, 0],
                 traj if valid else [],

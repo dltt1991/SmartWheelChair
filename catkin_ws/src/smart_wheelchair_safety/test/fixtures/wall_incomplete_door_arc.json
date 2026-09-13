@@ -1,0 +1,38 @@
+{
+  "source": "final/wall-calibrated.json",
+  "description": "Arcs enter the detected plane but cannot reach its rear-clear offset; the three-second horizon previously returned True.",
+  "cases": [
+    {
+      "t": 17.377,
+      "door": {
+        "center": [
+          1.8113128625475694,
+          1.1661965332270907
+        ],
+        "heading": -0.1785261766790016,
+        "width": 1.482932109556233,
+        "entry_clearance": -1.3337418854451928
+      },
+      "raw": [
+        0.83333335,
+        0.42
+      ]
+    },
+    {
+      "t": 31.954,
+      "door": {
+        "center": [
+          1.6889703929223865,
+          1.198693560008504
+        ],
+        "heading": -0.15980667258754688,
+        "width": 1.482932109556233,
+        "entry_clearance": -1.2999719571083699
+      },
+      "raw": [
+        0.83333335,
+        0.42
+      ]
+    }
+  ]
+}

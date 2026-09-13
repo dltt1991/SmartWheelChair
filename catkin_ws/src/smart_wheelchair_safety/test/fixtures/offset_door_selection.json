@@ -1,0 +1,68 @@
+[
+  {
+    "case": "ne_horizontal-out-+0",
+    "openings": [
+      {
+        "center_local": [
+          1.2894533965089496,
+          -0.25511447502035395
+        ],
+        "center_world": [
+          4.4966562946557085,
+          1.409666367886886
+        ],
+        "width": 1.1075121646739665,
+        "heading": -0.0008934692680960312,
+        "selected": false,
+        "selected_alone": true
+      },
+      {
+        "center_local": [
+          3.9921127593372923,
+          -0.18779062963495366
+        ],
+        "center_world": [
+          4.566920125161728,
+          -1.292918159147153
+        ],
+        "width": 1.1328960655977374,
+        "heading": -0.012933720244623862,
+        "selected": true,
+        "selected_alone": true
+      }
+    ]
+  },
+  {
+    "case": "sw_horizontal-out-+0",
+    "openings": [
+      {
+        "center_local": [
+          1.2896058593444872,
+          -0.24979837884234396
+        ],
+        "center_world": [
+          -4.501068916102021,
+          -1.4099647208391488
+        ],
+        "width": 1.2021433753498891,
+        "heading": -0.00048697862419461743,
+        "selected": false,
+        "selected_alone": true
+      },
+      {
+        "center_local": [
+          3.9920330124328944,
+          -0.18679424578023973
+        ],
+        "center_world": [
+          -4.565817399471942,
+          1.2924212013477092
+        ],
+        "width": 1.131026291023268,
+        "heading": -0.01047937197075905,
+        "selected": true,
+        "selected_alone": true
+      }
+    ]
+  }
+]

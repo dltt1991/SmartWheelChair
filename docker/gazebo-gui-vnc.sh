@@ -3,6 +3,8 @@ set -e
 
 export DISPLAY="${VNC_DISPLAY:-:1}"
 export LIBGL_ALWAYS_SOFTWARE=1
+export ROS_HOSTNAME="${ROS_HOSTNAME:-localhost}"
+export ROS_MASTER_URI="${ROS_MASTER_URI:-http://localhost:11311}"
 # llvmpipe otherwise consumes every Docker CPU and starves ROS callbacks.
 export LP_NUM_THREADS="${LP_NUM_THREADS:-2}"
 export MESA_GL_VERSION_OVERRIDE="${MESA_GL_VERSION_OVERRIDE:-3.3}"
@@ -52,14 +54,14 @@ desktop_pids+=($!)
 desktop_pids+=($!)
 x11vnc -display "$DISPLAY" -forever -shared -nopw -noxdamage -repeat -rfbport 5900 >/tmp/x11vnc.log 2>&1 &
 desktop_pids+=($!)
-websockify --web=/usr/share/novnc/ 0.0.0.0:6080 localhost:5900 >/tmp/novnc.log 2>&1 &
+python3 /workspaces/SmartWheelChair/docker/novnc_server.py >/tmp/novnc.log 2>&1 &
 desktop_pids+=($!)
 
 cd /workspaces/SmartWheelChair/catkin_ws
 catkin_make
 source devel/setup.bash
 
-args=(gui:=true)
+args=(gui:=true "$@")
 if [[ -n "${WHEELCHAIR_WORLD:-}" ]]; then
   args+=("world:=$WHEELCHAIR_WORLD")
 fi

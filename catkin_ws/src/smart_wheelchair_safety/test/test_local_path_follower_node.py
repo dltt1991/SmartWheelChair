@@ -17,10 +17,57 @@ if ROS_AVAILABLE:
 
 @unittest.skipUnless(ROS_AVAILABLE, "requires ROS")
 class LocalPathFollowerNodeTest(unittest.TestCase):
+    def test_sim_input_receipts_age_on_ros_time_but_hardware_uses_wall(self):
+        from geometry_msgs.msg import PoseStamped
+        from nav_msgs.msg import Odometry, Path
+        from sensor_msgs.msg import LaserScan
+        from std_msgs.msg import Float32
+        from smart_wheelchair_safety.local_path_follower_node import LocalPathFollowerNode
+        now=[100.]
+        with patch.object(rospy,'Timer'):
+            node=LocalPathFollowerNode(clock=lambda:now[0])
+        node.use_sim_time=True
+        path=Path();path.header.stamp=rospy.Time.from_sec(10.)
+        path.poses=[PoseStamped() for _ in range(31)]
+        for index,pose in enumerate(path.poses):
+            pose.pose.position.x=index*.1;pose.pose.orientation.w=1.
+        odom=Odometry();odom.header.stamp=path.header.stamp;odom.pose.pose.orientation.w=1.
+        scan=LaserScan(angle_increment=.1,ranges=[4.,4.,4.]);scan.header.stamp=path.header.stamp
+        with patch.object(rospy.Time,'now',return_value=rospy.Time.from_sec(10.)):
+            node.on_reference(path);node.on_odom(odom);node.on_speed_limit(Float32(data=.8))
+            node.on_scan_left(scan);node.on_scan_right(scan)
+        messages=[];node.publisher=SimpleNamespace(publish=messages.append)
+        now[0]=100.27
+        with patch.object(rospy.Time,'now',return_value=rospy.Time.from_sec(10.2)):node.publish()
+        self.assertGreater(messages[-1].twist.linear.x,0.)
+        with patch.object(rospy.Time,'now',return_value=rospy.Time.from_sec(10.251)):node.publish()
+        self.assertEqual(messages[-1].twist.linear.x,0.)
+        node.use_sim_time=False
+        with patch.object(rospy.Time,'now',return_value=rospy.Time.from_sec(10.2)):node.publish()
+        self.assertEqual(messages[-1].twist.linear.x,0.)
+        for subscription in node._subscriptions:subscription.unregister()
+
+    def test_sim_sensor_future_tolerance_is_bounded_and_reference_remains_strict(self):
+        import numpy as np
+        from smart_wheelchair_safety.local_path_follower_node import LocalPathFollowerNode
+        with patch.object(rospy,'Timer'):node=LocalPathFollowerNode(clock=lambda:100.)
+        node.use_sim_time=True
+        def value(stamp):return (100.,np.zeros(2),rospy.Time.from_sec(stamp),10.)
+        base=(value(10.),value(10.),(100.,.8,None,10.),value(10.),value(10.))
+        with patch.object(rospy.Time,'now',return_value=rospy.Time.from_sec(10.)):
+            for delta,expected in ((.008,True),(.049,True),(.051,False)):
+                inputs=list(base);inputs[1]=value(10.+delta)
+                self.assertEqual(node._fresh(inputs,100.),expected)
+            inputs=list(base);inputs[0]=value(10.008)
+            self.assertFalse(node._fresh(inputs,100.))
+            node.use_sim_time=False
+            self.assertTrue(node._fresh(inputs,100.),'hardware local follower keeps original receipt-only rule')
+        for subscription in node._subscriptions:subscription.unregister()
+
     def test_private_timing_parameters_are_used_and_validated(self):
         from smart_wheelchair_safety.local_path_follower_node import LocalPathFollowerNode
 
-        with patch.object(rospy, 'get_param', side_effect=[10.0, 0.1]), \
+        with patch.object(rospy, 'get_param', side_effect=[10.0, 0.1, False]), \
                 patch.object(rospy, 'Timer') as timer:
             node = LocalPathFollowerNode()
         self.assertAlmostEqual(timer.call_args[0][0].to_sec(), 0.1)

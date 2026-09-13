@@ -9,6 +9,7 @@ class NeuPANAdapter:
                  max_linear=0.8, max_angular=0.65, action_timeout=0.25,
                  max_range=5.0, body_radius=0.0, planner_kwargs=None):
         self.max_linear = float(max_linear)
+        self.reference_speed = self.max_linear
         self.max_angular = float(max_angular)
         self.action_timeout = float(action_timeout)
         self.max_range = float(max_range)
@@ -80,7 +81,10 @@ class NeuPANAdapter:
         if len(p):
             # Preserve explicit headings, including turns at the same position.
             p = p[np.r_[True, np.linalg.norm(np.diff(p, axis=0), axis=1) > 1e-6]]
-        self.initial_path = p
+        if (p.shape == self.initial_path.shape
+                and np.allclose(p, self.initial_path, rtol=0., atol=1e-8)):
+            return
+        self.initial_path = p.copy()
         if self.planner is not None and hasattr(self.planner, "set_initial_path") and len(p):
             # NeuPAN expects [x, y, heading, gear] columns.
             if p.shape[1] == 2:
@@ -94,13 +98,21 @@ class NeuPANAdapter:
             self.planner.ipath.arrive_flag = False
             self.planner.info["arrive"] = False
 
+    def set_reference_speed(self, speed):
+        speed = float(speed)
+        if not np.isfinite(speed) or not 0. <= speed <= self.max_linear:
+            raise ValueError("reference speed outside configured linear limit")
+        if self.planner is not None:
+            self.planner.set_reference_speed(speed)
+        self.reference_speed = speed
+
     def _clip(self, action):
         a = np.asarray(action, dtype=float).reshape(-1)
         if a.size != 2 or not np.isfinite(a).all():
             raise ValueError("invalid action")
         v = float(a[0]) if len(a) else 0.0
         w = float(a[1]) if len(a) > 1 else 0.0
-        return np.array([np.clip(v, -self.max_linear, self.max_linear),
+        return np.array([np.clip(v, -self.reference_speed, self.reference_speed),
                          np.clip(w, -self.max_angular, self.max_angular)])
 
     def step(self, state, now=None):
@@ -114,6 +126,17 @@ class NeuPANAdapter:
             state3 = np.asarray(state, dtype=float).reshape(3, 1)
             if not np.isfinite(state3).all():
                 raise ValueError("state must be finite")
+            ipath = getattr(self.planner, "ipath", None)
+            if len(self.initial_path) and hasattr(ipath, "cur_curve"):
+                # Upstream resets to index 0 for each new path and searches
+                # only ten points by XY. Locate the remaining path globally,
+                # using heading too so co-located pivot poses can progress.
+                start = ipath.point_index
+                remaining = np.asarray(ipath.cur_curve[start:])[:, :3, 0]
+                delta = remaining-state3[:, 0]
+                delta[:, 2] = np.arctan2(np.sin(delta[:, 2]), np.cos(delta[:, 2]))
+                ipath.point_index = start+int(np.argmin(
+                    np.sum(delta[:, :2]**2, axis=1)+(.2*delta[:, 2])**2))
             # Upstream NeuPAN is callable and returns (action, info).
             action, info = self.planner(state3, self.obstacles.T if len(self.obstacles) else None)
             if not isinstance(info, dict):

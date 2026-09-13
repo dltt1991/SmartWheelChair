@@ -19,6 +19,11 @@ step_time: 0.1
 ref_speed: 0.5
 device: cpu
 collision_threshold: 0.01
+# Stop rewarding extra distance once the 10 cm optimizer clearance is met;
+# the wall-following reference independently targets a 12 cm body-edge gap.
+adjust:
+  d_min: 0.10
+  d_max: 0.10
 ipath:
   waypoints: [[0, 0, 0], [1, 0, 0]]
   curve_style: line
@@ -26,4 +31,3 @@ ipath:
 pan:
   iter_num: 2
   dune_max_num: 100
-  dune_checkpoint: ''

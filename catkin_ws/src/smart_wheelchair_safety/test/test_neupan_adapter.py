@@ -3,6 +3,11 @@ from types import SimpleNamespace
 import numpy as np
 from smart_wheelchair_safety.neupan_adapter import NeuPANAdapter
 
+try:
+    from neupan.blocks.initial_path import InitialPath
+except ImportError:
+    InitialPath = None
+
 
 class Planner:
     def __init__(self):
@@ -17,6 +22,57 @@ class Planner:
 
 
 class AdapterTest(unittest.TestCase):
+    def test_reference_speed_updates_planner_and_bounds_action(self):
+        planner = Planner()
+        planner.set_reference_speed = lambda speed: setattr(planner, 'ref_speed', speed)
+        a = NeuPANAdapter(planner=planner)
+        for speed in (.35, .8, 0.):
+            a.set_reference_speed(speed)
+            self.assertEqual(planner.ref_speed, speed)
+            a.set_obstacles([], now=10.)
+            action, _ = a.step([0., 0., 0.], now=10.)
+            self.assertEqual(action[0], speed)
+        for invalid in (-.1, float('nan'), float('inf'), .81):
+            with self.assertRaises(ValueError):
+                a.set_reference_speed(invalid)
+
+    @unittest.skipIf(InitialPath is None, 'requires the pinned NeuPAN runtime')
+    def test_real_upstream_reference_progress_and_stationary_turn(self):
+        class ReferencePlanner(Planner):
+            def __init__(self):
+                super().__init__()
+                self.ipath = InitialPath(10, .1, .5, SimpleNamespace(kinematics='diff', L=0.))
+
+            def set_initial_path(self, path):
+                self.ipath.set_initial_path(path)
+
+            def __call__(self, state, points):
+                self.ipath.check_arrive(state)
+                return np.zeros((2, 1)), {'opt_state_list': [state]}
+
+        a = NeuPANAdapter(planner=ReferencePlanner())
+        path = np.column_stack((np.linspace(0., 3., 121), np.zeros((121, 2))))
+        for x in (1.5, 1.6, 1.7):
+            a.set_initial_path(path.copy())
+            a.set_obstacles([], now=10.)
+            a.step([x, 0., 0.], now=10.)
+            self.assertGreaterEqual(a.planner.ipath.cur_point[0, 0], x-.03)
+        a.step([2.98, 0., 0.], now=10.)
+        self.assertTrue(a.planner.ipath.arrive_flag)
+        a.set_initial_path(path+1e-10)
+        self.assertTrue(a.planner.ipath.arrive_flag)
+        # A refreshed path must re-localize, including a changed travel heading.
+        path[:, 1] = .01
+        path[:, 2] = np.pi
+        a.set_initial_path(path)
+        a.step([2., .01, -np.pi], now=10.)
+        self.assertAlmostEqual(a.planner.ipath.cur_point[0, 0], 2.)
+        # Equal positions encode a turn, so XY-only nearest-point search stalls.
+        pivot = np.column_stack((np.zeros((51, 2)), np.linspace(0., 1., 51)))
+        a.set_initial_path(np.vstack((pivot, [[1., 0., 1.]])))
+        a.step([0., 0., .6], now=10.)
+        self.assertAlmostEqual(a.planner.ipath.cur_point[2, 0], .6)
+
     def test_filters_and_merges_points(self):
         a = NeuPANAdapter(planner=Planner(), max_range=2)
         a.set_obstacles([[1, 0], [np.nan, 0], [3, 0]])

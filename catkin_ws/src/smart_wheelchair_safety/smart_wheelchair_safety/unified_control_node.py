@@ -16,23 +16,27 @@ from std_msgs.msg import Bool, Float32, String
 from tf2_ros import Buffer, TransformBroadcaster, StaticTransformBroadcaster, TransformListener, TransformException
 
 from smart_wheelchair_safety.unified_geometry import (
-    LIDAR_X_M, LIDAR_Y_M, LIDAR_VIEW_DEG,
+    LIDAR_X_M, LIDAR_Y_M, LIDAR_VIEW_DEG, output_arc_targets_aperture,
     Opening, active_aperture_targeted, angle_difference, approach_path, arc_path, braking_clear,
     collision_aware_door_reference, door_alignment_reference, door_entry_clearance,
     extract_lines, extract_opening_lines, footprint_clearance,
-    find_openings, intended_front_door, intended_side_opening, opening_matches, transform_points,
+    find_openings, refine_opening, intended_front_door, intended_side_opening, opening_matches, transform_points,
     wall_reference, front_wall_reference, reference_is_clear,
 )
 
 
 DOOR_INTENT_CORRIDOR_TOLERANCE = .47
 DOOR_ENTRY_NOISE_TOLERANCE = .01
+DOOR_TRACKING_RESERVE = .01
+DOOR_PASS_SPEED = .15
 DOOR_CREEP_SPEED = .05
 DOOR_OBSTACLE_MEMORY_TIMEOUT = 1.5
 OPENING_TURN_TIMEOUT = 12.
 OPENING_TURN_REAR_CLEARANCE = .50
 REFERENCE_PERIOD = .2
 JERK_LIMITS = np.array([2.5, 4.0])
+# The approach limiter settles within J*dt^2/8; control caps dt at .1 s.
+DOOR_CAPTURE_SPEED_TOLERANCE = JERK_LIMITS[0]*.1**2/8
 
 
 class UnifiedControlNode:
@@ -59,8 +63,23 @@ class UnifiedControlNode:
         self.planned = np.zeros(2)
         self.output = np.zeros(2)
         self.acceleration = np.zeros(2)
+        self.reverse_slew_active = False
+        self.initial_plan_wait = None
         self.pose = None
         self.raw_time = self.odom_time = self.plan_time = 0.
+        self.use_sim_time = bool(rospy.get_param('/use_sim_time', False))
+        self.odom_ros_time = 0.
+        self.plan_ros_time = self.neupan_ros_time = 0.
+        self.clock_last_ros = 0.
+        self.clock_last_advance_wall = time.monotonic()
+        self.clock_stalled = False
+        self.raw_resume_wall = 0.
+        self.clock_watchdog_stop = threading.Event()
+        self.clock_watchdog_thread = None
+        self.latest_odom = self.consumed_odom = None
+        self.latest_raw = self.latest_raw_cancel = self.consumed_raw = None
+        self.latest_planned = self.consumed_planned = None
+        self.latest_neupan = self.consumed_neupan = None
         self.sensor_stale_since = None
         self.active_reference_stamp = None
         self.last_reference_stamp = rospy.Time()
@@ -69,6 +88,7 @@ class UnifiedControlNode:
         self.planning_scans = {}
         self.recovering = False
         self.door = None
+        self.pending_door_capture = None
         self.door_phase = None
         self.door_path = None
         self.door_rotation_index = 0
@@ -109,8 +129,10 @@ class UnifiedControlNode:
         self.neupan_time = 0.
         self.neupan_stamp = None
         self.override = False
+        self.override_handoff_time = 0.
         self.reason = 'starting'
         self.epoch = 0
+        self.last_clear_tick = None
         self.last_tick = rospy.Time.now().to_sec()
         self.tf = Buffer()
         self.listener = TransformListener(self.tf)
@@ -131,12 +153,16 @@ class UnifiedControlNode:
         self.reference = rospy.Publisher('shared_control/reference', Path, queue_size=10)
         self.door_detection_pub = rospy.Publisher('shared_control/door_detections', PolygonStamped, queue_size=1)
         self.limit_pub = rospy.Publisher('speed_limit', Float32, queue_size=10)
+        self.reference_speed_pub = rospy.Publisher('shared_control/reference_speed', TwistStamped, queue_size=10)
         self.scan_pubs = {side: rospy.Publisher(f'unified_scan_{side}', LaserScan, queue_size=10)
                           for side in ('left', 'right')}
-        self.publishers = [self.pub, self.status, self.reference, self.limit_pub, self.door_detection_pub,
+        self.publishers = [self.pub, self.status, self.reference, self.limit_pub, self.reference_speed_pub, self.door_detection_pub,
                            *self.scan_pubs.values()]
+        receivers = {'odom': self._receive_odom, 'cmd_vel_raw': self._receive_raw,
+                     'cmd_vel_planned': self._receive_planned, 'neupan/cmd_vel': self._receive_neupan}
         self.subscribers = [
-            rospy.Subscriber(topic, message, self._serialized(callback), queue_size=10)
+            rospy.Subscriber(topic, message, receivers.get(topic) or self._serialized(callback),
+                             queue_size=1 if topic == 'odom' else 10)
             for topic, message, callback in (
                 ('cmd_vel_raw', Twist, self.on_raw),
                 ('cmd_vel_planned', TwistStamped, self.on_planned),
@@ -153,6 +179,70 @@ class UnifiedControlNode:
         self.control_timer = rospy.Timer(
             rospy.Duration(.05), self._serialized(lambda _: self.control()))
 
+        if self.use_sim_time:
+            # ROS timers themselves stop with /clock; this final-output watchdog
+            # must run on an independent wall-clock wait.
+            self.clock_watchdog_thread = threading.Thread(
+                target=self._clock_watchdog_loop, name='sim_clock_watchdog', daemon=True)
+            self.clock_watchdog_thread.start()
+
+    def _clock_watchdog_loop(self):
+        while not self.clock_watchdog_stop.wait(.05):
+            self._clock_watchdog_tick()
+
+    def _clock_watchdog_tick(self, wall=None, ros=None):
+        if not self.use_sim_time:
+            return
+        with self.callback_lock:
+            # Sample after acquiring the state lock: queued snapshots can
+            # falsely report a freeze/rewind after control has already advanced.
+            wall = time.monotonic() if wall is None else wall
+            ros = rospy.Time.now().to_sec() if ros is None else ros
+            if self.stopped or (self.clock_last_ros <= 0. and ros <= 0. and not self.clock_stalled):
+                return
+            if ros > self.clock_last_ros:
+                self.clock_last_ros = ros
+                self.clock_last_advance_wall = wall
+                if self.clock_stalled:
+                    # Input received while the world was frozen cannot restart
+                    # motion by itself; require a fresh post-resume heartbeat.
+                    self.raw_time = 0.
+                    self.raw_resume_wall = wall
+                self.clock_stalled = False
+                return
+            rewind = ros < self.clock_last_ros
+            self.clock_last_ros = ros
+            if not self.clock_stalled and not rewind and wall-self.clock_last_advance_wall < .25:
+                return
+            self._stop_for_clock(wall, ros)
+
+    def _stop_for_clock(self, wall, ros, fault='clock_stalled', elapsed=None):
+        """Caller holds callback_lock; revoke once, publish zero on every fault."""
+        if not self.clock_stalled:
+            self.clock_stalled = True
+            self.cancel()
+            self.raw_time = 0.
+        self.output[:] = 0.
+        self.acceleration[:] = 0.
+        self.reason = 'stale_input'
+        self.pub.publish(Twist())
+        self.status.publish(String(data=json.dumps({
+            'control_stamp_s': ros, 'control_dt_s': 0., 'mode': self.mode,
+            'reason': self.reason, 'v': 0., 'w': 0., 'planner_source': 'stop',
+            'clock_stalled': True, 'clock_wall_age_s': wall-self.clock_last_advance_wall,
+            'clock_fault': fault, 'elapsed_s': elapsed})))
+
+    def _control_interval(self, stamp, preview=False):
+        elapsed = stamp-self.last_tick
+        if not self.use_sim_time:
+            return min(.1, max(.001, elapsed))
+        if preview and elapsed == 0.:
+            # Predict the next timer step without advancing state or authority.
+            return .05
+        if math.isfinite(elapsed) and .001-1e-9 <= elapsed < .25:
+            return elapsed
+        return None
+
     def parameter(self, name):
         return self.parameters[name]
 
@@ -160,16 +250,71 @@ class UnifiedControlNode:
         def invoke(*args):
             with self.callback_lock:
                 if not self.stopped:
+                    self._consume_odom()
+                    self._consume_raw()
+                    self._consume_planner_actions()
                     return callback(*args)
         return invoke
 
-    def on_raw(self, msg):
+    def _receive_raw(self, msg):
+        if self.stopped:
+            return
+        snapshot = (msg, time.monotonic())
+        if (msg.linear.x <= .02
+                or not math.isfinite(msg.linear.x) or not math.isfinite(msg.angular.z)):
+            # Publish cancellation first: a concurrent consumer must never
+            # replay an older forward input after observing this cancellation.
+            self.latest_raw_cancel = snapshot
+        self.latest_raw = snapshot
+
+    def _consume_raw(self):
+        if self.stopped:
+            return
+        latest, cancellation = self.latest_raw, self.latest_raw_cancel
+        for snapshot in (cancellation, latest):
+            if snapshot is None or snapshot is self.consumed_raw:
+                continue
+            if self.consumed_raw is not None and snapshot[1] <= self.consumed_raw[1]:
+                continue
+            self.consumed_raw = snapshot
+            self.on_raw(*snapshot)
+
+    def on_raw(self, msg, received=None):
+        received = time.monotonic() if received is None else received
+        # Preserve cancellation even when queued during a clock pause. A forward
+        # heartbeat, however, must have actually arrived after clock recovery.
+        if (self.use_sim_time and received <= self.raw_resume_wall
+                and msg.linear.x > .02 and math.isfinite(msg.linear.x)
+                and math.isfinite(msg.angular.z)):
+            return
+        previous_raw, previous_received = self.raw.copy(), self.raw_time
+        was_override = self.override
         self.raw = np.array([msg.linear.x, msg.angular.z])
-        self.raw_time = time.monotonic()
+        # Old cancellation still clears intent, but its nonzero reverse/spin
+        # component cannot become a fresh motion command after clock recovery.
+        self.raw_time = (0. if self.use_sim_time and received <= self.raw_resume_wall
+                         else received)
+        if not np.isfinite(self.raw).all():
+            self._clear_opening_turn()
+            self._clear_door()
+            self.cancel()
+            return
+        if self.pending_door_capture is not None:
+            tolerance = min(.60, DOOR_INTENT_CORRIDOR_TOLERANCE + .16*abs(self.raw[1]))
+            if (self.raw[0] <= .02 or self.pose is None
+                    or intended_front_door([self._local_opening(self.pending_door_capture)],
+                                           *self.raw, corridor_tolerance=tolerance) is None):
+                self.pending_door_capture = None
         if np.linalg.norm(self.raw) < .01:
             self.mode_neutral_seen = True
         if not self.assist_enabled or not self.mode_neutral_seen:
             return
+        if (np.isfinite(previous_raw).all() and previous_raw[0] <= .02 < self.raw[0]
+                and previous_received > self.raw_resume_wall
+                and 0 <= received-previous_received < self.parameter('command_timeout')
+                and self.active_reference_stamp is None and not self.accept_planned
+                and not self.clock_stalled and self.fresh()):
+            self.initial_plan_wait = (self.epoch, received)
         if self.raw[0] <= .02:
             self.wall_preference = 0
         elif abs(self.raw[1]) >= .12:
@@ -181,16 +326,10 @@ class UnifiedControlNode:
             self.front_blocked = False
             self.opening_candidates = []
             self.confirmed_openings = []
-        intended, _ = self._intended_door()
-        side_opening = None
-        if self.pose is not None and self.raw[0] > .02 and abs(self.raw[1]) >= .12:
-            local_openings = [self._local_opening(opening)
-                              for opening in self.confirmed_openings]
-            side_opening = intended_side_opening(
-                local_openings, math.copysign(1., self.raw[1]), *self.raw)
         door_cancelled = False
         if self.raw[0] <= .02:
             self._clear_door()
+            self.cancel()
         elif self.door is not None:
             local = self._local_opening(self.door)
             targeted = active_aperture_targeted(local, *self.raw)
@@ -210,14 +349,33 @@ class UnifiedControlNode:
                 self.door_away_since = time.monotonic()
             elif time.monotonic()-self.door_away_since >= .35:
                 self._clear_door()
+                self.cancel()
+                # The next reference timer may not run for another .2 s.
+                # Release door-mode ownership now so live input uses ordinary
+                # assisted slew; cancelled-path actions cannot reclaim it.
+                self.mode = 'manual'
                 door_cancelled = True
-        self.override = (door_cancelled
-                         or (self.door is None and intended is None
-                             and side_opening is None
-                             and self.wall_side * self.raw[1] < -.15)
-                         or (self.door is None and intended is None
-                             and side_opening is None
-                             and self.mode == 'override' and abs(self.raw[1]) > .25))
+        self.override = door_cancelled
+        if (not self.override and self.door is None
+                and (self.wall_side*self.raw[1] < -.15
+                     or (self.mode == 'override' and abs(self.raw[1]) > .25))):
+            # Straight heartbeats and an active door cannot enter override;
+            # only compute door intent when it can change this decision.
+            intended, _ = self._intended_door()
+            if intended is None:
+                side_opening = None
+                if self.pose is not None and self.raw[0] > .02 and abs(self.raw[1]) >= .12:
+                    local_openings = [self._local_opening(opening)
+                                      for opening in self.confirmed_openings]
+                    side_opening = intended_side_opening(
+                        local_openings, math.copysign(1., self.raw[1]), *self.raw)
+                self.override = side_opening is None
+        if self.override or self.raw[0] <= .02 or abs(self.raw[1]) <= .25:
+            self.override_handoff_time = 0.
+        elif was_override:
+            # Release reference ownership now, but retain live joystick control
+            # until a new accepted action can take over without a timeout gap.
+            self.override_handoff_time = time.monotonic()
 
     def on_assist_enabled(self, msg):
         enabled = bool(msg.data)
@@ -243,18 +401,47 @@ class UnifiedControlNode:
         self.wall_preference = 0
         self.wall_preview_heading = None
         self.override = False
+        self.override_handoff_time = 0.
         self.mode = 'manual' if enabled else 'manual_direct'
         self.pub.publish(Twist())
 
-    def on_planned(self, msg):
+    def _receive_planned(self, msg):
+        if not self.stopped:
+            self.latest_planned = (msg, time.monotonic(), rospy.Time.now().to_sec())
+
+    def _receive_neupan(self, msg):
+        if not self.stopped:
+            self.latest_neupan = (msg, time.monotonic(), rospy.Time.now().to_sec())
+
+    def _consume_planner_actions(self):
+        if self.stopped:
+            return
+        for name in ('planned', 'neupan'):
+            snapshot = getattr(self, 'latest_'+name)
+            if snapshot is None or snapshot is getattr(self, 'consumed_'+name):
+                continue
+            setattr(self, 'consumed_'+name, snapshot)
+            msg, received, received_ros = snapshot
+            timeout = self.neupan_action_timeout if name == 'neupan' else .25
+            ros_now = rospy.Time.now().to_sec()
+            age = ros_now-received_ros if self.use_sim_time else time.monotonic()-received
+            if (not 0 <= age < timeout
+                    or not 0 <= ros_now-msg.header.stamp.to_sec() < timeout):
+                continue
+            getattr(self, 'on_'+name)(msg, received, received_ros)
+
+    def on_planned(self, msg, received=None, received_ros=None):
         if (not self.assist_enabled or not self.mode_neutral_seen
                 or not self.accept_planned
                 or msg.header.stamp != self.active_reference_stamp):
             return
         self.planned = np.array([msg.twist.linear.x, msg.twist.angular.z])
-        self.plan_time = time.monotonic()
+        self.plan_time = time.monotonic() if received is None else received
+        self.plan_ros_time = rospy.Time.now().to_sec() if received_ros is None else received_ros
+        if np.isfinite(self.planned).all():
+            self.initial_plan_wait = None
 
-    def on_neupan(self, msg):
+    def on_neupan(self, msg, received=None, received_ros=None):
         if (not self.use_neupan or not self.assist_enabled or not self.mode_neutral_seen
                 or not self.accept_planned or msg.header.stamp != self.active_reference_stamp
                 or not 0 <= rospy.Time.now().to_sec()-msg.header.stamp.to_sec() < self.neupan_action_timeout):
@@ -262,8 +449,16 @@ class UnifiedControlNode:
         value = np.array([msg.twist.linear.x, msg.twist.angular.z], dtype=float)
         if np.isfinite(value).all():
             self.neupan = value
-            self.neupan_time = time.monotonic()
+            self.neupan_time = time.monotonic() if received is None else received
+            self.neupan_ros_time = rospy.Time.now().to_sec() if received_ros is None else received_ros
             self.neupan_stamp = msg.header.stamp
+            self.initial_plan_wait = None
+
+    def _plan_age(self, now=None):
+        # A replacement reference never renews this cached action's receipt.
+        if self.use_sim_time:
+            return rospy.Time.now().to_sec()-self.plan_ros_time
+        return (time.monotonic() if now is None else now)-self.plan_time
 
     def neupan_fresh(self, now=None):
         now = time.monotonic() if now is None else float(now)
@@ -271,13 +466,38 @@ class UnifiedControlNode:
                 and self.mode_neutral_seen and self.neupan_stamp is not None
                 and self.neupan_stamp == self.active_reference_stamp
                 and np.isfinite(self.neupan).all()
-                and 0 <= now-self.neupan_time < self.neupan_action_timeout
+                and 0 <= (rospy.Time.now().to_sec()-self.neupan_ros_time if self.use_sim_time
+                          else now-self.neupan_time) < self.neupan_action_timeout
                 and 0 <= rospy.Time.now().to_sec()-self.neupan_stamp.to_sec() < self.neupan_action_timeout)
 
-    def on_odom(self, msg):
+    def _receive_odom(self, msg):
+        # Never wait for the state-machine lock in the transport callback.
+        if not self.stopped:
+            self.latest_odom = (msg, time.monotonic(), rospy.Time.now().to_sec())
+
+    def _consume_odom(self):
+        snapshot = self.latest_odom
+        if self.stopped or snapshot is None or snapshot is self.consumed_odom:
+            return
+        # Do not clear latest: the receiver may replace it during consumption.
+        self.consumed_odom = snapshot
+        msg, received, received_ros = snapshot
+        now, ros_now = time.monotonic(), rospy.Time.now().to_sec()
+        receipt_age = ros_now-received_ros if self.use_sim_time else now-received
+        if (not 0 <= receipt_age < self.parameter('odom_timeout')
+                or (self.use_sim_time and now-received >= min(.25, self.parameter('command_timeout')))):
+            return
+        self.on_odom(msg, received, received_ros)
+
+    def on_odom(self, msg, received=None, received_ros=None):
         q = msg.pose.pose.orientation
         p = msg.pose.pose.position
-        age = (rospy.Time.now().to_sec() - msg.header.stamp.to_sec())
+        ros_now = rospy.Time.now().to_sec()
+        received_ros = ros_now if received_ros is None else received_ros
+        received = time.monotonic() if received is None else received
+        age = ros_now - msg.header.stamp.to_sec()
+        if not -.05 <= received_ros-msg.header.stamp.to_sec() <= self.parameter('odom_timeout'):
+            return
         values = [p.x, p.y, q.x, q.y, q.z, q.w, msg.twist.twist.linear.x, msg.twist.twist.angular.z]
         if not -.05 <= age <= self.parameter('odom_timeout') or not np.isfinite(values).all():
             return
@@ -286,7 +506,8 @@ class UnifiedControlNode:
         yaw = math.atan2(2*(q.w*q.z + q.x*q.y), 1-2*(q.y*q.y + q.z*q.z))
         self.pose = (p.x, p.y, yaw)
         self.measured = np.array([msg.twist.twist.linear.x, msg.twist.twist.angular.z])
-        self.odom_time = time.monotonic()
+        self.odom_time = received
+        self.odom_ros_time = received_ros
         self.odom_stamp = msg.header.stamp.to_sec()
         t = TransformStamped()
         t.header = msg.header
@@ -341,15 +562,38 @@ class UnifiedControlNode:
             if (self.stopped or not -.05 <= scan_age <= self.parameter('scan_timeout')
                     or received < self.scans.get(side, (0., None))[0]):
                 return
+            self._consume_odom()
+            self._consume_raw()
+            self._consume_planner_actions()
             self.scans[side] = (received, world)
             self.planning_scans[side] = world
             self.scan_pubs[side].publish(outgoing)
             now = time.monotonic()
-            if self.pose is not None and len(self.scans) == 2 and now-self.opening_observation_time >= .08:
-                groups, _ = self.points()
-                lines = [line for group in groups for line in extract_opening_lines(group)]
-                self._observe_openings(find_openings(lines))
-                self.opening_observation_time = now
+            if self.pose is None or len(self.scans) != 2 or now-self.opening_observation_time < .08:
+                return
+            groups, _ = self.points()
+            observation_pose = self.pose
+            epoch, generation = self.epoch, self.door_generation
+            scan_times = [stamp for stamp, _ in self.scans.values()]
+            # Reserve this observation before releasing the lock. A newer
+            # reservation supersedes an older extraction that finishes late.
+            self.opening_observation_time = now
+        lines = [line for group in groups for line in extract_opening_lines(group)]
+        observation_points = np.vstack(groups)
+        openings = [refine_opening(opening, observation_points) for opening in find_openings(lines)]
+        observed = [Opening(tuple(transform_points([opening.center], observation_pose)[0]),
+                            opening.heading+observation_pose[2], opening.width, ())
+                    for opening in openings]
+        with self.callback_lock:
+            scan_age = rospy.Time.now().to_sec()-msg.header.stamp.to_sec()
+            if (self.stopped or self.pose is None or self.epoch != epoch
+                    or self.door_generation != generation or self.opening_observation_time != now
+                    or not -.05 <= scan_age <= self.parameter('scan_timeout')
+                    or any(time.monotonic()-stamp >= self.parameter('scan_timeout') for stamp in scan_times)):
+                return
+            # Odometry can advance during extraction. Preserve acquisition
+            # geometry in world coordinates before using the current pose.
+            self._observe_openings([self._local_opening(opening) for opening in observed])
 
     def _world_opening(self, opening):
         center = transform_points([opening.center], self.pose)[0]
@@ -374,7 +618,7 @@ class UnifiedControlNode:
                     and self.output[0] > .02 and self.measured[0] > .02
                     and door_entry_clearance(door) > .01):
                 direct = door_alignment_reference(door, 'align')
-                if reference_is_clear(direct, obstacles, margin=.045):
+                if reference_is_clear(direct, obstacles, margin=.06):
                     xy = transform_points(direct[:, :2], self.pose)
                     self.door_path = np.column_stack((xy, direct[:, 2]+self.pose[2]))
                     self.door_path_feasible = True
@@ -450,20 +694,40 @@ class UnifiedControlNode:
     def _pending_door_rotation(self):
         if self.door_path is None:
             return None
-        for index in range(self.door_rotation_index, len(self.door_path)-1):
+        # Translation samples are dense; only coincident positions can be a
+        # pivot. Find those in one array operation instead of scanning every
+        # path point repeatedly in the 20 Hz control callback.
+        segments = np.diff(self.door_path[self.door_rotation_index:, :2], axis=0)
+        pivots = np.flatnonzero(np.hypot(segments[:, 0], segments[:, 1]) <= 1e-6)
+        for index in pivots + self.door_rotation_index:
             first, second = self.door_path[index:index+2]
-            if np.linalg.norm(second[:2]-first[:2]) > 1e-6:
-                continue
             distance = float(np.linalg.norm(first[:2]-self.pose[:2]))
             error = angle_difference(second[2], self.pose[2])
-            if distance < .07:
+            if distance < .025:
                 self.door_rotation_index = index
-            if (index == self.door_rotation_index and distance < (.04 if index == 0 else .12)
-                    and abs(error) < .04 and abs(self.measured[1]) < .08):
+            if (index == self.door_rotation_index and distance < .04
+                    and abs(error) < .04 and abs(self.measured[1]) < .01
+                    and abs(self.output[1]) < 1e-6 and abs(self.acceleration[1]) < 1e-6):
                 self.door_rotation_index = index+1
                 continue
             return index, distance, error
         return None
+
+    def _door_rear_clear_progress(self, local):
+        normal = np.array([math.cos(self.door.heading), math.sin(self.door.heading)])
+        tangent = np.array([-normal[1], normal[0]])
+        points = np.asarray(self.door_obstacles, dtype=float).reshape(-1, 2)
+        if not np.isfinite(points).all():
+            return math.inf
+        relative = points - self.door.center
+        across, along = relative @ normal, relative @ tangent
+        # Use observed doorway depth, excluding distant or unrelated wall points.
+        jamb = ((np.abs(across) <= .3)
+                & (np.abs(np.abs(along) - self.door.width/2) <= .25))
+        depth = max(0., float(np.max(across[jamb]))) if np.any(jamb) else 0.
+        cosine, sine = math.cos(local.heading), math.sin(local.heading)
+        rear = max(.25*cosine, -.97*cosine) + .4*abs(sine)
+        return depth + rear + .04
 
     def _door_angular(self, linear):
         path_angular = self._door_preview_angular(linear)
@@ -472,11 +736,133 @@ class UnifiedControlNode:
         local = self._local_opening(self.door)
         normal = np.array([math.cos(local.heading), math.sin(local.heading)])
         progress = -np.asarray(local.center) @ normal
-        joystick_weight = float(np.clip(progress/.29, 0., 1.))
+        joystick_weight = float(np.clip(progress/self._door_rear_clear_progress(local), 0., 1.))
         return (1.-joystick_weight)*path_angular + joystick_weight*self.raw[1]
 
+    def _guard_state_age(self, stamp):
+        age = max(0., stamp-self.odom_stamp)
+        # In a narrow aperture, accelerating against a freshly received pose
+        # can consume the clearance needed by the next, older pose. Reserve
+        # the full accepted odometry delay before entering that speed state.
+        return max(age, self.parameter('odom_timeout')) if self.mode.startswith('door_') else age
+
+    def _assisted_slew(self, desired, dt, acceleration=None, linear_lower_bound=0.):
+        """Recover acceleration across changing targets and fixed speed bounds."""
+        previous_a = self.acceleration if acceleration is None else acceleration
+        limits = np.array([.5, .8])
+        lower = np.array([linear_lower_bound, -.65])
+        upper = np.array([self.parameter('max_speed'), .65])
+        delta = desired-self.output
+        approach = np.maximum(0., np.sqrt(2*JERK_LIMITS*np.abs(delta))
+                              -.5*JERK_LIMITS*dt)
+        # A timer may run as soon as .001 s later. Finish only when that
+        # next stationary step can also recover acceleration within jerk.
+        finish_limit = JERK_LIMITS*min(dt, .001)
+        approach = np.maximum(approach, np.minimum(np.abs(delta)/dt, finish_limit))
+        target_a = np.sign(delta)*np.minimum(limits, approach)
+        acceleration = previous_a+np.clip(
+            target_a-previous_a, -JERK_LIMITS*dt, JERK_LIMITS*dt)
+        # A positive acceleration needs a*dt now and at most a**2/(2*J)
+        # extra speed while subsequent steps recover it with maximum jerk.
+        # Reserve that space at physical bounds, independent of a changing target.
+        bound_a = lambda distance: (np.sqrt((JERK_LIMITS*dt)**2
+                                            +2*JERK_LIMITS*np.maximum(0., distance))
+                                    -JERK_LIMITS*dt)
+        acceleration = np.clip(acceleration, -bound_a(self.output-lower),
+                               bound_a(upper-self.output))
+        finish_a = delta/dt
+        finish = ((np.abs(finish_a) <= np.minimum(limits, finish_limit))
+                  & (np.abs(finish_a-previous_a) <= JERK_LIMITS*dt))
+        acceleration = np.where(finish, finish_a, acceleration)
+        command = np.clip(self.output+acceleration*dt, lower, upper)
+        # Safety bounds win for externally imposed, already infeasible states.
+        # Never leave a stored acceleration different from the emitted step.
+        return command, (command-self.output)/dt
+
+    def _door_wait_slew(self, dt, output=None, acceleration=None):
+        """Preview comfortable stopping without mutating the current command."""
+        output = self.output if output is None else output
+        previous_a = self.acceleration if acceleration is None else acceleration
+        limits = np.array([.5, .8])
+        finish_limit = JERK_LIMITS*min(dt, .001)
+        approach = np.maximum(0., np.sqrt(2*JERK_LIMITS*np.abs(output))-.5*JERK_LIMITS*dt)
+        approach = np.maximum(approach, np.minimum(np.abs(output)/dt, finish_limit))
+        target_a = -np.sign(output)*np.minimum(limits, approach)
+        acceleration = previous_a + np.clip(target_a-previous_a,
+                                                   -JERK_LIMITS*dt, JERK_LIMITS*dt)
+        # Before reaching zero reserve room to recover acceleration, including
+        # when the next control interval is shorter than this one.
+        toward_zero = (np.sqrt((JERK_LIMITS*dt)**2+2*JERK_LIMITS*np.abs(output))
+                       -JERK_LIMITS*dt)
+        bounded = np.sign(output)*np.maximum(
+            np.sign(output)*acceleration, -toward_zero)
+        # An imposed state may lack the future reserve yet still stop smoothly
+        # at this dt. Recover as fast as jerk permits; only actual zero crossing
+        # below takes precedence over comfort and makes admission fail.
+        acceleration = np.clip(bounded, previous_a-JERK_LIMITS*dt,
+                               previous_a+JERK_LIMITS*dt)
+        stop_a = -output/dt
+        finish = ((np.abs(stop_a) <= np.minimum(limits, finish_limit))
+                  & (np.abs(stop_a-previous_a) <= JERK_LIMITS*dt))
+        acceleration = np.where(finish, stop_a, acceleration)
+        command = output + acceleration*dt
+        # Initial acceleration may carry output away from zero while recovering.
+        # Never cross zero or restart from it. Infeasible imposed states remain
+        # visible as a jerk failure to the shared admission preview.
+        command = np.where((output == 0.) | (command*output < 0.), 0., command)
+        command = np.where(finish & (np.abs(command) < 1e-12), 0., command)
+        return command, (command-output)/dt
+
+    def _door_capture_is_clear(self, points):
+        """Check a bounded full wait stop before changing door ownership.
+
+        The first state uses actual odometry. Later states predict constant
+        command integration and ideal end-of-step tracking on the frozen cloud.
+        This admission screen does not replace the actual per-tick hard guard.
+        """
+        stamp = rospy.Time.now().to_sec()
+        dt = self._control_interval(stamp, preview=True)
+        if dt is None:
+            return False
+        kwargs = dict(margin=self.parameter('hard_margin'),
+                      reaction=self.parameter('reaction_time'),
+                      deceleration=self.parameter('braking_deceleration'),
+                      state_age=max(0., stamp-self.odom_stamp, self.parameter('odom_timeout')))
+        output, acceleration = self.output.copy(), self.acceleration.copy()
+        measured = self.measured.copy()
+        if not np.isfinite([output, acceleration, measured]).all():
+            return False
+        if not braking_clear(points, output, measured, **kwargs):
+            return False
+        for _ in range(80):
+            command, next_a = self._door_wait_slew(dt, output, acceleration)
+            if (np.any(np.abs(next_a) > np.array([.5, .8])+1e-9)
+                    or np.any(np.abs(next_a-acceleration) > JERK_LIMITS*dt+1e-9)
+                    or not braking_clear(points, command, measured, **kwargs)):
+                return False
+            if np.max(np.abs(command)) < 1e-10 and np.max(np.abs(next_a)) < 1e-10:
+                return True
+            v, w = command
+            theta = w*dt
+            pose = ([v*dt, 0., theta] if abs(w) < 1e-10 else
+                    [v/w*math.sin(theta), v/w*(1.-math.cos(theta)), theta])
+            points = transform_points(points, pose, inverse=True)
+            output, acceleration, measured = command, next_a, command
+            dt = .05
+        # Unsettled predictions cannot authorize a wait that has no checked end.
+        return False
+
+    def _door_near_entry(self):
+        if self.door is None:
+            return False
+        local = self._local_opening(self.door)
+        normal = np.array([math.cos(local.heading), math.sin(local.heading)])
+        # Start passage speed before the front reaches the jambs. At 1.6 m
+        # the .97 m front overhang still leaves .63 m to settle acceleration.
+        return np.asarray(local.center) @ normal < 1.6
+
     def _safe_door_command(self, points, stamp):
-        cruise = .35 if self.mode == 'door_align' else .55
+        cruise = .35 if self.mode == 'door_align' and not self._door_near_entry() else DOOR_PASS_SPEED
         high = min(self.raw[0], cruise)
         pending = self._pending_door_rotation()
         if pending is not None:
@@ -484,7 +870,7 @@ class UnifiedControlNode:
             if index == 0 and distance > .04:
                 return np.zeros(2)
             if index == self.door_rotation_index:
-                if distance > .12:
+                if distance > .04:
                     self.door_path = None
                     self.door_path_feasible = False
                     self.door_rotation_index = 0
@@ -492,25 +878,68 @@ class UnifiedControlNode:
                     self.cancel()
                     self.mode = 'door_wait'
                     return np.zeros(2)
-                angular = float(np.clip(1.5*error, -.4, .4)) if abs(self.measured[0]) < .025 else 0.
+                angular = (float(np.clip(1.5*error, -.4, .4))
+                           if abs(error) >= .04 and abs(self.measured[0]) < .025 else 0.)
                 return np.array([0., angular])
             # Arrive stopped at the checked pivot; do not carry translation
             # into a stationary rotation's swept-footprint guarantee.
             high = min(high, max(.025, math.sqrt(.04+max(0., distance-.05))-.2))
         best = np.zeros(2)
-        state_age = max(0., stamp-self.odom_stamp)
-        for _ in range(7):
-            speed = (best[0]+high)/2
+        state_age = self._guard_state_age(stamp)
+        # Keep tracking below the hard guard boundary so scan/pose updates do
+        # not turn small clearance changes into abrupt safety intervention.
+        planning_margin = self.parameter('hard_margin') + DOOR_TRACKING_RESERVE
+        for attempt in range(8):
+            speed = high if attempt == 0 else (best[0]+high)/2
             candidate = np.array([speed, self._door_angular(speed)])
-            if braking_clear(points, candidate, self.measured,
-                             margin=self.parameter('hard_margin'),
-                             reaction=self.parameter('reaction_time'),
-                             deceleration=self.parameter('braking_deceleration'),
-                             state_age=state_age):
+            clear = braking_clear(points, candidate, self.measured,
+                                  margin=planning_margin,
+                                  reaction=self.parameter('reaction_time'),
+                                  deceleration=self.parameter('braking_deceleration'),
+                                  state_age=state_age)
+            if clear:
+                # The next cycle must still be able to stop at the requested
+                # speed. A safe transition alone can consume that reserve as
+                # the newly measured speed renews the reaction-delay travel.
+                next_pose = arc_path(*candidate, duration=.05, steps=2)[-1]
+                next_points = transform_points(points, next_pose, inverse=True)
+                clear = braking_clear(next_points, np.zeros(2), candidate,
+                                      margin=planning_margin,
+                                      reaction=self.parameter('reaction_time'),
+                                      deceleration=self.parameter('braking_deceleration'),
+                                      state_age=state_age)
+            if clear:
+                if attempt == 0:
+                    return candidate
                 best = candidate
             else:
                 high = speed
         return best
+
+    def _safe_assisted_command(self, desired, points):
+        """Reserve one control cycle and the full odometry age before acceleration."""
+        if not len(points) or not np.any(desired):
+            return desired
+        kwargs = dict(margin=self.parameter('hard_margin')+.01,
+                      reaction=self.parameter('reaction_time'),
+                      deceleration=self.parameter('braking_deceleration'),
+                      state_age=self.parameter('odom_timeout'))
+        def clear(candidate):
+            if not braking_clear(points, candidate, self.measured, **kwargs):
+                return False
+            next_pose = arc_path(*candidate, duration=.05, steps=2)[-1]
+            next_points = transform_points(points, next_pose, inverse=True)
+            return braking_clear(next_points, np.zeros(2), candidate, **kwargs)
+        if clear(desired):
+            return desired
+        low, high = 0., 1.
+        for _ in range(7):
+            scale = (low+high)/2
+            if clear(desired*scale):
+                low = scale
+            else:
+                high = scale
+        return desired*low
 
     def _observe_openings(self, openings):
         if self.pose is None:
@@ -604,6 +1033,7 @@ class UnifiedControlNode:
             if len(self.door_obstacles):
                 self.door_obstacle_time = time.monotonic()
         self.door = None
+        self.pending_door_capture = None
         self.door_phase = None
         self.door_path = None
         self.door_rotation_index = 0
@@ -660,7 +1090,7 @@ class UnifiedControlNode:
         normal = np.array([math.cos(local.heading), math.sin(local.heading)])
         progress = -np.asarray(local.center) @ normal
         if self.door_phase in ('door_pass', 'door_clear'):
-            if progress > .29:
+            if progress > self._door_rear_clear_progress(local):
                 self._clear_door()
                 self.door_obstacles = np.empty((0, 2))
                 self.door_obstacle_time = 0.
@@ -726,15 +1156,23 @@ class UnifiedControlNode:
 
     def fresh(self):
         now = time.monotonic()
-        return (np.isfinite(self.raw).all() and np.isfinite(self.measured).all()
+        ros_now = rospy.Time.now().to_sec()
+        # Simulated motion ages on ROS time, but a frozen clock must never
+        # hide an independently lost odometry stream beyond the wall deadman.
+        receipt_age = ros_now-self.odom_ros_time if self.use_sim_time else now-self.odom_time
+        return (not self.clock_stalled
+                and np.isfinite(self.raw).all() and np.isfinite(self.measured).all()
                 and self.pose is not None and np.isfinite(self.pose).all()
                 and now-self.raw_time < self.parameter('command_timeout')
                 and self.odom_stamp is not None
-                and -.05 <= rospy.Time.now().to_sec()-self.odom_stamp < self.parameter('odom_timeout')
-                and now-self.odom_time < self.parameter('odom_timeout') and len(self.scans) == 2
+                and -.05 <= ros_now-self.odom_stamp < self.parameter('odom_timeout')
+                and 0 <= receipt_age < self.parameter('odom_timeout')
+                and (not self.use_sim_time or now-self.odom_time < min(.25, self.parameter('command_timeout')))
+                and len(self.scans) == 2
                 and all(now-stamp < self.parameter('scan_timeout') for stamp, _ in self.scans.values()))
 
     def cancel(self):
+        self.initial_plan_wait = None
         self.epoch += 1
         self.accept_planned = False
         self.active_reference_stamp = None
@@ -742,6 +1180,7 @@ class UnifiedControlNode:
         self.neupan[:] = 0.
         self.neupan_time = 0.
         self.plan_time = 0.
+        self.plan_ros_time = self.neupan_ros_time = 0.
 
     def _near_recovery(self, points):
         limit = self.parameter('hard_margin') + (.02 if self.recovering else 0.)
@@ -764,12 +1203,14 @@ class UnifiedControlNode:
             return False
         # Do not hand a now-clear chair back to a stationary/infeasible plan.
         # Keep guarded creep while the normal planner obtains a moving path.
-        moving_plan = (time.monotonic()-self.plan_time < .25 and self.mode != 'door_wait'
+        moving_plan = (0 <= self._plan_age() < .25 and self.mode != 'door_wait'
                        and np.isfinite(self.planned).all() and self.planned[0] > .002)
         door_ready = self.mode.startswith('door_') and self.door_path_feasible
         return not (moving_plan or door_ready)
 
     def update_reference(self):
+        preparing_capture = self.pending_door_capture
+        self.pending_door_capture = None
         self._publish_door_detections()
         self.wall_preview_heading = None
         if not self.assist_enabled:
@@ -787,8 +1228,7 @@ class UnifiedControlNode:
                 nearby = np.linalg.norm(self.door_obstacles-np.array(self.pose[:2]), axis=1) < 4.5
                 self.door_obstacles = self.door_obstacles[nearby]
         now = time.monotonic()
-        if (self.raw[0] <= .02 or not np.isfinite(self.raw).all()
-                or now-self.raw_time >= self.parameter('command_timeout')):
+        if self.raw[0] <= .02 or not np.isfinite(self.raw).all():
             self.sensor_stale_since = None
             self._clear_opening_turn()
             self._clear_door()
@@ -796,6 +1236,12 @@ class UnifiedControlNode:
             self.mode = 'manual'
             return
         if not self.fresh():
+            # A missing heartbeat stops motion without becoming a new intent.
+            # Keep the checked door through the same bounded sensor grace;
+            # absent input must not count as sustained steering away either.
+            self.door_away_since = 0.
+            if now-self.raw_time >= self.parameter('command_timeout'):
+                self._clear_opening_turn()
             if self.sensor_stale_since is None:
                 self.sensor_stale_since = now
             if now-self.sensor_stale_since >= 1.:
@@ -824,16 +1270,37 @@ class UnifiedControlNode:
         opening_path = self._opening_turn_path()
         local_door = self._local_tracked_door()
         if (local_door is not None and self.door_phase == 'door_align'
+                and self.door_plan_request is None and not self.door_path_feasible
                 and abs(self.raw[1]) < .12
                 and abs(local_door.center[1]) > .65
                 and door_entry_clearance(local_door) < -DOOR_ENTRY_NOISE_TOLERANCE):
             # A remembered door can remain in the two-scan cache after the
             # chair has moved past it or beside it. With straight joystick
             # intent, do not wait forever for an infeasible angled entry.
+            # A pending search or a checked staging path can resolve the angle.
             self._clear_door()
             local_door = None
+        capture_deferred = False
         if local_door is None:
             world_door, local_door = self._intended_door()
+            if (world_door is not None and abs(self.output[0]) > .1
+                    and not output_arc_targets_aperture(local_door, *self.output)):
+                if (preparing_capture is not None
+                        and opening_matches(preparing_capture, world_door)):
+                    # A transient slew curvature must not lift the speed cap
+                    # while the same door remains selected by live raw intent.
+                    capture_deferred = True
+                    self.pending_door_capture = world_door
+                world_door, local_door = None, None
+            if (world_door is not None
+                    and (max(abs(self.output[0]), abs(self.measured[0])) > .35+DOOR_CAPTURE_SPEED_TOLERANCE
+                         or ((abs(self.output[0]) > .1 or preparing_capture is not None)
+                             and not self._door_capture_is_clear(obstacle_points)))):
+                # Reach the existing alignment speed under the current
+                # controller before entering the door waiting/age policy.
+                capture_deferred = True
+                self.pending_door_capture = world_door
+                world_door, local_door = None, None
             if world_door is not None:
                 self.door_generation += 1
                 self.door = world_door
@@ -870,7 +1337,8 @@ class UnifiedControlNode:
                     if door_entry_clearance(local_door) > 0.:
                         self.door_phase = 'door_pass'
                 self.mode = self.door_phase
-        elif self._pending_door_intent():
+        elif (self.pending_door_capture is not None
+              or (not capture_deferred and self._pending_door_intent())):
             self.front_blocked = False
             self.wall_side = 0
             self.wall_preference = 0
@@ -940,21 +1408,54 @@ class UnifiedControlNode:
         self.reference.publish(path)
         limit = min(self.raw[0], self.parameter('max_speed'),
                     .35 if self.mode == 'door_align'
-                    else .55 if self.mode in ('door_pass', 'door_clear')
+                    else DOOR_PASS_SPEED if self.mode in ('door_pass', 'door_clear')
                     else .5 if self.mode == 'opening_turn' else 10.)
+        if self.pending_door_capture is not None:
+            limit = min(limit, .35)
         self.limit_pub.publish(Float32(data=limit))
+        reference_speed = TwistStamped()
+        reference_speed.header = path.header
+        reference_speed.twist.linear.x = limit
+        self.reference_speed_pub.publish(reference_speed)
         self.accept_planned = True
         self.active_reference_stamp = path.header.stamp
+
+    def _control_input_signature(self):
+        # Receipts change only when accepted callbacks consume new data.
+        return (self.epoch, self.mode, self.assist_enabled, self.mode_neutral_seen,
+                self.raw_time, self.odom_time, self.plan_time, self.neupan_time,
+                self.active_reference_stamp, self.accept_planned, tuple(sorted(self.parameters.items())),
+                tuple(sorted((side, received) for side, (received, _) in self.scans.items())))
+
+    def _duplicate_clear_tick(self, stamp, now):
+        return (self.use_sim_time and self.assist_enabled and self.mode_neutral_seen
+                and math.isfinite(stamp) and stamp == self.last_tick
+                and not self.clock_stalled and stamp >= self.clock_last_ros
+                and 0. <= now-self.clock_last_advance_wall < .25
+                and self.last_clear_tick == (stamp, self._control_input_signature())
+                and self.fresh())
 
     def control(self):
         now = time.monotonic()
         stamp = rospy.Time.now().to_sec()
-        dt = min(.1, max(.001, stamp-self.last_tick))
+        if self._duplicate_clear_tick(stamp, now):
+            return
+        self.last_clear_tick = None
+        elapsed = stamp-self.last_tick
+        dt = self._control_interval(stamp)
+        if dt is None:
+            if math.isfinite(stamp):
+                self.last_tick = stamp
+                self.clock_last_ros = stamp
+            self._stop_for_clock(now, stamp, fault='control_interval', elapsed=elapsed)
+            return
         self.last_tick = stamp
+        tick_acceleration = self.acceleration.copy()
         command = np.zeros(2)
         self.reason = 'clear'
+        planner_source = 'stop'
         if not self.assist_enabled or not self.mode_neutral_seen:
-            fresh_raw = (np.isfinite(self.raw).all()
+            fresh_raw = (not self.clock_stalled and np.isfinite(self.raw).all()
                          and now-self.raw_time
                          < self.parameter('command_timeout'))
             if not self.assist_enabled and self.mode_neutral_seen and fresh_raw:
@@ -975,11 +1476,19 @@ class UnifiedControlNode:
             self.pub.publish(msg)
             self.status.publish(String(data=json.dumps({
                 'mode': self.mode, 'reason': self.reason,
+                'control_stamp_s': stamp, 'control_dt_s': dt,
                 'v': msg.linear.x, 'w': msg.angular.z,
+                'planner_source': 'joystick' if fresh_raw and self.mode_neutral_seen else 'stop',
             })))
             return
-        planner_stale = now-self.plan_time >= .25 or not np.isfinite(self.planned).all()
+        planner_stale = not 0 <= self._plan_age(now) < .25 or not np.isfinite(self.planned).all()
         neupan_fresh = self.neupan_fresh(now)
+        if (self.mode.startswith('door_') and self.door_path_feasible
+                and self.door_path is not None):
+            # Keep one controller throughout the checked aperture trajectory.
+            # Switching curvature whenever a neural reference is refreshed
+            # repeatedly consumes the narrow doorway's braking clearance.
+            neupan_fresh = False
         planner_stale = planner_stale and not neupan_fresh
         door_fallback = self.mode.startswith('door_') and self.door_path_feasible
         inputs_fresh = self.fresh()
@@ -990,26 +1499,50 @@ class UnifiedControlNode:
             door_fallback = False
         if neupan_fresh:
             door_fallback = False
+        if self.override_handoff_time:
+            if (not inputs_fresh or self.raw[0] <= .02 or abs(self.raw[1]) <= .25
+                    or self.mode in ('front_stop', 'door_wait') or self.recovering):
+                self.override_handoff_time = 0.
+            elif (self.mode != 'override' and (door_fallback or neupan_fresh
+                    or (self.accept_planned and not planner_stale
+                        and self.plan_time >= self.override_handoff_time))):
+                self.override_handoff_time = 0.
+        joystick_override = self.override or bool(self.override_handoff_time)
+        if (self.initial_plan_wait is not None and (
+                self.initial_plan_wait[0] != self.epoch
+                or not 0 <= now-self.initial_plan_wait[1] < .25
+                or not inputs_fresh or self.raw[0] <= .02 or self.clock_stalled
+                or self.recovering or joystick_override or self.mode.startswith('door_')
+                or not planner_stale)):
+            self.initial_plan_wait = None
+        transition_stop = self.initial_plan_wait is not None
         if not inputs_fresh:
             self.reason = 'stale_input'
         elif np.linalg.norm(self.raw) < .01:
             self.reason = 'user_stop'
-        elif (self.raw[0] > .02 and not self.override and self.mode != 'front_stop'
-              and self.mode != 'door_wait' and planner_stale and not door_fallback and not self.recovering):
+        elif (self.raw[0] > .02 and not joystick_override and self.mode != 'front_stop'
+              and self.mode != 'door_wait' and planner_stale and not door_fallback and not self.recovering
+              and not transition_stop):
             self.reason = 'planner_timeout'
         else:
             if self.recovering:
+                planner_source = 'recovery'
                 desired = self.raw / max(1., abs(self.raw[0])/.05, abs(self.raw[1])/.1)
                 if self.door_plan_request is not None and not self.door_plan_request[0].done():
                     desired *= .2
                 self.reason = 'clearance_recovery'
-            elif neupan_fresh and self.raw[0] > .02 and not self.override and self.mode not in ('door_wait', 'front_stop'):
+            elif neupan_fresh and self.raw[0] > .02 and not joystick_override and self.mode not in ('door_wait', 'front_stop'):
+                planner_source = 'neupan'
                 desired = self.neupan.copy()
+            elif transition_stop:
+                planner_source = 'transition_stop'
+                desired = np.zeros(2)
             elif self.mode == 'door_wait':
                 desired = np.zeros(2)
-            elif self.raw[0] <= .02 or self.override or self.mode == 'front_stop':
+            elif self.raw[0] <= .02 or joystick_override or self.mode == 'front_stop':
+                planner_source = 'joystick'
                 desired = self.raw.copy()
-                if self.mode == 'front_stop' and self.raw[0] > .02 and not self.override:
+                if self.mode == 'front_stop' and self.raw[0] > .02 and not joystick_override:
                     desired[1] = 0.
                     front = points[(points[:, 0] > 0.) & (np.abs(points[:, 1]) <= .44)]
                     gap = (float(front[:, 0].min())-.97-self.parameter('front_stop_margin')
@@ -1021,10 +1554,12 @@ class UnifiedControlNode:
                     allowed = math.sqrt(ar*ar+2*a*max(0., gap))-ar if gap > .01 else 0.
                     desired[0] = min(desired[0], allowed)
             elif door_fallback:
+                planner_source = 'door_follower'
                 desired = self._safe_door_command(points, stamp)
                 if planner_stale:
                     self.reason = 'planner_fallback'
-            elif neupan_fresh or (now-self.plan_time < .25 and np.isfinite(self.planned).all()):
+            elif neupan_fresh or (0 <= self._plan_age(now) < .25 and np.isfinite(self.planned).all()):
+                planner_source = 'neupan' if neupan_fresh else 'local_follower'
                 desired = self.neupan.copy() if neupan_fresh else self.planned.copy()
                 if (self.mode == 'wall' and self.raw[0] > .02
                         and desired[0] < .02):
@@ -1078,22 +1613,65 @@ class UnifiedControlNode:
             desired[0] = np.clip(desired[0], -.4 if self.raw[0] < 0. else 0.,
                                  min(max(0., self.raw[0]), self.parameter('max_speed')))
             desired[1] = np.clip(desired[1], -.65, .65)
-            # Slew-limit acceleration; snap at the target to avoid overshoot.
+            if (self.pending_door_capture is not None and not self.recovering
+                    and desired[0] > .35):
+                desired *= .35/desired[0]
+            planned_speed = (not self.recovering
+                             and self.mode in ('manual', 'wall', 'front_stop', 'opening_turn', 'override') and self.raw[0] > .02)
+            ordinary_slew = (not self.recovering and not door_fallback
+                             and self.mode != 'door_wait'
+                             and (planned_speed or planner_source == 'joystick'))
+            self.reverse_slew_active = bool(ordinary_slew and (
+                self.raw[0] < 0. or self.output[0] < 0.
+                or (self.reverse_slew_active and self.acceleration[0] < 0.)))
+            ordinary_lower_bound = -.4 if self.reverse_slew_active else 0.
+            if planned_speed:
+                desired = self._safe_assisted_command(desired, points)
+            # Recover acceleration using the active controller's slew policy.
             # The independent safety rejection below bypasses comfort limits.
-            target_a = np.clip((desired-self.output)/dt, [-.5, -.8], [.5, .8])
-            self.acceleration += np.clip(target_a-self.acceleration,
-                                         -JERK_LIMITS*dt, JERK_LIMITS*dt)
-            command = self.output + self.acceleration*dt
-            command = np.minimum(np.maximum(command, np.minimum(self.output, desired)), np.maximum(self.output, desired))
+            settling_pivot = False
+            if door_fallback and not np.any(desired):
+                rotation = self._pending_door_rotation()
+                settling_pivot = (rotation is not None
+                                  and rotation[0] == self.door_rotation_index
+                                  and rotation[1] < .04 and abs(rotation[2]) < .04)
+            if transition_stop:
+                command, self.acceleration = self._door_wait_slew(dt)
+            elif planned_speed:
+                command, self.acceleration = self._assisted_slew(
+                    desired, dt, linear_lower_bound=ordinary_lower_bound)
+            elif (self.mode == 'door_wait' or settling_pivot) and not self.recovering:
+                command, self.acceleration = self._door_wait_slew(dt)
+            elif door_fallback and not self.recovering:
+                command, self.acceleration = self._assisted_slew(desired, dt)
+            elif not self.recovering and planner_source == 'joystick':
+                # Joystick targets remain soft while acceleration recovers;
+                # keep directional physical bounds and the final guard.
+                command, self.acceleration = self._assisted_slew(
+                    desired, dt, linear_lower_bound=ordinary_lower_bound)
+            else:
+                target_a = np.clip((desired-self.output)/dt, [-.5, -.8], [.5, .8])
+                self.acceleration += np.clip(target_a-self.acceleration,
+                                             -JERK_LIMITS*dt, JERK_LIMITS*dt)
+                command = self.output + self.acceleration*dt
+                command = np.minimum(np.maximum(command, np.minimum(self.output, desired)), np.maximum(self.output, desired))
             if door_fallback and (not self.door_path_feasible or self.door_path is None):
                 command[:] = 0.
                 self.acceleration[:] = 0.
                 self.reason = 'invalid_door_path'
-            elif door_fallback:
+            elif (door_fallback and not settling_pivot
+                  and self.mode in ('door_align', 'door_pass', 'door_clear')):
                 pending = self._pending_door_rotation()
                 if pending is None or pending[0] != self.door_rotation_index:
-                    command[1] = self._door_angular(command[0]) if command[0] > .002 else 0.
-                    self.acceleration[1] = 0.
+                    target_w = self._door_angular(command[0]) if command[0] > .002 else 0.
+                    # The first slew has already updated acceleration;
+                    # use the real tick-entry state, never integrate twice.
+                    smooth, _ = self._assisted_slew(
+                        np.array([command[0], target_w]), dt,
+                        acceleration=tick_acceleration)
+                    command[1] = smooth[1]
+                    # Preserve the actual derivative across checked tracking phases.
+                    self.acceleration[1] = (command[1]-self.output[1])/dt
             candidates = [(command*scale, None if scale == 1. else 'braking_envelope')
                           for scale in (1., .8, .6, .4, .2)]
             if self.recovering:
@@ -1115,7 +1693,7 @@ class UnifiedControlNode:
                                  margin=self.parameter('hard_margin'),
                                  reaction=self.parameter('reaction_time'),
                                  deceleration=self.parameter('braking_deceleration'),
-                                 state_age=max(0., stamp-self.odom_stamp), recovery=self.recovering):
+                                 state_age=self._guard_state_age(stamp), recovery=self.recovering):
                     command = candidate
                     if adjusted_reason is not None:
                         self.reason = adjusted_reason
@@ -1124,13 +1702,26 @@ class UnifiedControlNode:
             else:
                 command[:] = 0.
                 self.reason = 'emergency_stop'
+        if self.reason != 'clear':
+            self.initial_plan_wait = None
         if self.reason in ('stale_input', 'user_stop', 'emergency_stop', 'planner_timeout'):
             self.acceleration[:] = 0.
         self.output = command
         msg = Twist()
         msg.linear.x, msg.angular.z = map(float, command)
         self.pub.publish(msg)
-        status = {'mode': self.mode, 'reason': self.reason, 'v': msg.linear.x, 'w': msg.angular.z}
+        status = {'control_stamp_s': stamp, 'control_dt_s': dt,
+                  'mode': self.mode, 'reason': self.reason, 'v': msg.linear.x, 'w': msg.angular.z,
+                  'planner_source': planner_source}
+        if self.reason == 'stale_input':
+            status['input_age_s'] = {
+                'raw': now-self.raw_time,
+                'odom_receipt': stamp-self.odom_ros_time if self.use_sim_time else now-self.odom_time,
+                'odom_receipt_clock': 'ros' if self.use_sim_time else 'monotonic',
+                'odom_receipt_monotonic': now-self.odom_time,
+                'odom_stamp': None if self.odom_stamp is None else stamp-self.odom_stamp,
+                **{f'scan_{side}': now-received for side, (received, _) in self.scans.items()},
+            }
         if self.opening_turn is not None and self.pose is not None:
             opening = self._local_opening(self.opening_turn)
             status['opening'] = {'center': opening.center, 'width': opening.width,
@@ -1140,8 +1731,11 @@ class UnifiedControlNode:
             status['door'] = {'center': door.center, 'heading': door.heading,
                               'width': door.width, 'entry_clearance': door_entry_clearance(door)}
         self.status.publish(String(data=json.dumps(status)))
+        if self.reason == 'clear':
+            self.last_clear_tick = (stamp, self._control_input_signature())
 
     def destroy_node(self):
+        self.clock_watchdog_stop.set()
         with self.callback_lock:
             if self.stopped:
                 return
@@ -1154,6 +1748,9 @@ class UnifiedControlNode:
             self.pub.publish(Twist())
             if self.door_plan_request is not None:
                 self.door_plan_request[0].cancel()
+        if (self.clock_watchdog_thread is not None
+                and self.clock_watchdog_thread is not threading.current_thread()):
+            self.clock_watchdog_thread.join(timeout=1.)
         # Reap the spawned worker after publishing stop and releasing the ROS
         # callback lock (Python 3.8 cannot safely close a live pool asynchronously).
         self.door_plan_executor.shutdown(wait=True)

@@ -1,0 +1,341 @@
+[
+  {
+    "case": "ne_horizontal-in--15",
+    "rows": [
+      {
+        "control_stamp_s": 422.24,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.06390230166352485,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.08210713381473976,
+            -0.017900075105885694
+          ],
+          "heading": 0.10167939770483136,
+          "width": 1.0999290340065535,
+          "entry_clearance": 0.004097924499076644
+        }
+      },
+      {
+        "control_stamp_s": 422.29,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.06389590615259176,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.09114705911627184,
+            -0.017580397537209504
+          ],
+          "heading": 0.09793146476824321,
+          "width": 1.0999290340065535,
+          "entry_clearance": 0.00845508776192468
+        }
+      },
+      {
+        "control_stamp_s": 422.34,
+        "control_dt_s": 0.049999999999954525,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.06390523940012888,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.09717569936860215,
+            -0.017352855844810913
+          ],
+          "heading": 0.09550809354796819,
+          "width": 1.0999290340065535,
+          "entry_clearance": 0.011278610561756263
+        }
+      },
+      {
+        "control_stamp_s": 422.39,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.050191294680765934,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.10622996367718537,
+            -0.01699569512779975
+          ],
+          "heading": 0.09199415914757725,
+          "width": 1.0999290340065535,
+          "entry_clearance": 0.015382313807618526
+        }
+      },
+      {
+        "control_stamp_s": 422.44,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.04937804280374341,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.11227469486069233,
+            -0.01676105875362452
+          ],
+          "heading": 0.08981972199520105,
+          "width": 1.0999290340065535,
+          "entry_clearance": 0.017946353835273005
+        }
+      },
+      {
+        "control_stamp_s": 422.49,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.048258320148289444,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.12131660248527566,
+            -0.016438729371101312
+          ],
+          "heading": 0.08707428023754127,
+          "width": 1.0999290340065535,
+          "entry_clearance": 0.021298345945665945
+        }
+      }
+    ]
+  },
+  {
+    "case": "ne_horizontal-in-+15",
+    "rows": [
+      {
+        "control_stamp_s": 436.85,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": -0.06499169613693806,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.07692792616743538,
+            0.016691046021139102
+          ],
+          "heading": -0.10442039176146456,
+          "width": 1.0999971808178948,
+          "entry_clearance": 0.0024916421949128242
+        }
+      },
+      {
+        "control_stamp_s": 436.9,
+        "control_dt_s": 0.049999999999954525,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": -0.06500772329268499,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.08297077779889257,
+            0.016482718907709224
+          ],
+          "heading": -0.10191589541605928,
+          "width": 1.0999971808178948,
+          "entry_clearance": 0.00543101227505775
+        }
+      },
+      {
+        "control_stamp_s": 436.95,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": -0.06501423893634231,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.09203355559897623,
+            0.016142045126384848
+          ],
+          "heading": -0.09815793157351327,
+          "width": 1.0999971808178948,
+          "entry_clearance": 0.009818648775198634
+        }
+      },
+      {
+        "control_stamp_s": 437.0,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": -0.051743980624376434,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.10109484042135486,
+            0.015767451452934126
+          ],
+          "heading": -0.0943993086188777,
+          "width": 1.0999971808178948,
+          "entry_clearance": 0.014179985205326314
+        }
+      },
+      {
+        "control_stamp_s": 437.05,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": -0.05087850067650874,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.1071417682209424,
+            0.015521342425214095
+          ],
+          "heading": -0.09201687135692249,
+          "width": 1.0999971808178948,
+          "entry_clearance": 0.01694962061568029
+        }
+      },
+      {
+        "control_stamp_s": 437.1,
+        "control_dt_s": 0.05000000000001137,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": -0.05009523300131565,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.1131859418336133,
+            0.015294275733933478
+          ],
+          "heading": -0.09001625326880934,
+          "width": 1.0999971808178948,
+          "entry_clearance": 0.019362654075275307
+        }
+      }
+    ]
+  },
+  {
+    "case": "ne_horizontal-out--15",
+    "rows": [
+      {
+        "control_stamp_s": 593.19,
+        "control_dt_s": 0.05000000000006821,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.06566147024684951,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.08421847837360162,
+            -0.018101316890495153
+          ],
+          "heading": 0.10593577367569584,
+          "width": 1.0999999337764625,
+          "entry_clearance": 0.0005819657475257967
+        }
+      },
+      {
+        "control_stamp_s": 593.24,
+        "control_dt_s": 0.049999999999954525,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.0656918068024613,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.09025505721490028,
+            -0.017885768771589726
+          ],
+          "heading": 0.103476969249642,
+          "width": 1.0999999337764625,
+          "entry_clearance": 0.0034784839492540583
+        }
+      },
+      {
+        "control_stamp_s": 593.29,
+        "control_dt_s": 0.049999999999954525,
+        "mode": "door_align",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.06574264657132262,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.09931180598448551,
+            -0.017543371315587215
+          ],
+          "heading": 0.09986282286861736,
+          "width": 1.0999999337764625,
+          "entry_clearance": 0.007731924343813494
+        }
+      },
+      {
+        "control_stamp_s": 593.34,
+        "control_dt_s": 0.05000000000006821,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.05131337148079057,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.10836726749483115,
+            -0.0171676971673719
+          ],
+          "heading": 0.0962457624477606,
+          "width": 1.0999999337764625,
+          "entry_clearance": 0.011962414954318278
+        }
+      },
+      {
+        "control_stamp_s": 593.39,
+        "control_dt_s": 0.049999999999954525,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.05046748610642027,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.11441362920353398,
+            -0.016921531366961912
+          ],
+          "heading": 0.09398919941474214,
+          "width": 1.0999999337764625,
+          "entry_clearance": 0.014621084579415713
+        }
+      },
+      {
+        "control_stamp_s": 593.44,
+        "control_dt_s": 0.05000000000006821,
+        "mode": "door_pass",
+        "reason": "clear",
+        "v": 0.15,
+        "w": 0.049672265148914,
+        "planner_source": "door_follower",
+        "door": {
+          "center": [
+            -0.12045009211055357,
+            -0.0166905464724606
+          ],
+          "heading": 0.09199895869186481,
+          "width": 1.0999999337764625,
+          "entry_clearance": 0.01702406993289869
+        }
+      }
+    ]
+  }
+]
